@@ -40,19 +40,11 @@ local CFG = {
     },
 
     title = {
-        x = 28,
-        y = -24,
-        width = 320,
-        height = 34,
-        text = "KeyLab Journal",
-    },
-
-    subtitle = {
-        x = 30,
-        y = -58,
-        width = 470,
-        height = 22,
-        text = "Personal Mythic+ progression, build experiments, and observed outcomes.",
+        text = "KeyLab",
+        x = 24,
+        y = 0,
+        font = "Fonts\\FRIZQT__.TTF",
+        size = 32,
     },
 
     sidebar = {
@@ -201,7 +193,7 @@ function KeyLab.UI:Create()
 
     self.frame = frame
 
-    -- Header background, color only. No image assets.
+    -- Header background with KeyLab title.
     local header = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     header:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -14)
     header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -14)
@@ -209,21 +201,14 @@ function KeyLab.UI:Create()
     StylePanel(header, CFG.colors.headerBg, CFG.colors.headerBorder)
     self.header = header
 
-    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.title.x, CFG.title.y)
-    title:SetSize(CFG.title.width, CFG.title.height)
-    title:SetJustifyH("LEFT")
+    local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("LEFT", header, "LEFT", CFG.title.x, CFG.title.y)
     title:SetText(CFG.title.text)
-    ApplyColor(title, CFG.colors.gold)
+    title:SetFont(CFG.title.font, CFG.title.size, "")
+    title:SetTextColor(CFG.colors.gold[1], CFG.colors.gold[2], CFG.colors.gold[3], CFG.colors.gold[4] or 1)
+    title:SetShadowColor(0, 0, 0, 0.85)
+    title:SetShadowOffset(2, -2)
     self.title = title
-
-    local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    subtitle:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.subtitle.x, CFG.subtitle.y)
-    subtitle:SetSize(CFG.subtitle.width, CFG.subtitle.height)
-    subtitle:SetJustifyH("LEFT")
-    subtitle:SetText(CFG.subtitle.text)
-    ApplyColor(subtitle, CFG.colors.muted)
-    self.subtitle = subtitle
 
     local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     close:SetSize(CFG.close.width, CFG.close.height)
