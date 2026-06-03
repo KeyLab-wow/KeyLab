@@ -1,0 +1,214 @@
+local ADDON_NAME, KeyLab = ...
+KeyLab = KeyLab or {}
+_G.KeyLab = KeyLab
+
+KeyLab.addonName = ADDON_NAME
+KeyLab.version = KeyLab.version or "0.1.4"
+
+KeyLab.UI = KeyLab.UI or {}
+KeyLab.Tabs = KeyLab.Tabs or {}
+KeyLab.RegisteredTabs = KeyLab.RegisteredTabs or {}
+
+--[[
+KeyLab_Core.lua
+
+Purpose:
+- Final startup coordinator.
+- Initializes the database.
+- Provides slash commands.
+- Opens/closes the UI.
+- Provides tab registration for UI tab files.
+- Does NOT capture Blizzard data directly.
+- Does NOT build UI cards directly.
+]]
+
+function KeyLab.RegisterTab(name, createFunc)
+    if not name or not createFunc then return end
+
+    KeyLab.RegisteredTabs = KeyLab.RegisteredTabs or {}
+
+    table.insert(KeyLab.RegisteredTabs, {
+        name = name,
+        createFunc = createFunc,
+    })
+end
+
+function KeyLab.Print(message)
+    if KeyLab.Utils and KeyLab.Utils.Print then
+        KeyLab.Utils.Print(message)
+    else
+        print("|cffd4af37KeyLab:|r " .. tostring(message))
+    end
+end
+
+function KeyLab.Debug(message)
+    if KeyLabDB and KeyLabDB.settings and KeyLabDB.settings.debugMode == true then
+        KeyLab.Print("Debug: " .. tostring(message))
+    end
+end
+
+function KeyLab.RefreshTabs()
+    if not KeyLab.Tabs then return end
+
+    for _, tab in pairs(KeyLab.Tabs) do
+        if type(tab) == "table" and tab.Refresh then
+            pcall(function()
+                tab:Refresh()
+            end)
+        end
+    end
+end
+
+local function Print(msg)
+    KeyLab.Print(msg)
+end
+
+local function Initialize()
+    if KeyLab.DB and KeyLab.DB.Initialize then
+        KeyLab.DB.Initialize()
+    else
+        if type(KeyLabDB) ~= "table" then KeyLabDB = {} end
+        KeyLabDB.version = KeyLabDB.version or KeyLab.version
+        KeyLabDB.trackingSince = KeyLabDB.trackingSince or date("%B %Y")
+        KeyLabDB.settings = KeyLabDB.settings or {}
+        KeyLabDB.encounters = KeyLabDB.encounters or {}
+        KeyLabDB.builds = KeyLabDB.builds or {}
+    end
+
+    if KeyLab.Capture and KeyLab.Capture.Sessions and KeyLab.Capture.Sessions.EnsureCaptureDB then
+        KeyLab.Capture.Sessions.EnsureCaptureDB()
+    else
+        KeyLabCaptureDB = KeyLabCaptureDB or {}
+        KeyLabCaptureDB.version = KeyLabCaptureDB.version or KeyLab.version
+    end
+end
+
+local function ResetAll()
+    if KeyLab.DB and KeyLab.DB.ResetAll then
+        KeyLab.DB.ResetAll()
+    else
+        KeyLabDB = {
+            version = KeyLab.version or "0.1.4",
+            trackingSince = date("%B %Y"),
+            settings = { completedMythicPlusOnly = true },
+            encounters = {},
+            builds = {},
+        }
+    end
+
+    if KeyLab.Capture and KeyLab.Capture.Sessions and KeyLab.Capture.Sessions.ResetCaptureDB then
+        KeyLab.Capture.Sessions.ResetCaptureDB()
+    else
+        KeyLabCaptureDB = {
+            version = KeyLab.version or "0.1.4",
+            active = false,
+            completedSeen = false,
+            interrupted = false,
+        }
+    end
+
+    KeyLab.RefreshTabs()
+    Print("All KeyLab data reset.")
+end
+
+local frame = CreateFrame("Frame")
+frame:RegisterEvent("ADDON_LOADED")
+
+frame:SetScript("OnEvent", function(_, event, addonName)
+    if event == "ADDON_LOADED" and addonName == ADDON_NAME then
+        Initialize()
+        Print("Loaded. Use /keylab to open.")
+    end
+end)
+
+SLASH_KEYLAB1 = "/keylab"
+SlashCmdList["KEYLAB"] = function(msg)
+    msg = tostring(msg or "")
+    msg = msg:lower()
+    msg = msg:gsub("^%s+", "")
+    msg = msg:gsub("%s+$", "")
+
+    if msg == "" or msg == "show" or msg == "open" or msg == "toggle" then
+        if KeyLab.UI and KeyLab.UI.Toggle then
+            KeyLab.UI:Toggle()
+        else
+            Print("UI is not available.")
+        end
+        return
+    end
+
+    if msg == "hide" or msg == "close" then
+        if KeyLab.UI and KeyLab.UI.Hide then
+            KeyLab.UI:Hide()
+        else
+            Print("UI is not available.")
+        end
+        return
+    end
+
+    if msg == "count" then
+        local count = 0
+
+        if KeyLab.DB and KeyLab.DB.CountEncounters then
+            count = KeyLab.DB.CountEncounters()
+        elseif KeyLabDB and type(KeyLabDB.encounters) == "table" then
+            count = #KeyLabDB.encounters
+        end
+
+        Print("Encounter count: " .. tostring(count))
+        return
+    end
+
+    if msg == "status" or msg == "capturestatus" then
+        local captureDB = KeyLabCaptureDB or {}
+
+        Print(
+            "active=" .. tostring(captureDB.active)
+            .. " completedSeen=" .. tostring(captureDB.completedSeen)
+            .. " interrupted=" .. tostring(captureDB.interrupted)
+            .. " lastError=" .. tostring(captureDB.lastFinalizeError)
+        )
+        return
+    end
+
+    if msg == "finalize" then
+        if KeyLab.Capture and KeyLab.Capture.Finalize then
+            KeyLab.Capture.Finalize("manual /keylab finalize")
+        else
+            Print("Capture finalize is not available.")
+        end
+        return
+    end
+
+    if msg == "resetcapture" then
+        if KeyLab.Capture and KeyLab.Capture.Sessions and KeyLab.Capture.Sessions.ResetCaptureDB then
+            KeyLab.Capture.Sessions.ResetCaptureDB()
+            Print("Temporary capture DB reset.")
+        else
+            KeyLabCaptureDB = {
+                version = KeyLab.version or "0.1.4",
+                active = false,
+                completedSeen = false,
+                interrupted = false,
+            }
+            Print("Temporary capture DB reset.")
+        end
+        return
+    end
+
+    if msg == "reset" then
+        ResetAll()
+        return
+    end
+
+    if msg == "debug" then
+        KeyLabDB = KeyLabDB or {}
+        KeyLabDB.settings = KeyLabDB.settings or {}
+        KeyLabDB.settings.debugMode = not KeyLabDB.settings.debugMode
+
+        Print("Debug mode " .. (KeyLabDB.settings.debugMode and "enabled." or "disabled."))
+        return
+    end
+
+    Print("Commands: /keylab, /keylab count, /keylab status, /keylab finalize, /keylab resetcapture, /keylab reset, /keylab debug")
+end

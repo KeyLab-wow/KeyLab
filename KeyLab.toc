@@ -1,0 +1,36 @@
+## Interface: 120005
+## Title: KeyLab
+## Notes: Personal Mythic+ experimentation journal for talent/stat builds and completed encounter outcomes.
+## Author: Brione
+## Version: 1.0.0
+## SavedVariables: KeyLab_DB, KeyLab_BuildDB, KeyLab_EncountersDB
+
+utils/KeyLab_Utils.lua
+KeyLab_Core.lua
+
+mapping/KeyLab_StatMapping.lua
+mapping/KeyLab_MetricMapping.lua
+mapping/KeyLab_MapMapping.lua
+mapping/KeyLab_AffixMapping.lua
+mapping/KeyLab_PlayerMapping.lua
+mapping/KeyLab_Formatters.lua
+
+database/KeyLab_DB.lua
+database/KeyLab_EncountersDB.lua
+database/KeyLab_BuildDB.lua
+
+capture/KeyLab_Sessions.lua
+capture/KeyLab_PlayerCapture.lua
+capture/KeyLab_StatCapture.lua
+capture/KeyLab_TalentCapture.lua
+capture/KeyLab_DamageMeter.lua
+capture/KeyLab_Capture.lua
+
+KeyLab_UI.lua
+ui/KeyLab_Home.lua
+ui/KeyLab_Encounters.lua
+ui/KeyLab_TalentBuilds.lua
+ui/KeyLab_StatProfiles.lua
+ui/KeyLab_Trends.lua
+ui/KeyLab_Insights.lua
+ui/KeyLab_Settings.lua
