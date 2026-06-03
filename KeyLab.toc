@@ -3,7 +3,7 @@
 ## Notes: Personal Mythic+ experimentation journal for talent/stat builds and completed encounter outcomes.
 ## Author: Brione
 ## Version: 1.0.0
-## SavedVariables: KeyLab_DB, KeyLab_BuildDB, KeyLab_EncountersDB
+## SavedVariables: KeyLabDB, KeyLabCaptureDB
 
 utils/KeyLab_Utils.lua
 KeyLab_Core.lua
