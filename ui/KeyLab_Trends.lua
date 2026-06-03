@@ -72,8 +72,10 @@ local CFG = {
         height = 62,
 
         specX = 18,
+        dungeonX = 250,
         labelY = -12,
         specWidth = 190,
+        dungeonWidth = 260,
     },
 
     content = {
@@ -779,7 +781,7 @@ local function AddTrendIcon(parent, trend, x, y, size)
     elseif key == "down" then
         icon:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
     else
-        icon:SetTexture("Interface\\Buttons\\UI-MinusButton-Up")
+        icon:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
     end
 
     local color = trend and trend.color or CFG.colors.soft
@@ -917,141 +919,382 @@ local function BuildTrendTile(parent, x, y, trend)
     return panel
 end
 
-local function BuildPerformanceTrends(parent, x, y, encounters, selectedSpec)
-    local panel = MakePanel(parent, x, y, 908, 124, "Performance Direction", CFG.colors.cardBorder, CFG.colors.green)
-    AddLine(panel, "Recent runs compared against earlier saved runs.", 14, -32, 650, CFG.colors.muted, "GameFontDisableSmall")
-
-    local keys = { "dps", "hps", "damageTaken", "avoidableDamageTaken" }
-    for i, key in ipairs(keys) do
-        local tx = 14 + ((i - 1) * 221)
-        BuildTrendTile(panel, tx, -44, BuildMetricDirection(encounters, selectedSpec, key))
-    end
-
-    return panel
-end
-
-local function BuildMostPlayedDungeon(encounters, selectedSpec)
-    local groups = {}
+local function GetDungeonOptions(encounters, selectedSpec)
+    local seen = {}
+    local list = {
+        { text = "All Dungeons", value = nil },
+    }
 
     for _, encounter in ipairs(encounters or {}) do
         if MatchesSelectedSpec(encounter, selectedSpec) then
-            local name = GetDungeonName(encounter)
-            groups[name] = groups[name] or { dungeonName = name, runCount = 0, encounters = {} }
-            groups[name].runCount = groups[name].runCount + 1
-            table.insert(groups[name].encounters, encounter)
-        end
-    end
-
-    local best = nil
-    for _, group in pairs(groups) do
-        if not best or (group.runCount or 0) > (best.runCount or 0) then
-            best = group
-        end
-    end
-
-    return best
-end
-
-local function FindBestInList(encounters, metricKey)
-    local metricInfo = GetMetricInfoByKey(metricKey)
-    if not metricInfo then return nil end
-
-    local lowerIsBetter = metricInfo.higherIsBetter == false
-    local bestValue = nil
-    local bestEncounter = nil
-
-    for _, encounter in ipairs(encounters or {}) do
-        local value = GetMetricValue(encounter, metricKey)
-        if type(value) == "number" then
-            if type(bestValue) ~= "number" then
-                bestValue = value
-                bestEncounter = encounter
-            elseif lowerIsBetter and value < bestValue then
-                bestValue = value
-                bestEncounter = encounter
-            elseif not lowerIsBetter and value > bestValue then
-                bestValue = value
-                bestEncounter = encounter
+            local dungeonName = GetDungeonName(encounter)
+            if dungeonName and dungeonName ~= "" and dungeonName ~= "Unknown Dungeon" and not seen[dungeonName] then
+                seen[dungeonName] = true
+                table.insert(list, {
+                    text = dungeonName,
+                    value = dungeonName,
+                })
             end
         end
     end
 
-    if bestValue == nil then return nil end
-    return {
-        metricKey = metricKey,
-        label = metricInfo.label or metricKey,
-        value = bestValue,
-        encounter = bestEncounter,
-        lowerIsBetter = lowerIsBetter,
-    }
+    table.sort(list, function(a, b)
+        if a.text == "All Dungeons" then return true end
+        if b.text == "All Dungeons" then return false end
+        return tostring(a.text) < tostring(b.text)
+    end)
+
+    return list
 end
 
-local function AddMasteryMetric(parent, label, result, x, y, color)
-    AddLine(parent, label, x, y, 150, CFG.colors.muted, "GameFontDisableSmall")
-    local value = result and FormatMetric(result.metricKey, result.value) or "-"
-    AddLine(parent, value, x, y - 18, 150, color or CFG.colors.text, "GameFontNormalLarge")
+local function GetDungeonText(dungeonName)
+    return dungeonName or "All Dungeons"
 end
 
-local function BuildDungeonMasteryPanel(parent, x, y, group, totalRuns)
-    local panel = MakePanel(parent, x, y, 908, 154, "Dungeon Familiarity", CFG.colors.cardStrongBorder, CFG.colors.gold)
-
-    if not group then
-        AddLine(panel, "No dungeon trend data found.", 14, -42, 850, CFG.colors.muted)
-        return panel
-    end
-
-    local pct = 0
-    if totalRuns and totalRuns > 0 then pct = (group.runCount or 0) / totalRuns end
-
-    AddLine(panel, "Most played dungeon", 14, -34, 180, CFG.colors.muted, "GameFontDisableSmall")
-    AddLine(panel, tostring(group.dungeonName or "Unknown Dungeon"), 14, -54, 320, CFG.colors.gold, "GameFontNormalLarge")
-    AddLine(panel, tostring(group.runCount or 0) .. " run(s) • " .. string.format("%.0f%% of selected runs", pct * 100), 14, -82, 260, CFG.colors.soft, "GameFontNormal")
-
-    AddMasteryMetric(panel, "Highest DPS", FindBestInList(group.encounters, "dps"), 330, -38, CFG.colors.orange)
-    AddMasteryMetric(panel, "Highest HPS", FindBestInList(group.encounters, "hps"), 495, -38, CFG.colors.green)
-    AddMasteryMetric(panel, "Lowest Damage Taken", FindBestInList(group.encounters, "damageTaken"), 660, -38, CFG.colors.red)
-
-    AddMasteryMetric(panel, "Lowest Avoidable", FindBestInList(group.encounters, "avoidableDamageTaken"), 330, -92, CFG.colors.red)
-    AddMasteryMetric(panel, "Most Interrupts", FindBestInList(group.encounters, "interrupts"), 495, -92, CFG.colors.purple)
-    AddMasteryMetric(panel, "Most Dispels", FindBestInList(group.encounters, "dispels"), 660, -92, CFG.colors.purple)
-
-    AddLine(panel, "This does not prove why outcomes happened; it highlights where repeated saved runs cluster.", 14, -126, 840, CFG.colors.muted, "GameFontDisableSmall")
-
-    return panel
+local function MatchesSelectedDungeon(encounter, selectedDungeon)
+    if not selectedDungeon then return true end
+    return GetDungeonName(encounter) == selectedDungeon
 end
 
-local function BuildRecordStrip(parent, x, y, encounters, selectedSpec)
-    local panel = MakePanel(parent, x, y, 908, 90, "Best Observed Results", CFG.colors.cardBorder, CFG.colors.blue)
-    AddLine(panel, "Single-run records in the selected sample.", 14, -32, 500, CFG.colors.muted, "GameFontDisableSmall")
+local function FilterTrendEncounters(encounters, selectedSpec, selectedDungeon)
+    local list = {}
 
-    local filtered = {}
     for _, encounter in ipairs(encounters or {}) do
-        if MatchesSelectedSpec(encounter, selectedSpec) then
-            table.insert(filtered, encounter)
+        if MatchesSelectedSpec(encounter, selectedSpec) and MatchesSelectedDungeon(encounter, selectedDungeon) then
+            table.insert(list, encounter)
         end
     end
 
-    local items = {
-        { label = "Highest DPS", key = "dps", color = CFG.colors.orange },
-        { label = "Highest HPS", key = "hps", color = CFG.colors.green },
-        { label = "Lowest Avoidable", key = "avoidableDamageTaken", color = CFG.colors.red },
-        { label = "Most Interrupts", key = "interrupts", color = CFG.colors.purple },
-        { label = "Most Dispels", key = "dispels", color = CFG.colors.purple },
-    }
+    table.sort(list, function(a, b)
+        return (a.timestamp or 0) < (b.timestamp or 0)
+    end)
 
-    for i, item in ipairs(items) do
-        local result = FindBestInList(filtered, item.key)
-        local ix = 14 + ((i - 1) * 178)
-        AddLine(panel, item.label, ix, -52, 165, CFG.colors.muted, "GameFontDisableSmall")
-        AddLine(panel, result and FormatMetric(item.key, result.value) or "-", ix, -68, 165, item.color, "GameFontNormal")
+    return list
+end
+
+local function CountTrendRuns(encounters, selectedSpec, selectedDungeon)
+    local count = 0
+
+    for _, encounter in ipairs(encounters or {}) do
+        if MatchesSelectedSpec(encounter, selectedSpec) and MatchesSelectedDungeon(encounter, selectedDungeon) then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
+local function BuildMetricDirectionFromList(encounters, metricKey)
+    local metricInfo = GetMetricInfoByKey(metricKey)
+    if not metricInfo then return nil end
+
+    local values = {}
+    for _, encounter in ipairs(encounters or {}) do
+        local value = GetMetricValue(encounter, metricKey)
+        if type(value) == "number" then
+            table.insert(values, {
+                timestamp = encounter.timestamp or 0,
+                value = value,
+            })
+        end
+    end
+
+    table.sort(values, function(a, b) return (a.timestamp or 0) < (b.timestamp or 0) end)
+
+    if #values < 2 then
+        return {
+            metricKey = metricKey,
+            label = metricInfo.label or metricKey,
+            direction = "EVEN",
+            trendKey = "stable",
+            trendText = "Need more runs",
+            recentAverage = values[1] and values[1].value or nil,
+            priorAverage = nil,
+            runCount = #values,
+            color = CFG.colors.muted,
+        }
+    end
+
+    local recent = {}
+    local prior = {}
+    local recentStart = math.max(1, #values - 2)
+
+    for i, item in ipairs(values) do
+        if i >= recentStart then
+            table.insert(recent, item.value)
+        else
+            table.insert(prior, item.value)
+        end
+    end
+
+    if #prior == 0 and #recent > 1 then
+        table.insert(prior, recent[1])
+        table.remove(recent, 1)
+    end
+
+    local recentAvg = Average(recent)
+    local priorAvg = Average(prior)
+    local lowerIsBetter = metricInfo.higherIsBetter == false
+    local diff = (recentAvg or 0) - (priorAvg or 0)
+    local pct = 0
+    if priorAvg and math.abs(priorAvg) > 0 then
+        pct = diff / priorAvg
+    end
+
+    local threshold = 0.03
+    local direction = "EVEN"
+    local trendKey = "stable"
+    local trendText = "Stable"
+    local color = CFG.colors.soft
+
+    if math.abs(pct) >= threshold then
+        if lowerIsBetter then
+            if diff < 0 then
+                direction = "DOWN"
+                trendKey = "down"
+                trendText = "Improving"
+                color = CFG.colors.green
+            else
+                direction = "UP"
+                trendKey = "up"
+                trendText = "Increasing"
+                color = CFG.colors.warning
+            end
+        else
+            if diff > 0 then
+                direction = "UP"
+                trendKey = "up"
+                trendText = "Improving"
+                color = CFG.colors.green
+            else
+                direction = "DOWN"
+                trendKey = "down"
+                trendText = "Decreasing"
+                color = CFG.colors.warning
+            end
+        end
+    end
+
+    return {
+        metricKey = metricKey,
+        label = metricInfo.label or metricKey,
+        direction = direction,
+        trendKey = trendKey,
+        trendText = trendText,
+        recentAverage = recentAvg,
+        priorAverage = priorAvg,
+        percent = pct,
+        runCount = #values,
+        color = color,
+    }
+end
+
+local function AverageMetric(encounters, metricKey)
+    local values = {}
+
+    for _, encounter in ipairs(encounters or {}) do
+        local value = GetMetricValue(encounter, metricKey)
+        if type(value) == "number" then
+            table.insert(values, value)
+        end
+    end
+
+    return Average(values), #values
+end
+
+local function BuildMetricComparison(metricKey, baselineEncounters, progressionEncounters)
+    local metricInfo = GetMetricInfoByKey(metricKey)
+    if not metricInfo then return nil end
+
+    local baselineAvg, baselineCount = AverageMetric(baselineEncounters, metricKey)
+    local progressionAvg, progressionCount = AverageMetric(progressionEncounters, metricKey)
+
+    if not baselineAvg or not progressionAvg or baselineCount == 0 or progressionCount == 0 then
+        return {
+            metricKey = metricKey,
+            label = metricInfo.label or metricKey,
+            direction = "EVEN",
+            trendKey = "stable",
+            trendText = "Need more runs",
+            recentAverage = progressionAvg,
+            priorAverage = baselineAvg,
+            runCount = progressionCount + baselineCount,
+            color = CFG.colors.muted,
+        }
+    end
+
+    local lowerIsBetter = metricInfo.higherIsBetter == false
+    local diff = progressionAvg - baselineAvg
+    local pct = 0
+    if math.abs(baselineAvg) > 0 then
+        pct = diff / baselineAvg
+    end
+
+    local threshold = 0.03
+    local direction = "EVEN"
+    local trendKey = "stable"
+    local trendText = "Stable"
+    local color = CFG.colors.soft
+
+    if math.abs(pct) >= threshold then
+        if lowerIsBetter then
+            if diff < 0 then
+                direction = "DOWN"
+                trendKey = "down"
+                trendText = "Improving"
+                color = CFG.colors.green
+            else
+                direction = "UP"
+                trendKey = "up"
+                trendText = "Increasing"
+                color = CFG.colors.warning
+            end
+        else
+            if diff > 0 then
+                direction = "UP"
+                trendKey = "up"
+                trendText = "Improving"
+                color = CFG.colors.green
+            else
+                direction = "DOWN"
+                trendKey = "down"
+                trendText = "Decreasing"
+                color = CFG.colors.warning
+            end
+        end
+    end
+
+    return {
+        metricKey = metricKey,
+        label = metricInfo.label or metricKey,
+        direction = direction,
+        trendKey = trendKey,
+        trendText = trendText,
+        recentAverage = progressionAvg,
+        priorAverage = baselineAvg,
+        percent = pct,
+        runCount = progressionCount + baselineCount,
+        color = color,
+    }
+end
+
+local TREND_METRICS = {
+    "dps",
+    "hps",
+    "damageTaken",
+    "avoidableDamageTaken",
+    "interrupts",
+    "dispels",
+    "absorbs",
+    "deaths",
+}
+
+local function BuildTrendTile(parent, x, y, trend, averageLabel)
+    local color = trend and trend.color or CFG.colors.blue
+    local panel = MakePanel(parent, x, y, 213, 78, "", CFG.colors.cardBorder, color)
+
+    if not trend then
+        AddLine(panel, "No trend", 12, -12, 190, CFG.colors.muted)
+        return panel
+    end
+
+    AddLine(panel, trend.label, 12, -10, 154, CFG.colors.gold, "GameFontNormal")
+    AddTrendIcon(panel, trend, -12, -8, 18)
+    AddLine(panel, trend.trendText or "Stable", 12, -34, 150, color, "GameFontNormalLarge")
+
+    if trend.recentAverage then
+        AddLine(panel, (averageLabel or "Recent avg") .. ": " .. FormatMetric(trend.metricKey, trend.recentAverage), 12, -58, 185, CFG.colors.muted, "GameFontDisableSmall")
+    else
+        AddLine(panel, "Need more runs", 12, -58, 185, CFG.colors.muted, "GameFontDisableSmall")
     end
 
     return panel
 end
 
-local function BuildNotesPanel(parent, x, y)
-    local panel = MakePanel(parent, x, y, 908, 56, "How to Read Trends", CFG.colors.cardBorder, CFG.colors.warning)
-    AddLine(panel, "Trends are observations from saved completed runs, not rules or simulations. Buffs, group comp, pull size, deaths, affixes, movement, and pacing can change outcomes.", 14, -32, 860, CFG.colors.muted, "GameFontDisableSmall")
+local function BuildMessagePanel(parent, x, y, title, message, accentColor)
+    local panel = MakePanel(parent, x, y, 908, 96, title, CFG.colors.cardBorder, accentColor or CFG.colors.warning)
+    AddLine(panel, message, 14, -40, 860, CFG.colors.muted, "GameFontNormal")
+    return panel
+end
+
+local function BuildPerformanceTrends(parent, x, y, encounters, title, subtitle, averageLabel)
+    local panel = MakePanel(parent, x, y, 908, 210, title or "Performance Direction", CFG.colors.cardBorder, CFG.colors.green)
+    if subtitle and subtitle ~= "" then
+        AddLine(panel, subtitle, 14, -32, 720, CFG.colors.muted, "GameFontDisableSmall")
+    end
+
+    for i, key in ipairs(TREND_METRICS) do
+        local row = math.floor((i - 1) / 4)
+        local col = (i - 1) % 4
+        local tx = 14 + (col * 221)
+        local ty = -44 - (row * 88)
+        BuildTrendTile(panel, tx, ty, BuildMetricDirectionFromList(encounters, key), averageLabel)
+    end
+
+    return panel
+end
+
+local function FindHighestKey(encounters)
+    local highest = nil
+
+    for _, encounter in ipairs(encounters or {}) do
+        local keyLevel = tonumber(GetKeyLevel(encounter)) or 0
+        if not highest or keyLevel > highest then
+            highest = keyLevel
+        end
+    end
+
+    return highest
+end
+
+local function SplitProgressionRuns(encounters, highestKey)
+    local progression = {}
+    local baseline = {}
+
+    for _, encounter in ipairs(encounters or {}) do
+        local keyLevel = tonumber(GetKeyLevel(encounter)) or 0
+        if keyLevel == highestKey then
+            table.insert(progression, encounter)
+        elseif keyLevel < highestKey then
+            table.insert(baseline, encounter)
+        end
+    end
+
+    return progression, baseline
+end
+
+local function BuildProgressionSnapshot(parent, x, y, encounters, selectedDungeon)
+    if not selectedDungeon then
+        return BuildMessagePanel(parent, x, y, "Progression Snapshot", "Choose a dungeon above to view progression direction for that dungeon.", CFG.colors.blue)
+    end
+
+    if #encounters < 2 then
+        return BuildMessagePanel(parent, x, y, "Progression Snapshot", "Run this dungeon more to unlock progression trends.", CFG.colors.warning)
+    end
+
+    local highestKey = FindHighestKey(encounters)
+    if not highestKey then
+        return BuildMessagePanel(parent, x, y, "Progression Snapshot", "Run this dungeon more to unlock progression trends.", CFG.colors.warning)
+    end
+
+    local progressionRuns, baselineRuns = SplitProgressionRuns(encounters, highestKey)
+    if #baselineRuns == 0 then
+        return BuildMessagePanel(parent, x, y, "Progression Snapshot", "Run this dungeon at another key level to unlock progression trends.", CFG.colors.warning)
+    end
+
+    local title = tostring(selectedDungeon) .. " Progression"
+    local subtitle = "Highest captured: +" .. tostring(highestKey) .. " compared to lower saved runs."
+    local panel = MakePanel(parent, x, y, 908, 210, title, CFG.colors.cardBorder, CFG.colors.gold)
+    AddLine(panel, subtitle, 14, -32, 760, CFG.colors.muted, "GameFontDisableSmall")
+
+    for i, key in ipairs(TREND_METRICS) do
+        local row = math.floor((i - 1) / 4)
+        local col = (i - 1) % 4
+        local tx = 14 + (col * 221)
+        local ty = -44 - (row * 88)
+        BuildTrendTile(panel, tx, ty, BuildMetricComparison(key, baselineRuns, progressionRuns), "+" .. tostring(highestKey) .. " avg")
+    end
+
     return panel
 end
 
@@ -1076,38 +1319,65 @@ function Trends:RefreshDropdowns()
         self.selectedSpec = nil
     end
 
+    local dungeonOptions = GetDungeonOptions(self.allEncounters, self.selectedSpec)
+    local hasSelectedDungeon = false
+
+    for _, option in ipairs(dungeonOptions) do
+        if option.value == self.selectedDungeon then
+            hasSelectedDungeon = true
+            break
+        end
+    end
+
+    if not hasSelectedDungeon then
+        self.selectedDungeon = nil
+    end
+
     SetDropdownText(self.specDropdown, GetSpecText(self.selectedSpec))
+    SetDropdownText(self.dungeonDropdown, GetDungeonText(self.selectedDungeon))
 end
 
 function Trends:RefreshContent()
     ClearChildren(self.content)
 
     local encounters = self.allEncounters or GetEncounterList()
-    local usableCount = CountUsableRuns(encounters, self.selectedSpec)
+    local filtered = FilterTrendEncounters(encounters, self.selectedSpec, self.selectedDungeon)
+    local usableCount = #filtered
 
     if self.summaryText then
-        self.summaryText:SetText(tostring(usableCount) .. " completed run(s) in selected sample")
+        local label = self.selectedDungeon and tostring(self.selectedDungeon) or "selected sample"
+        self.summaryText:SetText(tostring(usableCount) .. " completed run(s) in " .. label)
     end
 
     if usableCount == 0 then
-        BuildNotesPanel(self.content, 0, 0)
-        self.content:SetHeight(90)
+        BuildMessagePanel(self.content, 0, 0, "Performance Direction", "Run this dungeon more to unlock trends.", CFG.colors.warning)
+        self.content:SetHeight(120)
         return
     end
 
-    local statGroup = BuildMostUsedStatPriority(encounters, self.selectedSpec)
-    local talentGroup = BuildMostUsedTalent(encounters, self.selectedSpec)
-    local dungeonGroup = BuildMostPlayedDungeon(encounters, self.selectedSpec)
+    if self.selectedDungeon and usableCount < 2 then
+        BuildMessagePanel(self.content, 0, 0, "Performance Direction", "Run this dungeon more to unlock trends.", CFG.colors.warning)
+        self.content:SetHeight(120)
+        return
+    end
 
-    BuildMostUsedStatCard(self.content, 0, 0, statGroup, usableCount)
-    BuildMostUsedTalentCard(self.content, 460, 0, talentGroup, usableCount)
+    if self.selectedDungeon then
+        BuildProgressionSnapshot(self.content, 0, 0, filtered, self.selectedDungeon)
+        self.content:SetHeight(240)
+        return
+    end
 
-    BuildPerformanceTrends(self.content, 0, -106, encounters, self.selectedSpec)
-    BuildDungeonMasteryPanel(self.content, 0, -244, dungeonGroup, usableCount)
-    BuildRecordStrip(self.content, 0, -412, encounters, self.selectedSpec)
-    BuildNotesPanel(self.content, 0, -516)
+    BuildPerformanceTrends(
+        self.content,
+        0,
+        0,
+        filtered,
+        "Performance Direction",
+        "Recent runs compared against earlier saved runs.",
+        "Recent avg"
+    )
 
-    self.content:SetHeight(600)
+    self.content:SetHeight(240)
 end
 
 function Trends:Refresh()
@@ -1136,7 +1406,7 @@ function Trends:Create(parent)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
     subtitle:SetWidth(CFG.header.subtitleWidth)
     subtitle:SetJustifyH("LEFT")
-    subtitle:SetText("Shows what KeyLab observed over time: setups, direction, dungeon familiarity, and best saved results.")
+    subtitle:SetText("Shows visual performance direction by spec, dungeon, and captured progression runs.")
     ApplyColor(subtitle, CFG.colors.muted)
 
     self.summaryText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -1157,6 +1427,21 @@ function Trends:Create(parent)
             info.text = option.text
             info.func = function()
                 Trends.selectedSpec = option.value
+                Trends.selectedDungeon = nil
+                Trends:Refresh()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+
+    self.dungeonDropdown = MakeDropdown(controls, CFG.controls.dungeonWidth, CFG.controls.dungeonX, CFG.controls.labelY, "Dungeon", function(_, level)
+        local options = GetDungeonOptions(Trends.allEncounters or GetEncounterList(), Trends.selectedSpec)
+
+        for _, option in ipairs(options) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = option.text
+            info.func = function()
+                Trends.selectedDungeon = option.value
                 Trends:Refresh()
             end
             UIDropDownMenu_AddButton(info, level)
