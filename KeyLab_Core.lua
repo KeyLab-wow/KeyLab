@@ -73,6 +73,9 @@ local function Initialize()
         KeyLabDB.settings = KeyLabDB.settings or {}
         KeyLabDB.encounters = KeyLabDB.encounters or {}
         KeyLabDB.builds = KeyLabDB.builds or {}
+        KeyLabDB.lootTargets = KeyLabDB.lootTargets or {}
+        KeyLabDB.lootTargetStatuses = KeyLabDB.lootTargetStatuses or {}
+        KeyLabDB.statGoals = KeyLabDB.statGoals or {}
     end
 
     if KeyLab.Capture and KeyLab.Capture.Sessions and KeyLab.Capture.Sessions.EnsureCaptureDB then
@@ -93,6 +96,9 @@ local function ResetAll()
             settings = { completedMythicPlusOnly = true },
             encounters = {},
             builds = {},
+            lootTargets = {},
+            lootTargetStatuses = {},
+            statGoals = {},
         }
     end
 

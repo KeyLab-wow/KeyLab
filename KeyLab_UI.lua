@@ -93,6 +93,7 @@ local CFG = {
         "Talent Builds",
         "Stat Profiles",
         "Trends",
+        "Gear Targets",
         "Insights",
         "Settings",
     },
