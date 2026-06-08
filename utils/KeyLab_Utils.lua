@@ -18,7 +18,25 @@ Purpose:
 
 function Utils.SafeNumber(value)
     local ok, result = pcall(function()
-        return tonumber(value)
+        local n = tonumber(value)
+        if type(n) ~= "number" then
+            return nil
+        end
+
+        -- Some live player stat APIs can briefly return protected "secret"
+        -- numbers after talent/loadout changes. Any comparison against those
+        -- values errors, so verify the number is usable before callers sort or
+        -- format it.
+        local copy = n + 0
+        if copy ~= copy then
+            return nil
+        end
+
+        if not (copy < math.huge and copy > -math.huge) then
+            return nil
+        end
+
+        return copy
     end)
 
     if ok and type(result) == "number" then
