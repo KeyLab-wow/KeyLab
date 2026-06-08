@@ -24,9 +24,44 @@ local function PickValue(values, resultIndex)
     return values[resultIndex or 1]
 end
 
+local function SafeNumber(value)
+    if KeyLab.Utils and KeyLab.Utils.SafeNumber then
+        return KeyLab.Utils.SafeNumber(value)
+    end
+
+    local ok, result = pcall(function()
+        local n = tonumber(value)
+        if type(n) ~= "number" then return nil end
+        local copy = n + 0
+        if copy ~= copy then return nil end
+        if not (copy < math.huge and copy > -math.huge) then return nil end
+        return copy
+    end)
+
+    if ok and type(result) == "number" then
+        return result
+    end
+
+    return nil
+end
+
+local function CaptureValues(fn, ...)
+    if type(fn) ~= "function" then
+        return nil
+    end
+
+    local ok, a, b, c, d = pcall(fn, ...)
+    if not ok then
+        return nil
+    end
+
+    return { a, b, c, d }
+end
+
 local function StoreStatValue(stats, statKey, value)
-    if type(value) == "number" then
-        stats[statKey] = value
+    local safeValue = SafeNumber(value)
+    if safeValue ~= nil then
+        stats[statKey] = safeValue
     end
 end
 
@@ -47,35 +82,35 @@ function StatCapture.GetSnapshot()
             local values = nil
 
             if statKey == "strength" and UnitStat then
-                values = { UnitStat("player", 1) }
+                values = CaptureValues(UnitStat, "player", 1)
             elseif statKey == "agility" and UnitStat then
-                values = { UnitStat("player", 2) }
+                values = CaptureValues(UnitStat, "player", 2)
             elseif statKey == "stamina" and UnitStat then
-                values = { UnitStat("player", 3) }
+                values = CaptureValues(UnitStat, "player", 3)
             elseif statKey == "intellect" and UnitStat then
-                values = { UnitStat("player", 4) }
+                values = CaptureValues(UnitStat, "player", 4)
             elseif statKey == "crit" and GetCritChance then
-                values = { GetCritChance() }
+                values = CaptureValues(GetCritChance)
             elseif statKey == "haste" and GetHaste then
-                values = { GetHaste() }
+                values = CaptureValues(GetHaste)
             elseif statKey == "mastery" and GetMasteryEffect then
-                values = { GetMasteryEffect() }
+                values = CaptureValues(GetMasteryEffect)
             elseif statKey == "versatility" and GetCombatRatingBonus and CR_VERSATILITY_DAMAGE_DONE then
-                values = { GetCombatRatingBonus(CR_VERSATILITY_DAMAGE_DONE) }
+                values = CaptureValues(GetCombatRatingBonus, CR_VERSATILITY_DAMAGE_DONE)
             elseif statKey == "leech" and GetLifesteal then
-                values = { GetLifesteal() }
+                values = CaptureValues(GetLifesteal)
             elseif statKey == "avoidance" and GetAvoidance then
-                values = { GetAvoidance() }
+                values = CaptureValues(GetAvoidance)
             elseif statKey == "speed" and GetSpeed then
-                values = { GetSpeed() }
+                values = CaptureValues(GetSpeed)
             elseif statKey == "dodge" and GetDodgeChance then
-                values = { GetDodgeChance() }
+                values = CaptureValues(GetDodgeChance)
             elseif statKey == "parry" and GetParryChance then
-                values = { GetParryChance() }
+                values = CaptureValues(GetParryChance)
             elseif statKey == "block" and GetBlockChance then
-                values = { GetBlockChance() }
+                values = CaptureValues(GetBlockChance)
             elseif statKey == "armor" and UnitArmor then
-                values = { UnitArmor("player") }
+                values = CaptureValues(UnitArmor, "player")
             end
 
             local value = PickValue(values, info.resultIndex)
