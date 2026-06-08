@@ -6,6 +6,27 @@ KeyLab.Formatters = KeyLab.Formatters or {}
 
 local Formatters = KeyLab.Formatters
 
+local function SafeNumber(value)
+    if KeyLab.Utils and KeyLab.Utils.SafeNumber then
+        return KeyLab.Utils.SafeNumber(value)
+    end
+
+    local ok, result = pcall(function()
+        local n = tonumber(value)
+        if type(n) ~= "number" then return nil end
+        local copy = n + 0
+        if copy ~= copy then return nil end
+        if not (copy < math.huge and copy > -math.huge) then return nil end
+        return copy
+    end)
+
+    if ok and type(result) == "number" then
+        return result
+    end
+
+    return nil
+end
+
 --[[
 KeyLab Formatters
 
@@ -16,7 +37,8 @@ Purpose:
 ]]
 
 function Formatters.Number(value)
-    if type(value) ~= "number" then
+    value = SafeNumber(value)
+    if value == nil then
         return "-"
     end
 
@@ -32,7 +54,8 @@ function Formatters.Number(value)
 end
 
 function Formatters.Percent(value)
-    if type(value) ~= "number" then
+    value = SafeNumber(value)
+    if value == nil then
         return "-"
     end
 
@@ -48,7 +71,8 @@ function Formatters.Text(value)
 end
 
 function Formatters.DateTime(timestamp)
-    if type(timestamp) ~= "number" then
+    timestamp = SafeNumber(timestamp)
+    if timestamp == nil then
         return "-"
     end
 
@@ -56,7 +80,8 @@ function Formatters.DateTime(timestamp)
 end
 
 function Formatters.Duration(seconds)
-    if type(seconds) ~= "number" then
+    seconds = SafeNumber(seconds)
+    if seconds == nil then
         return "-"
     end
 
