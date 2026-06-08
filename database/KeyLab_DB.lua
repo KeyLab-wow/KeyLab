@@ -20,7 +20,7 @@ SavedVariables:
 - KeyLabDB
 ]]
 
-local DB_VERSION = "0.1.4"
+local DB_VERSION = "0.1.5"
 
 local DEFAULT_SETTINGS = {
     completedMythicPlusOnly = true,
@@ -45,6 +45,9 @@ function DB.Initialize()
     EnsureTable(KeyLabDB, "settings")
     EnsureTable(KeyLabDB, "encounters")
     EnsureTable(KeyLabDB, "builds")
+    EnsureTable(KeyLabDB, "lootTargets")
+    EnsureTable(KeyLabDB, "lootTargetStatuses")
+    EnsureTable(KeyLabDB, "statGoals")
 
     for key, value in pairs(DEFAULT_SETTINGS) do
         if KeyLabDB.settings[key] == nil then
@@ -107,6 +110,9 @@ function DB.ResetAll()
         settings = {},
         encounters = {},
         builds = {},
+        lootTargets = {},
+        lootTargetStatuses = {},
+        statGoals = {},
     }
 
     for key, value in pairs(DEFAULT_SETTINGS) do
