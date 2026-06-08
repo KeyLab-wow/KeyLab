@@ -194,9 +194,31 @@ local function Fmt()
     return KeyLab.Formatters or {}
 end
 
+local function SafeNumber(value)
+    if KeyLab.Utils and KeyLab.Utils.SafeNumber then
+        return KeyLab.Utils.SafeNumber(value)
+    end
+
+    local ok, result = pcall(function()
+        local n = tonumber(value)
+        if type(n) ~= "number" then return nil end
+        local copy = n + 0
+        if copy ~= copy then return nil end
+        if not (copy < math.huge and copy > -math.huge) then return nil end
+        return copy
+    end)
+
+    if ok and type(result) == "number" then
+        return result
+    end
+
+    return nil
+end
+
 local function FormatNumber(value)
     if Fmt().Number then return Fmt().Number(value) end
-    if type(value) ~= "number" then return "-" end
+    value = SafeNumber(value)
+    if value == nil then return "-" end
     if value >= 1000000 then return string.format("%.1fM", value / 1000000) end
     if value >= 1000 then return string.format("%.1fK", value / 1000) end
     return tostring(math.floor(value + 0.5))
@@ -204,13 +226,15 @@ end
 
 local function FormatDateTime(value)
     if Fmt().DateTime then return Fmt().DateTime(value) end
-    if type(value) ~= "number" then return "-" end
+    value = SafeNumber(value)
+    if value == nil then return "-" end
     return date("%b %d, %Y %I:%M %p", value)
 end
 
 local function FormatDuration(value)
     if Fmt().Duration then return Fmt().Duration(value) end
-    if type(value) ~= "number" then return "-" end
+    value = SafeNumber(value)
+    if value == nil then return "-" end
     local mins = math.floor(value / 60)
     local secs = math.floor(value % 60)
     return string.format("%d:%02d", mins, secs)
@@ -218,7 +242,8 @@ end
 
 local function FormatStat(statKey, value)
     if Fmt().Stat then return Fmt().Stat(statKey, value) end
-    if type(value) ~= "number" then return "-" end
+    value = SafeNumber(value)
+    if value == nil then return "-" end
 
     local mapping = KeyLab.Mapping and KeyLab.Mapping.Stats and KeyLab.Mapping.Stats[statKey]
     if mapping and mapping.displayType == "percent" then
@@ -461,7 +486,7 @@ local function GetEncounterList()
             end
         end
         table.sort(copy, function(a, b)
-            return (a.timestamp or 0) > (b.timestamp or 0)
+            return (SafeNumber(a.timestamp) or 0) > (SafeNumber(b.timestamp) or 0)
         end)
         return copy
     end
@@ -625,7 +650,7 @@ local function GetStatPriority(encounter)
     local priority = {}
 
     for _, statKey in ipairs(STAT_KEYS) do
-        local value = stats and tonumber(stats[statKey])
+        local value = SafeNumber(stats and stats[statKey])
         if value and value > 0 then
             table.insert(priority, {
                 key = statKey,
@@ -673,6 +698,9 @@ end
 local function AddEncounterToPriorityGroup(groups, encounter, metricKey, metricValue, lowerIsBetter)
     local priority = GetStatPriority(encounter)
     if not priority then return end
+
+    metricValue = SafeNumber(metricValue)
+    if metricValue == nil then return end
 
     local priorityKey = GetPriorityKey(priority)
     if not priorityKey then return end
@@ -737,8 +765,8 @@ local function GetProfileCards(self)
 
     for _, encounter in ipairs(self.allEncounters or {}) do
         if MatchesFilters(encounter, self.selectedSpec) then
-            local metricValue = GetMetricValue(encounter, self.selectedMetricKey)
-            if type(metricValue) == "number" then
+            local metricValue = SafeNumber(GetMetricValue(encounter, self.selectedMetricKey))
+            if metricValue ~= nil then
                 AddEncounterToPriorityGroup(groups, encounter, self.selectedMetricKey, metricValue, lowerIsBetter)
             end
         end
@@ -762,8 +790,8 @@ local function GetProfileCards(self)
     end
 
     table.sort(results, function(a, b)
-        local av = tonumber(a.metricAverage) or 0
-        local bv = tonumber(b.metricAverage) or 0
+        local av = SafeNumber(a.metricAverage) or 0
+        local bv = SafeNumber(b.metricAverage) or 0
 
         if av == bv then
             return (a.runCount or 0) > (b.runCount or 0)
@@ -804,9 +832,9 @@ local function AddStatRows(parent, encounter, x, y, width)
 
     for _, statKey in ipairs(order) do
         local info = mapping[statKey]
-        local value = stats and stats[statKey]
+        local value = SafeNumber(stats and stats[statKey])
 
-        if info and info.store == true and type(value) == "number" and value > 0 then
+        if info and info.store == true and value and value > 0 then
             if shown < maxShown then
                 local label = info.label or statKey
                 local text = label .. ": " .. FormatStat(statKey, value)
@@ -1188,7 +1216,7 @@ function StatProfiles:Refresh()
 
     for i = 1, showCount do
         local profile = profiles[i]
-        local value = tonumber(profile.metricAverage) or 0
+        local value = SafeNumber(profile.metricAverage) or 0
         if value > maxValue then maxValue = value end
         if minValue == nil or value < minValue then minValue = value end
     end

@@ -171,9 +171,31 @@ local function Fmt()
     return KeyLab.Formatters or {}
 end
 
+local function SafeNumber(value)
+    if KeyLab.Utils and KeyLab.Utils.SafeNumber then
+        return KeyLab.Utils.SafeNumber(value)
+    end
+
+    local ok, result = pcall(function()
+        local n = tonumber(value)
+        if type(n) ~= "number" then return nil end
+        local copy = n + 0
+        if copy ~= copy then return nil end
+        if not (copy < math.huge and copy > -math.huge) then return nil end
+        return copy
+    end)
+
+    if ok and type(result) == "number" then
+        return result
+    end
+
+    return nil
+end
+
 local function FormatNumber(value)
     if Fmt().Number then return Fmt().Number(value) end
-    if type(value) ~= "number" then return "-" end
+    value = SafeNumber(value)
+    if value == nil then return "-" end
     if value >= 1000000 then return string.format("%.1fM", value / 1000000) end
     if value >= 1000 then return string.format("%.1fK", value / 1000) end
     return tostring(math.floor(value + 0.5))
@@ -186,7 +208,8 @@ end
 
 local function FormatDateTime(value)
     if Fmt().DateTime then return Fmt().DateTime(value) end
-    if type(value) ~= "number" then return "-" end
+    value = SafeNumber(value)
+    if value == nil then return "-" end
     return date("%b %d, %Y %I:%M %p", value)
 end
 
@@ -331,7 +354,7 @@ local function GetEncounterList()
     end
 
     table.sort(list, function(a, b)
-        return (a.timestamp or 0) > (b.timestamp or 0)
+        return (SafeNumber(a.timestamp) or 0) > (SafeNumber(b.timestamp) or 0)
     end)
 
     return list
@@ -478,7 +501,7 @@ local function GetStatPriority(encounter)
     local priority = {}
 
     for _, statKey in ipairs(STAT_KEYS) do
-        local value = stats and tonumber(stats[statKey])
+        local value = SafeNumber(stats and stats[statKey])
         if value and value > 0 then
             table.insert(priority, {
                 key = statKey,
@@ -764,7 +787,7 @@ local function Average(values)
     if type(values) ~= "table" or #values == 0 then return nil end
     local total = 0
     for _, value in ipairs(values) do
-        total = total + (tonumber(value) or 0)
+        total = total + (SafeNumber(value) or 0)
     end
     return total / #values
 end

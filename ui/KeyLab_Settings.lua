@@ -107,55 +107,23 @@ end
 -- =========================================================
 
 local function RegisterResetPopup()
-    if StaticPopupDialogs["KEYLAB_CONFIRM_RESET"] then
-        return
-    end
-
-    StaticPopupDialogs["KEYLAB_CONFIRM_RESET"] = {
-        text = "Delete all saved KeyLab journal data for all characters?\n\nThis action cannot be undone.",
-        button1 = YES,
-        button2 = CANCEL,
-        OnAccept = function()
-            if KeyLab.DB and KeyLab.DB.ResetAll then
-                KeyLab.DB.ResetAll()
-            else
-                KeyLabDB = {
-                    version = KeyLab.version or "0.1.4",
-                    trackingSince = date("%B %Y"),
-                    settings = { completedMythicPlusOnly = true },
-                    encounters = {},
-                    builds = {},
-                }
-            end
-
-            KeyLabCaptureDB = {
-                version = KeyLab.version or "0.1.4",
-                active = false,
-                completedSeen = false,
-                interrupted = false,
-            }
-
-            Print("Journal data has been reset.")
-
-            if KeyLab.UI and KeyLab.UI.RefreshSelectedTab then
-                KeyLab.UI:RefreshSelectedTab()
-            elseif KeyLab.UI and KeyLab.UI.RefreshCurrentTab then
-                KeyLab.UI.RefreshCurrentTab()
-            end
-        end,
-        timeout = 0,
-        whileDead = true,
-        hideOnEscape = true,
-        preferredIndex = STATICPOPUP_NUMDIALOGS,
-    }
+    -- Reset confirmation is registered by KeyLab_JournalData.lua.
 end
 
 local function ExportJournalData()
-    Print("Export system is not implemented yet.")
+    if KeyLab.ShowExportPopup then
+        KeyLab:ShowExportPopup()
+    else
+        Print("Export system is not available.")
+    end
 end
 
 local function ImportJournalData()
-    Print("Import system is not implemented yet.")
+    if KeyLab.ShowImportPopup then
+        KeyLab:ShowImportPopup()
+    else
+        Print("Import system is not available.")
+    end
 end
 
 -- =========================================================
@@ -213,7 +181,11 @@ local function BuildSettings(content)
         "Delete / Reset Data",
         "danger",
         function()
-            StaticPopup_Show("KEYLAB_CONFIRM_RESET")
+            if KeyLab.ShowResetJournalDataConfirmation then
+                KeyLab:ShowResetJournalDataConfirmation()
+            else
+                Print("Reset system is not available.")
+            end
         end
     )
     y = y - ROW_GAP - SECTION_GAP

@@ -19,19 +19,22 @@ KeyLab.Tabs.Insights = Insights
 
 local COLORS = {
     bg       = {0.025, 0.035, 0.075, 0.96},
-    panel    = {0.035, 0.055, 0.105, 0.40},
-    border   = {0.22, 0.42, 0.78, 0.45},
+    panel    = {0.035, 0.055, 0.105, 0.72},
+    border   = {0.22, 0.42, 0.78, 0.62},
     gold     = {0.95, 0.72, 0.25, 1.0},
     title    = {0.70, 0.86, 1.00, 1.0},
     text     = {0.88, 0.90, 0.96, 1.0},
     muted    = {0.64, 0.70, 0.82, 1.0},
     accent   = {0.35, 0.68, 1.00, 1.0},
     divider  = {1, 1, 1, 0.14},
-    softBg   = {0.030, 0.046, 0.090, 0.42},
+    softBg   = {0.030, 0.046, 0.090, 0.74},
+    headerBg = {0.020, 0.034, 0.074, 0.86},
+    cardBg   = {0.020, 0.032, 0.068, 0.82},
+    cardLine = {0.58, 0.78, 1.00, 0.48},
 }
 
 local CONTENT_WIDTH = 900
-local PAGE_PADDING = 6
+local PAGE_PADDING = 8
 
 -- =========================================================
 -- BASIC HELPERS
@@ -82,29 +85,39 @@ end
 local function AddAccent(parent, x, y, height)
     local strip = parent:CreateTexture(nil, "ARTWORK")
     strip:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    strip:SetSize(3, height or 24)
+    strip:SetSize(4, height or 24)
     strip:SetColorTexture(unpack(COLORS.gold))
     return strip
 end
 
 local function AddSectionHeader(parent, y, title, subtitle)
-    AddAccent(parent, PAGE_PADDING, y + 2, subtitle and 44 or 28)
+    local headerHeight = subtitle and 58 or 42
+    local headerBg = parent:CreateTexture(nil, "BACKGROUND")
+    headerBg:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, y + 8)
+    headerBg:SetSize(CONTENT_WIDTH - (PAGE_PADDING * 2), headerHeight)
+    headerBg:SetColorTexture(unpack(COLORS.headerBg))
+
+    local topLine = parent:CreateTexture(nil, "ARTWORK")
+    topLine:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, y + 8)
+    topLine:SetSize(CONTENT_WIDTH - (PAGE_PADDING * 2), 1)
+    topLine:SetColorTexture(unpack(COLORS.border))
+
+    AddAccent(parent, PAGE_PADDING, y + 8, headerHeight)
 
     local h = MakeText(parent, title, "GameFontNormalLarge", nil, COLORS.gold, "LEFT")
-    h:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING + 12, y)
-    h:SetSize(CONTENT_WIDTH - 36, 24)
+    h:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING + 16, y - 1)
+    h:SetSize(CONTENT_WIDTH - 44, 24)
 
     local nextY = y - 30
 
     if subtitle and subtitle ~= "" then
         local s = MakeText(parent, subtitle, "GameFontHighlightSmall", nil, COLORS.muted, "LEFT")
-        s:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING + 12, y - 25)
-        s:SetSize(CONTENT_WIDTH - 36, 32)
+        s:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING + 16, y - 25)
+        s:SetSize(CONTENT_WIDTH - 44, 32)
         nextY = y - 62
     end
 
-    AddDivider(parent, nextY + 8)
-    return nextY - 12
+    return nextY - 18
 end
 
 local function AddTextBlock(parent, x, y, width, title, body)
@@ -131,7 +144,13 @@ local function AddSoftBox(parent, x, y, width, height, title, body)
     box:SetSize(width, height)
     SetBackdrop(box, COLORS.softBg, COLORS.border)
 
-    local h = MakeText(box, title, "GameFontNormal", nil, COLORS.title, "LEFT")
+    local strip = box:CreateTexture(nil, "ARTWORK")
+    strip:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
+    strip:SetPoint("TOPRIGHT", box, "TOPRIGHT", 0, 0)
+    strip:SetHeight(2)
+    strip:SetColorTexture(unpack(COLORS.cardLine))
+
+    local h = MakeText(box, title, "GameFontNormal", nil, COLORS.gold, "LEFT")
     h:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
     h:SetSize(width - 24, 18)
 
@@ -146,7 +165,7 @@ local function AddColumnDivider(parent, x, y, height)
     local line = parent:CreateTexture(nil, "ARTWORK")
     line:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     line:SetSize(1, height)
-    line:SetColorTexture(unpack(COLORS.divider))
+    line:SetColorTexture(unpack(COLORS.border))
     return line
 end
 
@@ -326,16 +345,28 @@ function Insights:Create(parent)
     frame:SetAllPoints(parent)
     SetBackdrop(frame, COLORS.bg, {0, 0, 0, 0})
 
-    local title = MakeText(frame, "Insights", "GameFontNormalLarge", nil, COLORS.gold, "LEFT")
-    title:SetPoint("TOPLEFT", 18, -18)
-    title:SetSize(420, 28)
+    local header = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    header:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -14)
+    header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -14)
+    header:SetHeight(62)
+    SetBackdrop(header, COLORS.panel, COLORS.border)
 
-    local subtitle = MakeText(frame, "Reference notes for encounter variables, character stats, spell queue window, macros, and sims.", "GameFontHighlightSmall", nil, COLORS.muted, "LEFT")
+    local strip = header:CreateTexture(nil, "ARTWORK")
+    strip:SetPoint("TOPLEFT", header, "TOPLEFT", 0, 0)
+    strip:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 0, 0)
+    strip:SetWidth(3)
+    strip:SetColorTexture(unpack(COLORS.gold))
+
+    local title = MakeText(header, "Insights", "GameFontNormalLarge", nil, COLORS.gold, "LEFT")
+    title:SetPoint("TOPLEFT", header, "TOPLEFT", 16, -10)
+    title:SetSize(420, 24)
+
+    local subtitle = MakeText(header, "Reference notes for encounter variables, character stats, spell queue window, macros, and sims.", "GameFontHighlightSmall", nil, COLORS.muted, "LEFT")
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
     subtitle:SetSize(820, 24)
 
     local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -74)
+    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -90)
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
 
     local content = CreateFrame("Frame", nil, scrollFrame)

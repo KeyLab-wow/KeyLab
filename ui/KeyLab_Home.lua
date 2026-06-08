@@ -1,7 +1,5 @@
 -- KeyLab_Home.lua
--- Home tab for KeyLab / M+ Journal
--- Purpose: simple landing page with tracking summary, required setup, quick access, and what KeyLab records.
--- Assets intentionally omitted for now.
+-- Home tab for KeyLab / M+ Journal.
 
 local addonName, KeyLab = ...
 KeyLab = KeyLab or {}
@@ -13,14 +11,10 @@ KeyLab.Tabs = KeyLab.Tabs or {}
 local HOME = {}
 KeyLab.Tabs.Home = HOME
 
--- =========================================================
--- EASY EDIT SETTINGS
--- =========================================================
-
 local COLORS = {
     bg         = {0.015, 0.025, 0.055, 0.96},
-    panel      = {0.030, 0.045, 0.085, 0.72},
-    important  = {0.080, 0.055, 0.025, 0.72},
+    panel      = {0.030, 0.045, 0.085, 0.78},
+    important  = {0.080, 0.055, 0.025, 0.74},
     border     = {0.24, 0.36, 0.68, 0.55},
     warnBorder = {0.95, 0.72, 0.25, 0.85},
     text       = {0.86, 0.90, 0.96, 1.0},
@@ -37,10 +31,6 @@ local CFG = {
     width = 880,
     gap = 14,
 }
-
--- =========================================================
--- BASIC HELPERS
--- =========================================================
 
 local function SetBackdrop(frame, color, borderColor)
     frame:SetBackdrop({
@@ -65,14 +55,6 @@ local function MakeText(parent, text, size, color, justify)
     return fs
 end
 
-local function MakeDivider(parent, y, width)
-    local line = parent:CreateTexture(nil, "ARTWORK")
-    line:SetPoint("TOPLEFT", parent, "TOPLEFT", CFG.x, y)
-    line:SetSize(width or CFG.width, 1)
-    line:SetColorTexture(unpack(COLORS.divider))
-    return line
-end
-
 local function MakePanel(parent, x, y, width, height, important)
     local panel = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     panel:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
@@ -90,6 +72,13 @@ local function MakePanel(parent, x, y, width, height, important)
     return panel
 end
 
+local function MakeButton(parent, label, width, height, onClick)
+    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    button:SetSize(width or 150, height or 26)
+    button:SetText(label)
+    button:SetScript("OnClick", onClick)
+    return button
+end
 
 local function NormalizeKeyLabName(value)
     value = tostring(value or "")
@@ -128,19 +117,36 @@ local function EncounterMatchesCurrentCharacter(encounter)
     end
 
     local player = encounter.player or {}
+    local character = encounter.character or {}
+    local context = encounter.context or {}
+    local capture = encounter.capture or {}
 
     local encounterName =
         player.name
         or player.characterName
         or player.character
+        or player.playerName
+        or character.name
+        or character.characterName
+        or context.characterName
+        or context.playerName
+        or capture.characterName
+        or capture.playerName
         or encounter.characterName
         or encounter.playerName
         or encounter.character
+        or encounter.name
 
     local encounterRealm =
         player.realm
         or player.realmName
         or player.server
+        or character.realm
+        or character.realmName
+        or context.realm
+        or context.realmName
+        or capture.realm
+        or capture.realmName
         or encounter.realm
         or encounter.realmName
         or encounter.server
@@ -148,6 +154,12 @@ local function EncounterMatchesCurrentCharacter(encounter)
     local encounterFull =
         player.fullName
         or player.characterFullName
+        or character.fullName
+        or character.characterFullName
+        or context.characterFullName
+        or context.fullName
+        or capture.characterFullName
+        or capture.fullName
         or encounter.characterFullName
         or encounter.fullName
 
@@ -166,8 +178,6 @@ local function EncounterMatchesCurrentCharacter(encounter)
     end
 
     if not encounterName or encounterName == "" then
-        -- Older test records may not have character identity saved.
-        -- Keep those visible instead of hiding historical data unexpectedly.
         return true
     end
 
@@ -181,19 +191,6 @@ local function EncounterMatchesCurrentCharacter(encounter)
 
     return true
 end
-
-local function FilterCurrentCharacterEncounters(encounters)
-    local filtered = {}
-
-    for _, encounter in ipairs(encounters or {}) do
-        if EncounterMatchesCurrentCharacter(encounter) then
-            table.insert(filtered, encounter)
-        end
-    end
-
-    return filtered
-end
-
 
 local function IsCompletedEncounter(encounter)
     if type(encounter) ~= "table" then return false end
@@ -216,8 +213,11 @@ local function IsCompletedEncounter(encounter)
         return true
     end
 
-    -- Backward compatibility with earlier test records.
     if encounter.result == "Timed" or encounter.result == "Untimed" or encounter.result == "Depleted" then
+        return true
+    end
+
+    if type(encounter.challenge) == "table" or type(encounter.metrics) == "table" then
         return true
     end
 
@@ -239,7 +239,6 @@ local function CountEncounters()
     end
 
     local count = 0
-
     for _, encounter in pairs(list or {}) do
         if EncounterMatchesCurrentCharacter(encounter) and IsCompletedEncounter(encounter) then
             count = count + 1
@@ -261,68 +260,90 @@ local function GetTrackingSinceText()
     return "Not started yet"
 end
 
--- =========================================================
--- CREATE TAB
--- =========================================================
-
 function HOME:Create(parent)
     local frame = CreateFrame("Frame", "KeyLabHomeTab", parent, "BackdropTemplate")
     frame:SetAllPoints(parent)
     SetBackdrop(frame, COLORS.bg, {0, 0, 0, 0})
 
     local y = CFG.y
+    local width = CFG.width
+    local gap = CFG.gap
+    local halfW = (width - gap) / 2
 
-    local title = MakeText(frame, "KeyLab Journal", 18, COLORS.title, "LEFT")
-    title:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.x, y)
-    title:SetSize(CFG.width, 24)
+    local hero = MakePanel(frame, CFG.x, y, width, 132, false)
 
-    y = y - 28
+    local title = MakeText(hero, "KeyLab Journal", 20, COLORS.title, "LEFT")
+    title:SetPoint("TOPLEFT", hero, "TOPLEFT", 16, -14)
+    title:SetSize(360, 26)
 
     local subtitle = MakeText(
-        frame,
-        "KeyLab is a personal Mythic+ journal focused on real encounter outcomes, talent and stat priority experimentation, and gameplay consistency.",
+        hero,
+        "A personal Mythic+ journal for real run outcomes, stat experiments, target gear, and the patterns that work for your characters.",
         12,
         COLORS.text,
         "LEFT"
     )
-    subtitle:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.x, y)
-    subtitle:SetSize(CFG.width, 34)
+    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
+    subtitle:SetSize(540, 38)
 
-    y = y - 56
-    MakeDivider(frame, y, CFG.width)
-    y = y - 28
+    local rhythm = MakeText(hero, "Try a build. Tune your stats. Target gear. Review results.", 14, COLORS.title, "LEFT")
+    rhythm:SetPoint("TOPLEFT", hero, "TOPLEFT", 16, -94)
+    rhythm:SetSize(560, 22)
 
-    local tracking = MakeText(frame, "Tracking Since: ", 13, COLORS.text, "LEFT")
-    tracking:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.x, y)
-    tracking:SetSize(200, 18)
+    local sinceLabel = MakeText(hero, "Tracking Since", 11, COLORS.muted, "LEFT")
+    sinceLabel:SetPoint("TOPLEFT", hero, "TOPLEFT", 620, -22)
+    sinceLabel:SetSize(120, 16)
 
-    local trackingValue = MakeText(frame, "Not started yet", 13, COLORS.accent, "LEFT")
-    trackingValue:SetPoint("LEFT", tracking, "RIGHT", 2, 0)
-    trackingValue:SetSize(280, 18)
+    local trackingValue = MakeText(hero, "Not started yet", 15, COLORS.accent, "LEFT")
+    trackingValue:SetPoint("TOPLEFT", sinceLabel, "BOTTOMLEFT", 0, -4)
+    trackingValue:SetSize(180, 22)
 
-    y = y - 54
-    MakeDivider(frame, y, CFG.width)
-    y = y - 28
+    local runsLabel = MakeText(hero, "Completed Runs", 11, COLORS.muted, "LEFT")
+    runsLabel:SetPoint("TOPLEFT", hero, "TOPLEFT", 620, -78)
+    runsLabel:SetSize(120, 16)
 
-    local steps = MakeText(
-        frame,
-        "Try a build.\nAdjust your stats.\nRun content.\nReview the results.",
-        15,
-        COLORS.title,
+    local runsValue = MakeText(hero, "0", 15, COLORS.accent, "LEFT")
+    runsValue:SetPoint("TOPLEFT", runsLabel, "BOTTOMLEFT", 0, -4)
+    runsValue:SetSize(180, 22)
+
+    y = y - 132 - gap
+
+    local gearPanel = MakePanel(frame, CFG.x, y, width, 126, false)
+
+    local gearTitle = MakeText(gearPanel, "Selected Gear Targets Window", 15, COLORS.title, "LEFT")
+    gearTitle:SetPoint("TOPLEFT", gearPanel, "TOPLEFT", 14, -12)
+    gearTitle:SetSize(width - 220, 20)
+
+    local gearBody = MakeText(
+        gearPanel,
+        "Opens a small companion window with the items you marked Wanted, Backup, or Temporary in the Gear Targets tab. Keep it open while browsing Premade Groups to quickly see target drops for the dungeon you are considering.",
+        12,
+        COLORS.text,
         "LEFT"
     )
-    steps:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.x, y)
-    steps:SetSize(CFG.width, 84)
+    gearBody:SetPoint("TOPLEFT", gearTitle, "BOTTOMLEFT", 0, -8)
+    gearBody:SetSize(width - 238, 56)
 
-    y = y - 102
-    MakeDivider(frame, y, CFG.width)
-    y = y - 22
+    local gearHint = MakeText(
+        gearPanel,
+        "Use the sidebar Gear Targets tab to browse loot, set stat goals, and mark items.",
+        11,
+        COLORS.muted,
+        "LEFT"
+    )
+    gearHint:SetPoint("TOPLEFT", gearPanel, "TOPLEFT", 14, -92)
+    gearHint:SetSize(width - 238, 18)
 
-    -- Important setup and access panels.
-    local halfW = (CFG.width - CFG.gap) / 2
-    local panelH = 210
+    local openTargets = MakeButton(gearPanel, "Open Selected Items", 178, 28, function()
+        if KeyLab.GearTargetsWindow and KeyLab.GearTargetsWindow.ShowManual then
+            KeyLab.GearTargetsWindow.ShowManual()
+        end
+    end)
+    openTargets:SetPoint("TOPRIGHT", gearPanel, "TOPRIGHT", -18, -48)
 
-    local required = MakePanel(frame, CFG.x, y, halfW, panelH, true)
+    y = y - 126 - gap
+
+    local required = MakePanel(frame, CFG.x, y, halfW, 170, true)
 
     local reqTitle = MakeText(required, "Required Blizzard Setting", 14, COLORS.warning, "LEFT")
     reqTitle:SetPoint("TOPLEFT", required, "TOPLEFT", 14, -12)
@@ -331,21 +352,18 @@ function HOME:Create(parent)
     local reqBody = MakeText(
         required,
         "KeyLab uses Blizzard's built-in Damage Meter data to capture completed Mythic+ outcomes.\n\n" ..
-        "Enable these settings before running keys:\n" ..
-        "1. Open Game Menu.\n" ..
-        "2. Select Gameplay Enhancements.\n" ..
-        "3. Under Damage Meter, check:\n" ..
-        "   • Enable Damage Meter\n" ..
-        "   • Auto Reset Damage Meter\n" ..
-        "4. Close the options window.",
+        "Before running keys:\n" ..
+        "- Game Menu > Gameplay Enhancements\n" ..
+        "- Under Damage Meter, enable Damage Meter\n" ..
+        "- Enable Auto Reset Damage Meter",
         12,
         COLORS.text,
         "LEFT"
     )
     reqBody:SetPoint("TOPLEFT", reqTitle, "BOTTOMLEFT", 0, -8)
-    reqBody:SetSize(halfW - 28, panelH - 42)
+    reqBody:SetSize(halfW - 28, 126)
 
-    local macro = MakePanel(frame, CFG.x + halfW + CFG.gap, y, halfW, panelH, false)
+    local macro = MakePanel(frame, CFG.x + halfW + gap, y, halfW, 170, false)
 
     local macroTitle = MakeText(macro, "Open KeyLab Quickly", 14, COLORS.title, "LEFT")
     macroTitle:SetPoint("TOPLEFT", macro, "TOPLEFT", 14, -12)
@@ -354,51 +372,64 @@ function HOME:Create(parent)
     local macroBody = MakeText(
         macro,
         "Use /keylab to open or close the journal.\n\n" ..
-        "To make an action bar button:\n" ..
-        "1. Open Game Menu.\n" ..
-        "2. Choose Macros.\n" ..
-        "3. In General Macros tab click New.\n" ..
-        "4. Name it KeyLab and choose any icon.\n" ..
-        "5. In Enter Macro Commands, add:\n" ..
-        "   /keylab\n" ..
-        "6. Save it and drag the macro icon to an action bar.",
+        "For an action bar button, create a General Macro named KeyLab, add /keylab as the command, then drag it to an action bar.",
         12,
         COLORS.text,
         "LEFT"
     )
     macroBody:SetPoint("TOPLEFT", macroTitle, "BOTTOMLEFT", 0, -8)
-    macroBody:SetSize(halfW - 28, panelH - 42)
+    macroBody:SetSize(halfW - 28, 116)
 
-    y = y - panelH - 26
-    MakeDivider(frame, y, CFG.width)
-    y = y - 28
+    y = y - 170 - gap
 
-    local tracksTitle = MakeText(frame, "What KeyLab Tracks", 15, COLORS.title, "LEFT")
-    tracksTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.x, y)
-    tracksTitle:SetSize(CFG.width, 22)
+    local tracks = MakePanel(frame, CFG.x, y, width, 158, false)
 
-    y = y - 34
+    local tracksTitle = MakeText(tracks, "What KeyLab Tracks", 15, COLORS.title, "LEFT")
+    tracksTitle:SetPoint("TOPLEFT", tracks, "TOPLEFT", 14, -12)
+    tracksTitle:SetSize(width - 28, 22)
 
-    local tracksBody = MakeText(
-        frame,
-        "• Dungeon\n" ..
-        "• Key Level\n" ..
-        "• Affixes\n" ..
-        "• Talent String\n" ..
-        "• Character Stats\n" ..
-        "• Metric Outcomes\n" ..
-        "• Stat Profiles",
-        13,
+    local tracksIntro = MakeText(
+        tracks,
+        "KeyLab keeps personal run context together so you can compare what changed and what actually worked.",
+        12,
+        COLORS.muted,
+        "LEFT"
+    )
+    tracksIntro:SetPoint("TOPLEFT", tracksTitle, "BOTTOMLEFT", 0, -4)
+    tracksIntro:SetSize(width - 28, 20)
+
+    local leftTracks = MakeText(
+        tracks,
+        "- Dungeon and key level\n" ..
+        "- Affixes\n" ..
+        "- Talent string\n" ..
+        "- Character stats",
+        12,
         COLORS.text,
         "LEFT"
     )
-    tracksBody:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.x, y)
-    tracksBody:SetSize(CFG.width, 150)
+    leftTracks:SetPoint("TOPLEFT", tracks, "TOPLEFT", 24, -62)
+    leftTracks:SetSize(360, 84)
+
+    local rightTracks = MakeText(
+        tracks,
+        "- Metric outcomes\n" ..
+        "- Stat profiles\n" ..
+        "- Gear targets\n" ..
+        "- Personal notes and trends",
+        12,
+        COLORS.text,
+        "LEFT"
+    )
+    rightTracks:SetPoint("TOPLEFT", tracks, "TOPLEFT", 454, -62)
+    rightTracks:SetSize(360, 84)
 
     frame.summarySince = trackingValue
+    frame.summaryRuns = runsValue
 
     function frame:Refresh()
         self.summarySince:SetText(GetTrackingSinceText())
+        self.summaryRuns:SetText(tostring(CountEncounters()))
     end
 
     frame:SetScript("OnShow", function(self)
