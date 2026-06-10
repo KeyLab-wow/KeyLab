@@ -9,6 +9,7 @@ local STATUS_LABELS = {
     wanted = "Wanted",
     backup = "Backup",
     temporary = "Temporary",
+    bis = "BIS",
     ignore = "Ignore",
     acquired = "Acquired",
 }
@@ -18,6 +19,7 @@ local STATUS_OPTIONS = {
     { value = "wanted", label = "Wanted" },
     { value = "backup", label = "Backup" },
     { value = "temporary", label = "Temporary" },
+    { value = "bis", label = "BIS" },
     { value = "ignore", label = "Ignore" },
     { value = "acquired", label = "Acquired" },
 }
@@ -26,6 +28,7 @@ local TRACKED_STATUSES = {
     wanted = true,
     backup = true,
     temporary = true,
+    bis = true,
 }
 
 --[[
@@ -258,7 +261,7 @@ function LootTargetsDB.GetSavedTargetsForSpec(specID)
 
     for itemID, selected in pairs(bucket or {}) do
         if selected then
-            local item = KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetItem and KeyLab.GearLootMapping.GetItem(tonumber(itemID))
+            local item = KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetItem and KeyLab.GearLootMapping.GetItem(tonumber(itemID), specID)
             if item then
                 table.insert(list, item)
             else
