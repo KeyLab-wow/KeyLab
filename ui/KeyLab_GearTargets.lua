@@ -36,6 +36,16 @@ local CFG = {
     rowHeight = 38,
 }
 
+local TABLE_WIDTH = 880
+local TABLE_COLUMNS = {
+    item = { x = 70, width = 235, label = "Item" },
+    slot = { x = 310, width = 68, label = "Slot" },
+    dungeon = { x = 384, width = 124, label = "Dungeon" },
+    stats = { x = 514, width = 164, label = "Stats" },
+    guidance = { x = 684, width = 96, label = "Guidance" },
+    status = { x = 786, width = 90, label = "Status" },
+}
+
 local PRIMARY_OPTIONS = {
     { label = "Intellect", value = "Int" },
     { label = "Stamina", value = "Stam" },
@@ -57,15 +67,34 @@ local STAT_GOAL_STATS = {
     versatility = { label = "Versatility" },
 }
 
-local STATUS_CYCLE = { "wanted", "backup", "temporary", "ignore", "acquired" }
+local STATUS_CYCLE = { "wanted", "backup", "temporary", "bis", "ignore", "acquired" }
 
 local STATUS_COLORS = {
     wanted = {0.45, 0.95, 0.60, 1.0},
     backup = {0.38, 0.68, 1.0, 1.0},
     temporary = {0.95, 0.76, 0.32, 1.0},
+    bis = {1.0, 0.86, 0.36, 1.0},
     ignore = {1.0, 0.72, 0.35, 1.0},
     acquired = {0.70, 0.85, 1.0, 1.0},
     unmarked = {0.62, 0.70, 0.82, 1.0},
+}
+
+local STATUS_SORT_RANK = {
+    wanted = 1,
+    backup = 2,
+    temporary = 3,
+    bis = 4,
+    acquired = 5,
+    ignore = 6,
+    unmarked = 7,
+}
+
+local GUIDANCE_SORT_RANK = {
+    ["Best Target"] = 1,
+    ["Good Backup"] = 2,
+    ["Temporary Option"] = 3,
+    ["Review Trinket"] = 4,
+    ["Avoid for Goal"] = 5,
 }
 
 local function SetBackdrop(frame, color, borderColor)
@@ -133,6 +162,25 @@ local function MakeEditBox(parent, width, height)
     box:SetMaxLetters(5)
     box:SetNumeric(false)
     box:SetFontObject("GameFontHighlightSmall")
+    return box
+end
+
+local function MakeSearchBox(parent, width, height, placeholderText)
+    local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    box:SetSize(width or 180, height or 22)
+    box:SetAutoFocus(false)
+    box:SetJustifyH("LEFT")
+    box:SetMaxLetters(64)
+    box:SetFontObject("GameFontHighlightSmall")
+    if box.SetTextInsets then
+        box:SetTextInsets(8, 8, 0, 0)
+    end
+
+    box.placeholder = MakeText(box, placeholderText or "", "GameFontDisableSmall", nil, CFG.colors.muted)
+    box.placeholder:SetPoint("LEFT", box, "LEFT", 8, 0)
+    box.placeholder:SetSize((width or 180) - 16, 18)
+
+    box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     return box
 end
 
@@ -217,6 +265,7 @@ local function StatusLabel(status)
     if status == "wanted" then return "Wanted" end
     if status == "backup" then return "Backup" end
     if status == "temporary" then return "Temporary" end
+    if status == "bis" then return "BIS" end
     if status == "ignore" then return "Ignore" end
     if status == "acquired" then return "Acquired" end
     return "Unmarked"
@@ -243,6 +292,26 @@ end
 local function ItemDisplayName(item)
     local name = item and item.name or "Unknown Item"
     return tostring(name):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+end
+
+local function ItemDisplayStats(item)
+    if KeyLab.ItemAnalysis and KeyLab.ItemAnalysis.GetDisplayStats then
+        return KeyLab.ItemAnalysis.GetDisplayStats(item, CurrentClassID(), TargetSpecID(), SpecName(TargetSpecID()))
+    end
+    return (item and item.displayStatText and item.displayStatText ~= "" and item.displayStatText)
+        or (item and item.statText and item.statText ~= "" and item.statText)
+        or (item and item.className)
+        or "-"
+end
+
+local function ItemGuidance(item, goalContext, status)
+    if KeyLab.ItemAnalysis and KeyLab.ItemAnalysis.GetItemGuidance then
+        return KeyLab.ItemAnalysis.GetItemGuidance(item, goalContext, goalContext and goalContext.currentStats, status)
+    end
+    if KeyLab.StatGoalGuidance and KeyLab.StatGoalGuidance.GetItemGuidance then
+        return KeyLab.StatGoalGuidance.GetItemGuidance(item, goalContext, status)
+    end
+    return { label = "-", color = "muted" }
 end
 
 local function GetSpecOptions()
@@ -277,6 +346,107 @@ local function GetSlotOptions()
     return list
 end
 
+local function CleanSortText(text)
+    return tostring(text or "")
+        :gsub("|c%x%x%x%x%x%x%x%x", "")
+        :gsub("|r", "")
+        :lower()
+end
+
+local function CompareSortValues(aValue, bValue, ascending)
+    if aValue == bValue then return nil end
+    if ascending then return aValue < bValue end
+    return aValue > bValue
+end
+
+function GearTargets:GetSortValue(item, key)
+    if key == "item" then
+        return CleanSortText(ItemDisplayName(item))
+    elseif key == "slot" then
+        return CleanSortText(item and item.slot)
+    elseif key == "dungeon" then
+        return CleanSortText(item and item.dungeonName)
+    elseif key == "stats" then
+        return CleanSortText(ItemDisplayStats(item))
+    elseif key == "guidance" then
+        local status = item and item.itemID and GetItemStatus(item.itemID) or nil
+        local guidance = ItemGuidance(item, self.goalContext, status)
+        local label = guidance and guidance.label or ""
+        return GUIDANCE_SORT_RANK[label] or 99, CleanSortText(label)
+    elseif key == "status" then
+        local status = item and item.itemID and GetItemStatus(item.itemID) or nil
+        return STATUS_SORT_RANK[status or "unmarked"] or 99, CleanSortText(StatusLabel(status))
+    end
+
+    return CleanSortText(item and item.dungeonName)
+end
+
+function GearTargets:SortItems(items)
+    if type(items) ~= "table" or not self.sortKey then return end
+    local key = self.sortKey
+    local ascending = self.sortAscending ~= false
+
+    table.sort(items, function(a, b)
+        local aValue, aText = self:GetSortValue(a, key)
+        local bValue, bText = self:GetSortValue(b, key)
+
+        local first = CompareSortValues(aValue, bValue, ascending)
+        if first ~= nil then return first end
+
+        if aText or bText then
+            local second = CompareSortValues(CleanSortText(aText), CleanSortText(bText), ascending)
+            if second ~= nil then return second end
+        end
+
+        local dungeon = CompareSortValues(CleanSortText(a and a.dungeonName), CleanSortText(b and b.dungeonName), true)
+        if dungeon ~= nil then return dungeon end
+        local slot = CompareSortValues(CleanSortText(a and a.slot), CleanSortText(b and b.slot), true)
+        if slot ~= nil then return slot end
+        return CleanSortText(ItemDisplayName(a)) < CleanSortText(ItemDisplayName(b))
+    end)
+end
+
+function GearTargets:MakeHeaderButton(parent, key)
+    local column = TABLE_COLUMNS[key]
+    if not column then return nil end
+
+    local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    button:SetPoint("LEFT", parent, "LEFT", column.x - 4, 0)
+    button:SetSize(column.width, 22)
+    SetBackdrop(button, {0.03, 0.05, 0.09, 0.65}, {0.20, 0.35, 0.65, 0.45})
+
+    local label = column.label
+    if self.sortKey == key then
+        label = label .. (self.sortAscending == false and " v" or " ^")
+    end
+
+    button.label = MakeText(button, label, "GameFontDisableSmall", nil, CFG.colors.gold)
+    button.label:SetPoint("LEFT", button, "LEFT", 4, 0)
+    button.label:SetSize(column.width - 8, 18)
+
+    button:SetScript("OnClick", function()
+        if GearTargets.sortKey == key then
+            GearTargets.sortAscending = not GearTargets.sortAscending
+        else
+            GearTargets.sortKey = key
+            GearTargets.sortAscending = true
+        end
+        GearTargets:RefreshContent()
+    end)
+    button:SetScript("OnEnter", function(btn)
+        btn:SetBackdropBorderColor(unpack(CFG.colors.blue))
+        GameTooltip:SetOwner(btn, "ANCHOR_TOP")
+        GameTooltip:AddLine("Sort by " .. column.label)
+        GameTooltip:AddLine("Click again to reverse the order.", 0.8, 0.85, 1.0, true)
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", function(btn)
+        btn:SetBackdropBorderColor(0.20, 0.35, 0.65, 0.45)
+        GameTooltip:Hide()
+    end)
+    return button
+end
+
 function GearTargets:GetFilteredItems()
     if not KeyLab.GearLootMapping or not KeyLab.GearLootMapping.GetFilteredItems then
         return {}
@@ -289,6 +459,8 @@ function GearTargets:GetFilteredItems()
         slot = self.selectedSlot,
         primaryStat = self.selectedPrimary,
         secondaryStats = self.selectedSecondaries,
+        searchText = self.searchText,
+        displaySpecID = TargetSpecID(),
         includeNonGear = false,
     }
 
@@ -301,6 +473,7 @@ function GearTargets:GetFilteredItems()
         end
         items = selected
     end
+    self:SortItems(items)
     return items
 end
 
@@ -407,32 +580,34 @@ function GearTargets:MakeLootRow(parent, item, y)
     if item.icon then icon:SetTexture(item.icon) end
 
     local name = MakeText(row, item.link or ItemDisplayName(item), "GameFontNormal", nil, CFG.colors.text)
-    name:SetPoint("LEFT", row, "LEFT", 70, 0)
-    name:SetSize(230, 20)
+    name:SetPoint("LEFT", row, "LEFT", TABLE_COLUMNS.item.x, 0)
+    name:SetSize(TABLE_COLUMNS.item.width, 20)
 
     local slot = MakeText(row, item.slot or "-", "GameFontHighlightSmall", nil, CFG.colors.blue)
-    slot:SetPoint("LEFT", row, "LEFT", 310, 0)
-    slot:SetSize(78, 18)
+    slot:SetPoint("LEFT", row, "LEFT", TABLE_COLUMNS.slot.x, 0)
+    slot:SetSize(TABLE_COLUMNS.slot.width, 18)
 
     local dungeon = MakeText(row, item.dungeonName or "-", "GameFontHighlightSmall", nil, CFG.colors.muted)
-    dungeon:SetPoint("LEFT", row, "LEFT", 390, 0)
-    dungeon:SetSize(124, 18)
+    dungeon:SetPoint("LEFT", row, "LEFT", TABLE_COLUMNS.dungeon.x, 0)
+    dungeon:SetSize(TABLE_COLUMNS.dungeon.width, 18)
 
-    local statText = (item.statText and item.statText ~= "" and item.statText) or (item.className or "-")
+    local statText = ItemDisplayStats(item)
     local stats = MakeText(row, statText, "GameFontDisableSmall", nil, CFG.colors.muted)
-    stats:SetPoint("LEFT", row, "LEFT", 522, 0)
-    stats:SetSize(128, 18)
-
-    local guidance = KeyLab.StatGoalGuidance and KeyLab.StatGoalGuidance.GetItemGuidance and KeyLab.StatGoalGuidance.GetItemGuidance(item, self.goalContext) or { label = "-", color = "muted" }
-    local guidanceColor = CFG.colors[guidance.color or "muted"] or CFG.colors.muted
-    local guidanceText = MakeText(row, guidance.label or "-", "GameFontHighlightSmall", nil, guidanceColor)
-    guidanceText:SetPoint("LEFT", row, "LEFT", 660, 0)
-    guidanceText:SetSize(106, 18)
+    stats:SetPoint("LEFT", row, "LEFT", TABLE_COLUMNS.stats.x, 0)
+    stats:SetSize(TABLE_COLUMNS.stats.width, 18)
 
     local status = GetItemStatus(item.itemID)
-    local statusButton = MakeSmallButton(row, StatusLabel(status), 86, 20)
-    statusButton:SetPoint("LEFT", row, "LEFT", 776, 0)
-    statusButton.label:SetTextColor(unpack(STATUS_COLORS[status or "unmarked"] or CFG.colors.muted))
+    local guidance = ItemGuidance(item, self.goalContext, status)
+    local guidanceColor = CFG.colors[guidance.color or "muted"] or CFG.colors.muted
+    local guidanceText = MakeText(row, guidance.label or "-", "GameFontHighlightSmall", nil, guidanceColor)
+    guidanceText:SetPoint("LEFT", row, "LEFT", TABLE_COLUMNS.guidance.x, 0)
+    guidanceText:SetSize(TABLE_COLUMNS.guidance.width, 18)
+
+    local statusColor = STATUS_COLORS[status or "unmarked"] or CFG.colors.muted
+    local statusButton = MakeSmallButton(row, StatusLabel(status) .. " >", TABLE_COLUMNS.status.width, 20)
+    statusButton:SetPoint("LEFT", row, "LEFT", TABLE_COLUMNS.status.x, 0)
+    statusButton:SetBackdropBorderColor(unpack(statusColor))
+    statusButton.label:SetTextColor(unpack(statusColor))
     statusButton:SetScript("OnClick", function()
         SetItemStatus(item.itemID, NextStatus(GetItemStatus(item.itemID)))
         GearTargets:RefreshContent()
@@ -444,7 +619,7 @@ function GearTargets:MakeLootRow(parent, item, y)
         btn:SetBackdropBorderColor(unpack(CFG.colors.blue))
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
         GameTooltip:AddLine("Gear Target Status")
-        GameTooltip:AddLine("Click to cycle Wanted, Backup, Temporary, Ignore, Acquired.", 0.8, 0.85, 1.0, true)
+        GameTooltip:AddLine("Click to cycle Wanted, Backup, Temporary, BIS, Ignore, Acquired.", 0.8, 0.85, 1.0, true)
         if guidance and guidance.reason then
             GameTooltip:AddLine(" ")
             GameTooltip:AddLine(guidance.label or "Guidance", 1.0, 0.82, 0.35, true)
@@ -453,7 +628,7 @@ function GearTargets:MakeLootRow(parent, item, y)
         GameTooltip:Show()
     end)
     statusButton:SetScript("OnLeave", function(btn)
-        btn:SetBackdropBorderColor(unpack(CFG.colors.border))
+        btn:SetBackdropBorderColor(unpack(statusColor))
         GameTooltip:Hide()
     end)
 
@@ -509,12 +684,12 @@ function GearTargets:RefreshContent()
     header:SetHeight(26)
     SetBackdrop(header, {0.02, 0.03, 0.06, 0.92}, CFG.colors.border)
 
-    MakeText(header, "Item", "GameFontDisableSmall", nil, CFG.colors.gold):SetPoint("LEFT", header, "LEFT", 70, 0)
-    MakeText(header, "Slot", "GameFontDisableSmall", nil, CFG.colors.gold):SetPoint("LEFT", header, "LEFT", 310, 0)
-    MakeText(header, "Dungeon", "GameFontDisableSmall", nil, CFG.colors.gold):SetPoint("LEFT", header, "LEFT", 390, 0)
-    MakeText(header, "Stats", "GameFontDisableSmall", nil, CFG.colors.gold):SetPoint("LEFT", header, "LEFT", 522, 0)
-    MakeText(header, "Guidance", "GameFontDisableSmall", nil, CFG.colors.gold):SetPoint("LEFT", header, "LEFT", 660, 0)
-    MakeText(header, "Status", "GameFontDisableSmall", nil, CFG.colors.gold):SetPoint("LEFT", header, "LEFT", 780, 0)
+    self:MakeHeaderButton(header, "item")
+    self:MakeHeaderButton(header, "slot")
+    self:MakeHeaderButton(header, "dungeon")
+    self:MakeHeaderButton(header, "stats")
+    self:MakeHeaderButton(header, "guidance")
+    self:MakeHeaderButton(header, "status")
 
     if #items == 0 then
         local msg = "No loot matched these filters."
@@ -555,6 +730,10 @@ function GearTargets:Create(parent)
     self.selectedPrimary = nil
     self.selectedSecondaries = {}
     self.selectedOnly = false
+    self.searchText = ""
+    self.pendingSearchText = ""
+    self.sortKey = "dungeon"
+    self.sortAscending = true
 
     local title = MakeText(frame, "Gear Targets", "GameFontNormalLarge", nil, CFG.colors.gold)
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -18)
@@ -606,8 +785,35 @@ function GearTargets:Create(parent)
         end
     end)
 
+    local searchLabel = MakeText(controls, "Search Item", "GameFontDisableSmall", nil, CFG.colors.muted)
+    searchLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", 590, -12)
+    searchLabel:SetSize(190, 16)
+
+    self.searchBox = MakeSearchBox(controls, 190, 22, "Enter text, press Enter")
+    self.searchBox:SetPoint("TOPLEFT", controls, "TOPLEFT", 590, -34)
+    self.searchBox:SetScript("OnTextChanged", function(box)
+        GearTargets.pendingSearchText = tostring(box:GetText() or "")
+        if box.placeholder then
+            box.placeholder:SetShown(GearTargets.pendingSearchText == "")
+        end
+    end)
+    self.searchBox:SetScript("OnEnterPressed", function(box)
+        GearTargets.searchText = tostring(box:GetText() or "")
+        GearTargets.pendingSearchText = GearTargets.searchText
+        box:ClearFocus()
+        GearTargets:RefreshContent()
+    end)
+    self.searchBox:SetScript("OnEditFocusLost", function(box)
+        local text = tostring(box:GetText() or "")
+        if GearTargets.searchText ~= text then
+            GearTargets.searchText = text
+            GearTargets.pendingSearchText = text
+            GearTargets:RefreshContent()
+        end
+    end)
+
     local selectedOnly = CreateFrame("CheckButton", nil, controls, "UICheckButtonTemplate")
-    selectedOnly:SetPoint("TOPLEFT", controls, "TOPLEFT", 605, -27)
+    selectedOnly:SetPoint("TOPLEFT", controls, "TOPLEFT", 795, -31)
     selectedOnly:SetSize(24, 24)
     selectedOnly:SetScript("OnClick", function(btn)
         GearTargets.selectedOnly = btn:GetChecked() == true
@@ -615,7 +821,7 @@ function GearTargets:Create(parent)
     end)
     local selectedLabel = MakeText(controls, "Active targets only", "GameFontHighlightSmall", nil, CFG.colors.text)
     selectedLabel:SetPoint("LEFT", selectedOnly, "RIGHT", 4, 0)
-    selectedLabel:SetSize(170, 18)
+    selectedLabel:SetSize(145, 18)
 
     local primaryLabel = MakeText(controls, "Primary / Stamina", "GameFontDisableSmall", nil, CFG.colors.muted)
     primaryLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", 18, -76)
@@ -677,7 +883,7 @@ function GearTargets:Create(parent)
     goalTitle:SetPoint("TOPLEFT", goalPanel, "TOPLEFT", 14, -10)
     goalTitle:SetSize(360, 18)
 
-    local goalNote = MakeText(goalPanel, "Personal target guidance for Heroic/Mythic-track gear. Set comfort goals; KeyLab labels items without trying to simulate BiS.", "GameFontDisableSmall", nil, CFG.colors.muted)
+    local goalNote = MakeText(goalPanel, "Guidance uses your stat % goals only. It is not a BIS ranking; manually marked BIS items are your own override.", "GameFontDisableSmall", nil, CFG.colors.muted)
     goalNote:SetPoint("TOPLEFT", goalTitle, "BOTTOMLEFT", 0, -2)
     goalNote:SetSize(380, 32)
     goalNote:SetWordWrap(true)
@@ -754,7 +960,7 @@ function GearTargets:Create(parent)
     scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
 
     local content = CreateFrame("Frame", nil, scroll)
-    content:SetSize(880, 620)
+    content:SetSize(TABLE_WIDTH, 620)
     scroll:SetScrollChild(content)
 
     self.scroll = scroll
