@@ -2,7 +2,7 @@
 ## Title: KeyLab
 ## Notes: Personal Mythic+ experimentation journal for talent/stat builds and completed encounter outcomes.
 ## Author: Brione
-## Version: 1.1.0
+## Version: 1.1.1
 ## SavedVariables: KeyLabDB, KeyLabCaptureDB
 
 utils/KeyLab_Utils.lua
@@ -20,6 +20,8 @@ database/KeyLab_JournalData.lua
 database/KeyLab_EncountersDB.lua
 database/KeyLab_BuildDB.lua
 database/KeyLab_GearLootDatabase.lua
+database/KeyLab_GearLootSpecStats.lua
+mapping/KeyLab_ItemAnalysis.lua
 mapping/KeyLab_GearLootMapping.lua
 database/KeyLab_LootTargetsDB.lua
 database/KeyLab_StatGoalsDB.lua
