@@ -19,29 +19,10 @@ Load order:
 local Mapping = KeyLab.GearLootMapping or {}
 KeyLab.GearLootMapping = Mapping
 
-local PRIMARY_STATS = {
-    Int = true,
-    Agi = true,
-    Str = true,
-}
-
-local SECONDARY_STATS = {
-    Crit = true,
-    Haste = true,
-    Mastery = true,
-    Vers = true,
-}
+local Analysis = KeyLab.ItemAnalysis or {}
 
 local function getDB()
     return KeyLab and KeyLab.GearLootDatabase or nil
-end
-
-local function wipeTable(tbl)
-    if not tbl then return {} end
-    for key in pairs(tbl) do
-        tbl[key] = nil
-    end
-    return tbl
 end
 
 local function addUniqueNumber(list, value)
@@ -77,6 +58,33 @@ local function normalizeItemName(name)
     return name:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
 end
 
+local function normalizeSearchText(text)
+    if type(text) ~= "string" then return "" end
+    text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    text = text:gsub("^%s+", ""):gsub("%s+$", "")
+    return string.lower(text)
+end
+
+local function getSpecInfo(specID)
+    local db = getDB()
+    specID = tonumber(specID)
+    return db and db.specs and specID and db.specs[specID] or nil
+end
+
+local function getClassIDForSpec(specID)
+    specID = tonumber(specID)
+    local spec = getSpecInfo(specID)
+    return spec and spec.classID or nil
+end
+
+local function getSpecName(specID)
+    local spec = getSpecInfo(specID)
+    if spec then
+        return spec.specName or spec.name
+    end
+    return nil
+end
+
 local function getDungeonNameForItem(item, mapID)
     local db = getDB()
     if not item then return "" end
@@ -105,44 +113,52 @@ local function getDungeonNameForItem(item, mapID)
     return table.concat(names, ", ")
 end
 
-local function withDisplayDungeon(item, mapID)
+local function withDisplayDungeon(item, mapID, displaySpecID, classID)
     if not item then return nil end
     local out = {}
     for key, value in pairs(item) do
         out[key] = value
     end
     out.dungeonName = getDungeonNameForItem(item, mapID)
+    if Analysis and Analysis.ChooseDisplaySpecID then
+        local resolvedSpecID = Analysis.ChooseDisplaySpecID(item, displaySpecID, classID)
+        local resolvedClassID = classID or getClassIDForSpec(resolvedSpecID)
+        out.resolvedPrimaryStat = Analysis.ResolvePrimaryStat and Analysis.ResolvePrimaryStat(item, resolvedClassID, resolvedSpecID, getSpecName(resolvedSpecID)) or nil
+        out.trinketEffectTags = Analysis.ExtractTrinketTags and Analysis.ExtractTrinketTags(item, resolvedClassID, resolvedSpecID, getSpecName(resolvedSpecID)) or {}
+        out.displayStatText = Analysis.GetDisplayStats and Analysis.GetDisplayStats(item, resolvedClassID, resolvedSpecID, getSpecName(resolvedSpecID)) or item.statText
+    end
     return out
 end
 
-local function hasSelectedStat(item, selected)
-    if not selected then return true end
-
-    local hasAny = false
-    for stat, enabled in pairs(selected) do
-        if enabled then
-            hasAny = true
-            if item and item.stats and item.stats[stat] ~= nil then
-                return true
-            end
-            if item and item.statSet and item.statSet[stat] then
-                return true
-            end
-        end
+local function itemMatchesPrimary(item, primaryStat, displaySpecID, classID)
+    if Analysis and Analysis.MatchesPrimaryStatFilter then
+        local resolvedSpecID = Analysis.ChooseDisplaySpecID and Analysis.ChooseDisplaySpecID(item, displaySpecID, classID) or displaySpecID
+        local resolvedClassID = classID or getClassIDForSpec(resolvedSpecID)
+        return Analysis.MatchesPrimaryStatFilter(item, primaryStat, resolvedClassID, resolvedSpecID, getSpecName(resolvedSpecID))
     end
-
-    return not hasAny
+    return true
 end
 
-local function itemMatchesPrimary(item, primaryStat)
-    if not primaryStat or primaryStat == "" or primaryStat == "All" then
+local function itemMatchesSecondaries(item, secondaryStats, displaySpecID, classID)
+    if Analysis and Analysis.MatchesSecondaryStatFilter then
+        local resolvedSpecID = Analysis.ChooseDisplaySpecID and Analysis.ChooseDisplaySpecID(item, displaySpecID, classID) or displaySpecID
+        local resolvedClassID = classID or getClassIDForSpec(resolvedSpecID)
+        return Analysis.MatchesSecondaryStatFilter(item, secondaryStats, resolvedClassID, resolvedSpecID, getSpecName(resolvedSpecID))
+    end
+    return true
+end
+
+local function itemMatchesSearch(item, searchText)
+    local search = normalizeSearchText(searchText)
+    if search == "" then return true end
+
+    local name = normalizeSearchText(item and item.name)
+    if name ~= "" and string.find(name, search, 1, true) then
         return true
     end
-    return hasSelectedStat(item, { [primaryStat] = true })
-end
 
-local function itemMatchesSecondaries(item, secondaryStats)
-    return hasSelectedStat(item, secondaryStats)
+    local link = normalizeSearchText(item and item.link)
+    return link ~= "" and string.find(link, search, 1, true) ~= nil
 end
 
 local function itemIsNonGear(item)
@@ -294,9 +310,37 @@ function Mapping.GetDungeonListForSpec(specID)
     return out
 end
 
-function Mapping.GetItem(itemID)
+function Mapping.GetItem(itemID, displaySpecID, classID)
     local db = getDB()
-    return db and db.items and withDisplayDungeon(db.items[itemID]) or nil
+    return db and db.items and withDisplayDungeon(db.items[itemID], nil, displaySpecID, classID) or nil
+end
+
+function Mapping.IsItemEligibleForSpec(itemOrItemID, specID)
+    local db = getDB()
+    local item = type(itemOrItemID) == "table" and itemOrItemID or (db and db.items and db.items[tonumber(itemOrItemID)])
+    if Analysis and Analysis.IsItemEligibleForSpec then
+        return Analysis.IsItemEligibleForSpec(item, specID)
+    end
+    return true
+end
+
+function Mapping.ResolvePrimaryStat(itemOrItemID, specID)
+    local db = getDB()
+    local item = type(itemOrItemID) == "table" and itemOrItemID or (db and db.items and db.items[tonumber(itemOrItemID)])
+    return Analysis and Analysis.ResolvePrimaryStat and Analysis.ResolvePrimaryStat(item, getClassIDForSpec(specID), specID, getSpecName(specID)) or nil
+end
+
+function Mapping.GetDisplayStatText(itemOrItemID, specID)
+    local db = getDB()
+    local item = type(itemOrItemID) == "table" and itemOrItemID or (db and db.items and db.items[tonumber(itemOrItemID)])
+    return Analysis and Analysis.GetDisplayStats and Analysis.GetDisplayStats(item, getClassIDForSpec(specID), specID, getSpecName(specID)) or (item and item.statText) or "-"
+end
+
+function Mapping.GetTrinketEffectTags(itemOrItemID, specID, classID)
+    local db = getDB()
+    local item = type(itemOrItemID) == "table" and itemOrItemID or (db and db.items and db.items[tonumber(itemOrItemID)])
+    local resolvedClassID = classID or getClassIDForSpec(specID)
+    return Analysis and Analysis.ExtractTrinketTags and Analysis.ExtractTrinketTags(item, resolvedClassID, specID, getSpecName(specID)) or {}
 end
 
 function Mapping.GetItemSpecs(itemID)
@@ -317,7 +361,7 @@ function Mapping.GetItemsForSpecDungeon(specID, mapID)
     local out = {}
     for _, itemID in ipairs(itemIDs or {}) do
         local item = db.items and db.items[itemID]
-        if item then table.insert(out, withDisplayDungeon(item, mapID)) end
+        if item then table.insert(out, withDisplayDungeon(item, mapID, specID)) end
     end
     table.sort(out, function(a, b)
         local slotA = tostring(a.slot or "")
@@ -339,6 +383,8 @@ function Mapping.GetFilteredItems(filters)
     local slot = filters.slot
     local primaryStat = filters.primaryStat
     local secondaryStats = filters.secondaryStats
+    local searchText = filters.searchText
+    local displaySpecID = filters.displaySpecID or specID
     local includeNonGear = filters.includeNonGear ~= false
 
     local out = {}
@@ -348,12 +394,15 @@ function Mapping.GetFilteredItems(filters)
         if seen[itemID] then return end
         local item = db.items and db.items[itemID]
         if not item then return end
+        if specID and Analysis.IsItemEligibleForSpec and not Analysis.IsItemEligibleForSpec(item, specID) then return end
+        if classID and not specID and Analysis.IsItemEligibleForClass and not Analysis.IsItemEligibleForClass(item, classID) then return end
         if slot and slot ~= "" and slot ~= "All" and item.slot ~= slot then return end
         if not includeNonGear and itemIsNonGear(item) then return end
-        if not itemMatchesPrimary(item, primaryStat) then return end
-        if not itemMatchesSecondaries(item, secondaryStats) then return end
+        if not itemMatchesSearch(item, searchText) then return end
+        if not itemMatchesPrimary(item, primaryStat, displaySpecID, classID) then return end
+        if not itemMatchesSecondaries(item, secondaryStats, displaySpecID, classID) then return end
         seen[itemID] = true
-        table.insert(out, withDisplayDungeon(item, mapID))
+        table.insert(out, withDisplayDungeon(item, mapID, displaySpecID, classID))
     end
 
     if specID and mapID then
@@ -447,7 +496,7 @@ function Mapping.GetTargetSummaryForDungeon(trackedItems, mapID, specID)
                 end
 
                 if belongsToThisDungeon and (not specID or Mapping.IsItemForSpecDungeon(itemID, specID, mapID)) then
-                    table.insert(summary.thisDungeon, item)
+                    table.insert(summary.thisDungeon, withDisplayDungeon(item, mapID, specID))
                 end
             end
         end

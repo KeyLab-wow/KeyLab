@@ -12,13 +12,6 @@ local STAT_LABELS = {
     versatility = "Versatility",
 }
 
-local ITEM_STAT_KEYS = {
-    crit = "Crit",
-    haste = "Haste",
-    mastery = "Mastery",
-    versatility = "Vers",
-}
-
 local function safeNumber(value)
     if KeyLab.Utils and KeyLab.Utils.SafeNumber then
         return KeyLab.Utils.SafeNumber(value)
@@ -147,116 +140,43 @@ function Guidance.GetSummaryLines(context)
     for _, statKey in ipairs(context.priority or {}) do
         local label = Guidance.GetStatLabel(statKey)
         local target = safeNumber(context.targets and context.targets[statKey]) or 0
-        local current = safeNumber(context.currentStats and context.currentStats[statKey]) or 0
         if target > 0 then
             if context.below and context.below[statKey] then
-                table.insert(lines, label .. " is below goal (" .. formatPercent(current) .. " / " .. formatPercent(target) .. ")")
                 table.insert(prioritize, label)
             elseif context.above and context.above[statKey] then
-                table.insert(lines, label .. " is already above goal (" .. formatPercent(current) .. " / " .. formatPercent(target) .. ")")
                 table.insert(cautious, label)
-            else
-                table.insert(lines, label .. " is near goal (" .. formatPercent(current) .. " / " .. formatPercent(target) .. ")")
             end
         end
     end
 
     if #prioritize > 0 then
-        table.insert(lines, "Prioritize gear with " .. table.concat(prioritize, " and/or "))
+        table.insert(lines, "Focus gear with: " .. table.concat(prioritize, ", ") .. ".")
+    else
+        table.insert(lines, "Focus gear with your highest-priority useful stats.")
     end
+
     if #cautious > 0 then
-        table.insert(lines, "Be cautious with gear that mainly adds " .. table.concat(cautious, " or "))
+        table.insert(lines, "Avoid over-stacking: " .. table.concat(cautious, ", ") .. ".")
+    else
+        table.insert(lines, "No over-stacked goal stats right now.")
     end
+
+    table.insert(lines, "Use labels to choose targets, backups, and temporary options.")
 
     return lines
 end
 
-function Guidance.GetItemGuidance(item, context)
+function Guidance.GetItemGuidance(item, context, status)
     context = context or Guidance.BuildContext()
-
-    if not context.configured then
-        return {
-            label = "Temporary Option",
-            color = "muted",
-            reason = "Set stat targets for stronger guidance.",
-            score = 0,
-        }
-    end
-
-    if not item or type(item.stats) ~= "table" then
-        return {
-            label = "Avoid for Goal",
-            color = "warning",
-            reason = "No useful secondary stats for this goal.",
-            score = -1,
-        }
-    end
-
-    local helpCount, riskCount, neutralCount, score = 0, 0, 0, 0
-    local helpful, risky = {}, {}
-
-    for rank, statKey in ipairs(context.priority or {}) do
-        local itemStatKey = ITEM_STAT_KEYS[statKey]
-        local hasStat = itemStatKey and item.stats[itemStatKey] ~= nil
-        local weight = math.max(1, 5 - rank)
-
-        if hasStat then
-            if context.below and context.below[statKey] then
-                helpCount = helpCount + 1
-                score = score + (weight * 2)
-                table.insert(helpful, Guidance.GetStatLabel(statKey))
-            elseif context.above and context.above[statKey] then
-                riskCount = riskCount + 1
-                score = score - weight
-                table.insert(risky, Guidance.GetStatLabel(statKey))
-            else
-                neutralCount = neutralCount + 1
-                score = score + weight
-            end
-        end
-    end
-
-    if helpCount >= 2 or score >= 8 then
-        return {
-            label = "Best Target",
-            color = "green",
-            reason = "Helps " .. table.concat(helpful, " and "),
-            score = score,
-        }
-    end
-
-    if helpCount >= 1 and score >= 3 then
-        return {
-            label = "Good Backup",
-            color = "blue",
-            reason = "Useful for " .. table.concat(helpful, " and "),
-            score = score,
-        }
-    end
-
-    if riskCount > 0 and helpCount == 0 then
-        return {
-            label = "Avoid for Goal",
-            color = "warning",
-            reason = "Mostly supports " .. table.concat(risky, " and "),
-            score = score,
-        }
-    end
-
-    if helpCount > 0 or neutralCount > 0 then
-        return {
-            label = "Temporary Option",
-            color = "muted",
-            reason = "Usable, but not a strong goal match.",
-            score = score,
-        }
+    if KeyLab.ItemAnalysis and KeyLab.ItemAnalysis.GetItemGuidance then
+        return KeyLab.ItemAnalysis.GetItemGuidance(item, context, context.currentStats, status)
     end
 
     return {
-        label = "Avoid for Goal",
-        color = "warning",
-        reason = "Does not support the current goal.",
-        score = score,
+        label = "Temporary Option",
+        color = "muted",
+        reason = "Item analysis is unavailable.",
+        score = 0,
     }
 end
 
