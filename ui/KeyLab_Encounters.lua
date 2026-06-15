@@ -1284,8 +1284,6 @@ function Encounters:Create(parent)
         Encounters:Refresh()
     end)
 
-    Encounters:Refresh()
-
     return frame
 end
 

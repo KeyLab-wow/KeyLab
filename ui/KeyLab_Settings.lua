@@ -32,6 +32,11 @@ local COLORS = {
 local CONTENT_PAD = 24
 local SECTION_GAP = 34
 local ROW_GAP = 86
+local FONT_PAGE_TITLE = 18
+local FONT_SECTION_TITLE = 17
+local FONT_ACTION_TITLE = 13
+local FONT_BODY = 12
+local FONT_BODY_SPACING = 2
 
 -- =========================================================
 -- BASIC HELPERS
@@ -55,6 +60,10 @@ local function MakeText(parent, text, template, size, color, justify)
         fs:SetFont(STANDARD_TEXT_FONT, size, "")
     end
 
+    if fs.SetSpacing then
+        fs:SetSpacing(FONT_BODY_SPACING)
+    end
+
     fs:SetTextColor(unpack(color or COLORS.text))
     fs:SetJustifyH(justify or "LEFT")
     fs:SetJustifyV("TOP")
@@ -73,7 +82,7 @@ local function MakeDivider(parent, y)
 end
 
 local function MakeSectionHeader(parent, title, y)
-    local fs = MakeText(parent, title, "GameFontNormalLarge", nil, COLORS.gold, "LEFT")
+    local fs = MakeText(parent, title, "GameFontNormalLarge", FONT_SECTION_TITLE, COLORS.gold, "LEFT")
     fs:SetPoint("TOPLEFT", parent, "TOPLEFT", CONTENT_PAD, y)
     fs:SetPoint("RIGHT", parent, "RIGHT", -CONTENT_PAD, 0)
     fs:SetHeight(24)
@@ -131,13 +140,13 @@ end
 -- =========================================================
 
 local function MakeDataAction(parent, y, title, description, buttonText, buttonColor, onClick)
-    local titleText = MakeText(parent, title, "GameFontNormal", nil, COLORS.text, "LEFT")
+    local titleText = MakeText(parent, title, "GameFontNormal", FONT_ACTION_TITLE, COLORS.text, "LEFT")
     titleText:SetPoint("TOPLEFT", parent, "TOPLEFT", CONTENT_PAD, y)
     titleText:SetPoint("RIGHT", parent, "RIGHT", -CONTENT_PAD, 0)
     titleText:SetHeight(18)
 
     local descColor = buttonColor == "danger" and COLORS.danger or COLORS.muted
-    local body = MakeText(parent, description, "GameFontHighlightSmall", nil, descColor, "LEFT")
+    local body = MakeText(parent, description, "GameFontHighlightSmall", FONT_BODY, descColor, "LEFT")
     body:SetPoint("TOPLEFT", titleText, "BOTTOMLEFT", 0, -6)
     body:SetWidth(560)
     body:SetHeight(40)
@@ -197,7 +206,7 @@ local function BuildSettings(content)
         content,
         "KeyLab is a personal Mythic+ journal focused on real encounter outcomes, talent experimentation, stat priorities, and gameplay consistency.",
         "GameFontHighlightSmall",
-        nil,
+        FONT_BODY,
         COLORS.muted,
         "LEFT"
     )
@@ -206,16 +215,16 @@ local function BuildSettings(content)
     purpose:SetHeight(34)
     y = y - 58
 
-    local createdTitle = MakeText(content, "Created By", "GameFontNormal", nil, COLORS.gold, "LEFT")
+    local createdTitle = MakeText(content, "Created By", "GameFontNormal", FONT_ACTION_TITLE, COLORS.gold, "LEFT")
     createdTitle:SetPoint("TOPLEFT", content, "TOPLEFT", CONTENT_PAD, y)
     createdTitle:SetWidth(240)
 
-    local createdBody = MakeText(content, "Brione", "GameFontHighlightSmall", nil, COLORS.text, "LEFT")
+    local createdBody = MakeText(content, "Brione", "GameFontHighlightSmall", FONT_BODY, COLORS.text, "LEFT")
     createdBody:SetPoint("TOPLEFT", createdTitle, "BOTTOMLEFT", 0, -8)
     createdBody:SetWidth(240)
     createdBody:SetHeight(42)
 
-    local qaTitle = MakeText(content, "Special Quality Assurance Lead", "GameFontNormal", nil, COLORS.gold, "LEFT")
+    local qaTitle = MakeText(content, "Special Quality Assurance Lead", "GameFontNormal", FONT_ACTION_TITLE, COLORS.gold, "LEFT")
     qaTitle:SetPoint("TOPLEFT", content, "TOPLEFT", 360, y)
     qaTitle:SetWidth(360)
 
@@ -223,7 +232,7 @@ local function BuildSettings(content)
         content,
         "Blue\nChief Breakfast Inspector\nSenior Mashed Potato Consultant",
         "GameFontHighlightSmall",
-        nil,
+        FONT_BODY,
         COLORS.text,
         "LEFT"
     )
@@ -247,7 +256,7 @@ function Settings:Create(parent)
     frame:SetAllPoints(parent)
     SetBackdrop(frame, COLORS.bg, {0, 0, 0, 0})
 
-    local title = MakeText(frame, "Settings", "GameFontNormalLarge", nil, COLORS.gold, "LEFT")
+    local title = MakeText(frame, "Settings", "GameFontNormalLarge", FONT_PAGE_TITLE, COLORS.gold, "LEFT")
     title:SetPoint("TOPLEFT", CONTENT_PAD, -22)
     title:SetSize(420, 30)
 

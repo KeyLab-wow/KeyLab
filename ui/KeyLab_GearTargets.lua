@@ -67,12 +67,16 @@ local STAT_GOAL_STATS = {
     versatility = { label = "Versatility" },
 }
 
-local STATUS_CYCLE = { "wanted", "backup", "temporary", "bis", "ignore", "acquired" }
+local STATUS_MENU_OPTIONS = {
+    { value = nil, label = "Unmarked" },
+    { value = "wanted", label = "Target" },
+    { value = "bis", label = "BIS" },
+    { value = "ignore", label = "Ignore" },
+    { value = "acquired", label = "Acquired" },
+}
 
 local STATUS_COLORS = {
     wanted = {0.45, 0.95, 0.60, 1.0},
-    backup = {0.38, 0.68, 1.0, 1.0},
-    temporary = {0.95, 0.76, 0.32, 1.0},
     bis = {1.0, 0.86, 0.36, 1.0},
     ignore = {1.0, 0.72, 0.35, 1.0},
     acquired = {0.70, 0.85, 1.0, 1.0},
@@ -81,13 +85,13 @@ local STATUS_COLORS = {
 
 local STATUS_SORT_RANK = {
     wanted = 1,
-    backup = 2,
-    temporary = 3,
-    bis = 4,
-    acquired = 5,
-    ignore = 6,
-    unmarked = 7,
+    bis = 2,
+    acquired = 3,
+    ignore = 4,
+    unmarked = 5,
 }
+
+local statusMenuFrame
 
 local GUIDANCE_SORT_RANK = {
     ["Best Target"] = 1,
@@ -262,24 +266,71 @@ local function StatusLabel(status)
     if KeyLab.LootTargetsDB and KeyLab.LootTargetsDB.GetStatusLabel then
         return KeyLab.LootTargetsDB.GetStatusLabel(status)
     end
-    if status == "wanted" then return "Wanted" end
-    if status == "backup" then return "Backup" end
-    if status == "temporary" then return "Temporary" end
+    if status == "wanted" then return "Target" end
     if status == "bis" then return "BIS" end
     if status == "ignore" then return "Ignore" end
     if status == "acquired" then return "Acquired" end
     return "Unmarked"
 end
 
-local function NextStatus(status)
-    if not status then return "wanted" end
-    for index, value in ipairs(STATUS_CYCLE) do
-        if value == status then
-            if index == #STATUS_CYCLE then return nil end
-            return STATUS_CYCLE[index + 1]
-        end
+local function StatusOptions()
+    if KeyLab.LootTargetsDB and KeyLab.LootTargetsDB.GetStatusOptions then
+        return KeyLab.LootTargetsDB.GetStatusOptions()
     end
-    return "wanted"
+
+    local out = {}
+    for _, option in ipairs(STATUS_MENU_OPTIONS) do
+        table.insert(out, { value = option.value, label = option.label })
+    end
+    return out
+end
+
+local function RefreshAfterStatusChange()
+    GearTargets:RefreshContent()
+    if KeyLab.GearTargetsWindow and KeyLab.GearTargetsWindow.RefreshVisible then
+        KeyLab.GearTargetsWindow.RefreshVisible()
+    end
+end
+
+local function GetStatusMenuFrame()
+    if not statusMenuFrame then
+        statusMenuFrame = CreateFrame("Frame", "KeyLabGearTargetsStatusMenu", UIParent, "UIDropDownMenuTemplate")
+    end
+    return statusMenuFrame
+end
+
+local function OpenStatusMenu(anchor, itemID)
+    if not anchor
+        or not itemID
+        or not UIDropDownMenu_Initialize
+        or not UIDropDownMenu_CreateInfo
+        or not UIDropDownMenu_AddButton
+        or not ToggleDropDownMenu then
+        return
+    end
+    GameTooltip:Hide()
+
+    local currentStatus = GetItemStatus(itemID)
+    local menuFrame = GetStatusMenuFrame()
+    UIDropDownMenu_Initialize(menuFrame, function(_, level)
+        if level and level > 1 then return end
+
+        for _, option in ipairs(StatusOptions()) do
+            local optionValue = option.value
+            local optionLabel = option.label or StatusLabel(optionValue)
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = (currentStatus == optionValue and "* " or "  ") .. tostring(optionLabel)
+            info.notCheckable = true
+            info.func = function()
+                SetItemStatus(itemID, optionValue)
+                if CloseDropDownMenus then CloseDropDownMenus() end
+                RefreshAfterStatusChange()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end, "MENU")
+
+    ToggleDropDownMenu(1, nil, menuFrame, anchor, 0, 0)
 end
 
 local function StatLabel(statKey)
@@ -583,6 +634,26 @@ function GearTargets:MakeLootRow(parent, item, y)
     name:SetPoint("LEFT", row, "LEFT", TABLE_COLUMNS.item.x, 0)
     name:SetSize(TABLE_COLUMNS.item.width, 20)
 
+    local itemHover = CreateFrame("Frame", nil, row)
+    itemHover:SetPoint("LEFT", row, "LEFT", 34, 0)
+    itemHover:SetSize((TABLE_COLUMNS.item.x + TABLE_COLUMNS.item.width) - 34, CFG.rowHeight - 4)
+    itemHover:SetFrameLevel(row:GetFrameLevel() + 3)
+    itemHover:EnableMouse(true)
+    itemHover:SetScript("OnEnter", function(self)
+        if item.link then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetHyperlink(item.link)
+            GameTooltip:Show()
+        elseif item.itemID then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetHyperlink("item:" .. tostring(item.itemID))
+            GameTooltip:Show()
+        end
+    end)
+    itemHover:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+
     local slot = MakeText(row, item.slot or "-", "GameFontHighlightSmall", nil, CFG.colors.blue)
     slot:SetPoint("LEFT", row, "LEFT", TABLE_COLUMNS.slot.x, 0)
     slot:SetSize(TABLE_COLUMNS.slot.width, 18)
@@ -604,22 +675,21 @@ function GearTargets:MakeLootRow(parent, item, y)
     guidanceText:SetSize(TABLE_COLUMNS.guidance.width, 18)
 
     local statusColor = STATUS_COLORS[status or "unmarked"] or CFG.colors.muted
-    local statusButton = MakeSmallButton(row, StatusLabel(status) .. " >", TABLE_COLUMNS.status.width, 20)
+    local statusButton = MakeSmallButton(row, StatusLabel(status) .. " v", TABLE_COLUMNS.status.width, 20)
     statusButton:SetPoint("LEFT", row, "LEFT", TABLE_COLUMNS.status.x, 0)
     statusButton:SetBackdropBorderColor(unpack(statusColor))
     statusButton.label:SetTextColor(unpack(statusColor))
-    statusButton:SetScript("OnClick", function()
-        SetItemStatus(item.itemID, NextStatus(GetItemStatus(item.itemID)))
-        GearTargets:RefreshContent()
-        if KeyLab.GearTargetsWindow and KeyLab.GearTargetsWindow.RefreshVisible then
-            KeyLab.GearTargetsWindow.RefreshVisible()
-        end
+    statusButton:SetScript("OnClick", function(btn)
+        OpenStatusMenu(btn, item.itemID)
     end)
     statusButton:SetScript("OnEnter", function(btn)
         btn:SetBackdropBorderColor(unpack(CFG.colors.blue))
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
         GameTooltip:AddLine("Gear Target Status")
-        GameTooltip:AddLine("Click to cycle Wanted, Backup, Temporary, BIS, Ignore, Acquired.", 0.8, 0.85, 1.0, true)
+        GameTooltip:AddLine("Click to choose Target, BIS, Ignore, Acquired, or Unmarked.", 0.8, 0.85, 1.0, true)
+        if GearTargets.sortKey == "status" then
+            GameTooltip:AddLine("Sorting by Status may move the item after you choose.", 1.0, 0.82, 0.35, true)
+        end
         if guidance and guidance.reason then
             GameTooltip:AddLine(" ")
             GameTooltip:AddLine(guidance.label or "Guidance", 1.0, 0.82, 0.35, true)
@@ -631,20 +701,6 @@ function GearTargets:MakeLootRow(parent, item, y)
         btn:SetBackdropBorderColor(unpack(statusColor))
         GameTooltip:Hide()
     end)
-
-    row:EnableMouse(true)
-    row:SetScript("OnEnter", function()
-        if item.link then
-            GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-            GameTooltip:SetHyperlink(item.link)
-            GameTooltip:Show()
-        elseif item.itemID then
-            GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-            GameTooltip:SetHyperlink("item:" .. tostring(item.itemID))
-            GameTooltip:Show()
-        end
-    end)
-    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     return row
 end
@@ -667,6 +723,46 @@ function GearTargets:UpdateSummary(items)
     self.summary:SetText(tostring(#items) .. " item(s) shown  |  " .. tostring(selectedCount) .. " target(s) for " .. SpecName(TargetSpecID()) .. seasonText)
 end
 
+function GearTargets:QueueVisibleTrinketTooltipRefresh(items)
+    local requested = false
+    self.visibleTrinketItemIDs = {}
+    local canRequest = C_Item and C_Item.RequestLoadItemDataByID and C_Timer and C_Timer.After
+    self.trinketTooltipRequestRounds = self.trinketTooltipRequestRounds or 0
+
+    for _, item in ipairs(items or {}) do
+        if item and item.itemID and (item.slot == "Trinket" or item.equipLoc == "INVTYPE_TRINKET") then
+            self.visibleTrinketItemIDs[tonumber(item.itemID)] = true
+            if canRequest and self.trinketTooltipRequestRounds < 2 then
+                pcall(C_Item.RequestLoadItemDataByID, tonumber(item.itemID))
+                requested = true
+            end
+        end
+    end
+
+    if self.trinketTooltipRefreshQueued then return end
+    if not requested then return end
+
+    self.trinketTooltipRefreshQueued = true
+    self.trinketTooltipRequestRounds = self.trinketTooltipRequestRounds + 1
+    C_Timer.After(0.75, function()
+        GearTargets.trinketTooltipRefreshQueued = false
+        if GearTargets.frame and GearTargets.frame:IsShown() then
+            GearTargets:RefreshContent()
+        end
+    end)
+end
+
+function GearTargets:QueueItemDataRefresh()
+    if self.itemDataRefreshQueued or not C_Timer or not C_Timer.After then return end
+    self.itemDataRefreshQueued = true
+    C_Timer.After(0.15, function()
+        GearTargets.itemDataRefreshQueued = false
+        if GearTargets.frame and GearTargets.frame:IsShown() then
+            GearTargets:RefreshContent()
+        end
+    end)
+end
+
 function GearTargets:RefreshContent()
     if not self.content then return end
     for _, child in ipairs({ self.content:GetChildren() }) do
@@ -676,6 +772,7 @@ function GearTargets:RefreshContent()
 
     self.goalContext = KeyLab.StatGoalGuidance and KeyLab.StatGoalGuidance.BuildContext and KeyLab.StatGoalGuidance.BuildContext(TargetSpecID()) or nil
     local items = self:GetFilteredItems()
+    self:QueueVisibleTrinketTooltipRefresh(items)
     self:UpdateSummary(items)
 
     local header = CreateFrame("Frame", nil, self.content, "BackdropTemplate")
@@ -724,6 +821,8 @@ function GearTargets:Create(parent)
     frame:SetAllPoints(parent)
     SetBackdrop(frame, CFG.colors.bg, {0, 0, 0, 0})
     self.frame = frame
+    self.visibleTrinketItemIDs = {}
+    self.trinketTooltipRequestRounds = 0
     self.selectedSpecID = nil
     self.selectedMapID = nil
     self.selectedSlot = nil
@@ -966,8 +1065,17 @@ function GearTargets:Create(parent)
     self.scroll = scroll
     self.content = content
 
+    local itemDataEvents = CreateFrame("Frame", nil, frame)
+    itemDataEvents:RegisterEvent("ITEM_DATA_LOAD_RESULT")
+    itemDataEvents:SetScript("OnEvent", function(_, _, itemID, success)
+        itemID = tonumber(itemID)
+        if success and itemID and GearTargets.visibleTrinketItemIDs and GearTargets.visibleTrinketItemIDs[itemID] then
+            GearTargets:QueueItemDataRefresh()
+        end
+    end)
+    self.itemDataEvents = itemDataEvents
+
     frame:SetScript("OnShow", function() GearTargets:Refresh() end)
-    GearTargets:Refresh()
     return frame
 end
 

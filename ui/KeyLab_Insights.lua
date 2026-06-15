@@ -35,6 +35,12 @@ local COLORS = {
 
 local CONTENT_WIDTH = 900
 local PAGE_PADDING = 8
+local FONT_SECTION_TITLE = 17
+local FONT_HEADER_TITLE = 18
+local FONT_SUBTITLE = 12
+local FONT_BLOCK_TITLE = 13
+local FONT_BODY = 12
+local FONT_BODY_SPACING = 2
 
 -- =========================================================
 -- BASIC HELPERS
@@ -56,6 +62,10 @@ local function MakeText(parent, text, template, size, color, justify)
 
     if size then
         fs:SetFont(STANDARD_TEXT_FONT, size, "")
+    end
+
+    if fs.SetSpacing then
+        fs:SetSpacing(FONT_BODY_SPACING)
     end
 
     fs:SetTextColor(unpack(color or COLORS.text))
@@ -104,14 +114,14 @@ local function AddSectionHeader(parent, y, title, subtitle)
 
     AddAccent(parent, PAGE_PADDING, y + 8, headerHeight)
 
-    local h = MakeText(parent, title, "GameFontNormalLarge", nil, COLORS.gold, "LEFT")
+    local h = MakeText(parent, title, "GameFontNormalLarge", FONT_SECTION_TITLE, COLORS.gold, "LEFT")
     h:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING + 16, y - 1)
     h:SetSize(CONTENT_WIDTH - 44, 24)
 
     local nextY = y - 30
 
     if subtitle and subtitle ~= "" then
-        local s = MakeText(parent, subtitle, "GameFontHighlightSmall", nil, COLORS.muted, "LEFT")
+        local s = MakeText(parent, subtitle, "GameFontHighlightSmall", FONT_SUBTITLE, COLORS.muted, "LEFT")
         s:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING + 16, y - 25)
         s:SetSize(CONTENT_WIDTH - 44, 32)
         nextY = y - 62
@@ -122,17 +132,17 @@ end
 
 local function AddTextBlock(parent, x, y, width, title, body)
     if title and title ~= "" then
-        local h = MakeText(parent, title, "GameFontNormal", nil, COLORS.title, "LEFT")
+        local h = MakeText(parent, title, "GameFontNormal", FONT_BLOCK_TITLE, COLORS.title, "LEFT")
         h:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
         h:SetSize(width, 18)
 
-        local b = MakeText(parent, body, "GameFontHighlightSmall", nil, COLORS.text, "LEFT")
+        local b = MakeText(parent, body, "GameFontHighlightSmall", FONT_BODY, COLORS.text, "LEFT")
         b:SetPoint("TOPLEFT", h, "BOTTOMLEFT", 0, -7)
         b:SetSize(width, 500)
         return b
     end
 
-    local b = MakeText(parent, body, "GameFontHighlightSmall", nil, COLORS.text, "LEFT")
+    local b = MakeText(parent, body, "GameFontHighlightSmall", FONT_BODY, COLORS.text, "LEFT")
     b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     b:SetSize(width, 500)
     return b
@@ -150,11 +160,11 @@ local function AddSoftBox(parent, x, y, width, height, title, body)
     strip:SetHeight(2)
     strip:SetColorTexture(unpack(COLORS.cardLine))
 
-    local h = MakeText(box, title, "GameFontNormal", nil, COLORS.gold, "LEFT")
+    local h = MakeText(box, title, "GameFontNormal", FONT_BLOCK_TITLE, COLORS.gold, "LEFT")
     h:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
     h:SetSize(width - 24, 18)
 
-    local b = MakeText(box, body, "GameFontHighlightSmall", nil, COLORS.text, "LEFT")
+    local b = MakeText(box, body, "GameFontHighlightSmall", FONT_BODY, COLORS.text, "LEFT")
     b:SetPoint("TOPLEFT", h, "BOTTOMLEFT", 0, -7)
     b:SetSize(width - 24, height - 38)
 
@@ -357,11 +367,11 @@ function Insights:Create(parent)
     strip:SetWidth(3)
     strip:SetColorTexture(unpack(COLORS.gold))
 
-    local title = MakeText(header, "Insights", "GameFontNormalLarge", nil, COLORS.gold, "LEFT")
+    local title = MakeText(header, "Insights", "GameFontNormalLarge", FONT_HEADER_TITLE, COLORS.gold, "LEFT")
     title:SetPoint("TOPLEFT", header, "TOPLEFT", 16, -10)
     title:SetSize(420, 24)
 
-    local subtitle = MakeText(header, "Reference notes for encounter variables, character stats, spell queue window, macros, and sims.", "GameFontHighlightSmall", nil, COLORS.muted, "LEFT")
+    local subtitle = MakeText(header, "Reference notes for encounter variables, character stats, spell queue window, macros, and sims.", "GameFontHighlightSmall", FONT_SUBTITLE, COLORS.muted, "LEFT")
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
     subtitle:SetSize(820, 24)
 

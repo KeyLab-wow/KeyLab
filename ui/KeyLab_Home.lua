@@ -316,7 +316,7 @@ function HOME:Create(parent)
 
     local gearBody = MakeText(
         gearPanel,
-        "Opens a small companion window with the items you marked Wanted, Backup, or Temporary in the Gear Targets tab. Keep it open while browsing Premade Groups to quickly see target drops for the dungeon you are considering.",
+        "Opens a small companion window with the items you marked Target or BIS in the Gear Targets tab. Keep it open while browsing Premade Groups to quickly see target drops for the dungeon you are considering.",
         12,
         COLORS.text,
         "LEFT"
@@ -435,8 +435,6 @@ function HOME:Create(parent)
     frame:SetScript("OnShow", function(self)
         self:Refresh()
     end)
-
-    frame:Refresh()
 
     return frame
 end

@@ -1430,8 +1430,6 @@ function TalentStatBuild:Create(parent)
         TalentStatBuild:Refresh()
     end)
 
-    TalentStatBuild:Refresh()
-
     return frame
 end
 

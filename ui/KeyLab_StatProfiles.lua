@@ -1332,8 +1332,6 @@ function StatProfiles:Create(parent)
         StatProfiles:Refresh()
     end)
 
-    StatProfiles:Refresh()
-
     return frame
 end
 

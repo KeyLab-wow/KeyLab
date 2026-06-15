@@ -1486,8 +1486,6 @@ function Trends:Create(parent)
         Trends:Refresh()
     end)
 
-    Trends:Refresh()
-
     return frame
 end
 
