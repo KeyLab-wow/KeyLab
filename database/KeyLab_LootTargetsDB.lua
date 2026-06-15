@@ -6,9 +6,7 @@ KeyLab.LootTargetsDB = KeyLab.LootTargetsDB or {}
 local LootTargetsDB = KeyLab.LootTargetsDB
 
 local STATUS_LABELS = {
-    wanted = "Wanted",
-    backup = "Backup",
-    temporary = "Temporary",
+    wanted = "Target",
     bis = "BIS",
     ignore = "Ignore",
     acquired = "Acquired",
@@ -16,9 +14,7 @@ local STATUS_LABELS = {
 
 local STATUS_OPTIONS = {
     { value = nil, label = "Unmarked" },
-    { value = "wanted", label = "Wanted" },
-    { value = "backup", label = "Backup" },
-    { value = "temporary", label = "Temporary" },
+    { value = "wanted", label = "Target" },
     { value = "bis", label = "BIS" },
     { value = "ignore", label = "Ignore" },
     { value = "acquired", label = "Acquired" },
@@ -26,8 +22,6 @@ local STATUS_OPTIONS = {
 
 local TRACKED_STATUSES = {
     wanted = true,
-    backup = true,
-    temporary = true,
     bis = true,
 }
 
@@ -74,6 +68,11 @@ local function NormalizeStatus(status)
     status = tostring(status):lower()
     if status == "" or status == "none" or status == "unmarked" then
         return nil
+    end
+    -- Older saved data used Backup/Temporary. Fold those into Target so
+    -- removing the UI choices does not strand existing saved items.
+    if status == "backup" or status == "temporary" then
+        return "wanted"
     end
     if STATUS_LABELS[status] then return status end
     return nil
