@@ -1,0 +1,37 @@
+Category,Probe / Blizzard Field,Normalized KeyLab Field,UI Label,Where Used,Description / Rule
+Slot,slotID,slotID,Slot,Item card,WoW inventory slot ID.
+Slot,slotName,slotName,Slot,Item card,Readable slot name; shirt slot should be ignored for dashboard.
+Item,itemLink,itemLink,Item,Tooltip/Icon,Full item link for display and tooltip.
+Item,itemID,itemID,Item ID,Debug only,Item ID for lookups/debug.
+Item,itemLevel,itemLevel,ilvl,Item card,Current item level shown on item card.
+Track,upgradeRawLine,upgradeRawLine,Upgrade Level,Debug/fallback,Raw tooltip line such as Upgrade Level: Hero 2/6.
+Track,parsed from upgradeRawLine,upgradeTrack,Track,Item card / scoring,"Track name: Unranked, Adventurer, Veteran, Champion, Hero, Myth."
+Track,parsed from upgradeRawLine,upgradeRank,Rank,Item card / upgrades,"Current upgrade rank, e.g. 2 from 2/6."
+Track,parsed from upgradeRawLine,upgradeMaxRank,Max Rank,Item card / upgrades,"Max upgrade rank, e.g. 6 from 2/6."
+Stats,primaryStatsShown,primaryStatsShown,Primary Stats,Debug/future,Do not assume all items have primary stats.
+Stats,secondaryStatsShown,secondaryStatsShown,Secondary Stats,Debug/future,Do not assume all items have secondary stats.
+Enchant,enchantDetected,enchantDetected,Enchant,Polish badge,True means slot has real enchant. Illusory adornments do not count.
+Enchant,enchantLines,enchantLines,Enchant Text,Debug,Use if needed to confirm line starts with Enchanted:.
+Gem,emptySocketCount,emptySocketCount,Gem,Polish badge,"If > 0, show Gem missing/empty socket badge."
+Gem,gemLines,gemLines,Gem Text,Debug,Raw gem/socket info for fallback/debug.
+Crafted,craftedIndicatorVisible,craftedDetected,Crafted,Item card / analysis,True if tooltip indicates crafted item.
+Crafted,tooltip line type=12 Quality,craftQualityTier,Craft Quality,Craft analysis,Quality Tier 5 is important for max crafted upgrades.
+Crafted,leftText contains Radiance Crafted,radianceCraftedDetected,Radiance Crafted,Craft analysis,Useful crafted item clue from tooltip text.
+Embellishment,leftText contains Unique-Equipped: Embellished (2),embellishedDetected,Embellished,Polish/Craft badge,Detects equipped embellishment. Max 2 equipped.
+Tier,tierIndicatorVisible,tierDetected,Tier,Tier badge,True if item is currently tier or has tier indicator.
+Tier,"slotID in 1,3,5,10,7",tierEligible,Tier Eligible,Tier analysis,"Head, Shoulders, Chest, Hands, Legs."
+Voidforge,leftText contains Ascendant Voidforged,ascendantVoidforgedDetected,Voidforged,Voidforge badge,True if item is already Ascendant Voidforged.
+Voidforge,slotID=16 craftedIndicatorVisible,craftedWeaponVoidforgeCandidate,Voidforge,Voidforge analysis,Crafted weapon can be checked for Ascendant Voidforged.
+Voidforge,slotID=13 or 14 + Hero/Myth 6/6,trinketVoidforgeCandidate,Voidforge,Voidforge analysis,Hero/Myth trinket must be max 6/6 before voidforge check.
+Currency,C_CurrencyInfo.GetCurrencyInfo(3343),championCrests,Champion Crests,Activities/upgrade panel,Champion Dawncrest; M0 / M+2-3 source signal.
+Currency,C_CurrencyInfo.GetCurrencyInfo(3345),heroCrests,Hero Crests,Activities/upgrade panel,Hero Dawncrest; M+4-8 source signal.
+Currency,C_CurrencyInfo.GetCurrencyInfo(3347),mythCrests,Myth Crests,Activities/upgrade panel,Myth Dawncrest; M+9+ source signal.
+Currency,C_CurrencyInfo.GetCurrencyInfo(3378),dawnlightManaflux,Catalyst,Activities/upgrade panel,Catalyst charges for tier conversion.
+Currency,C_CurrencyInfo.GetCurrencyInfo(3418),nebulousVoidcore,Voidcore Rolls,Activities/upgrade panel,Seasonal roll/resource tracking.
+Currency,C_CurrencyInfo.GetCurrencyInfo(3212),radiantSparkDust,Spark Dust,Craft panel,Crafting/spark progress.
+Item Currency,itemID 268552,ascendantVoidcore,Ascendant Voidcore,Voidforge panel,Used to upgrade eligible crafted weapons/trinkets.
+Item Currency,itemID 263897,radiantJewelbinder,Radiant Jewelbinder,Socket/jewel panel,Vault vendor upgrade item if available.
+Target,Gear Targets DB status,gearTargetStatus,Target/BIS/Acquired,Item card,Target statuses drive source hints and progress.
+Target,Gear Targets dungeon/source,targetSources,Dungeon(s),Item card,M+ dungeon/source hints for saved targets.
+M+ History,KeyLab encounters,highestCompletedKey,Highest Key,Activities,Use actual player M+ history to avoid lowballing recommendations.
+M+ History,KeyLab encounters,highestTimedKey,Highest Timed,Activities,Use timed history as a stronger lane signal if available.
