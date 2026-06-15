@@ -93,6 +93,7 @@ local CFG = {
         "Talent Builds",
         "Stat Profiles",
         "Trends",
+        "Gear Dashboard",
         "Gear Targets",
         "Insights",
         "Settings",
@@ -244,7 +245,6 @@ function KeyLab.UI:Create()
     self.tabButtons = {}
 
     self:CreateTabButtons()
-    self:CreateTabFrames()
 
     self:SelectTab("Home")
 
@@ -289,31 +289,51 @@ function KeyLab.UI:CreateTabButtons()
     end
 end
 
-function KeyLab.UI:CreateTabFrames()
-    for _, tabName in ipairs(CFG.tabs) do
-        local reg = FindRegisteredTab(tabName)
-
-        if reg and reg.createFunc then
-            local ok, tabFrameOrError = pcall(reg.createFunc, self.content)
-
-            if ok and tabFrameOrError then
-                local tabFrame = tabFrameOrError
-                tabFrame:SetParent(self.content)
-                tabFrame:SetAllPoints(self.content)
-                tabFrame:Hide()
-                self.tabFrames[tabName] = tabFrame
-            elseif not ok then
-                SafePrint("Error creating tab " .. tostring(tabName) .. ": " .. tostring(tabFrameOrError))
-            end
-        else
-            SafePrint("Tab not registered yet: " .. tostring(tabName))
-        end
+function KeyLab.UI:CreateTabFrame(tabName)
+    if not tabName then return nil end
+    self.tabFrames = self.tabFrames or {}
+    if self.tabFrames[tabName] then
+        return self.tabFrames[tabName]
     end
+
+    local reg = FindRegisteredTab(tabName)
+    if not reg or not reg.createFunc then
+        SafePrint("Tab not registered yet: " .. tostring(tabName))
+        return nil
+    end
+
+    local ok, tabFrameOrError = pcall(reg.createFunc, self.content)
+    if not ok then
+        SafePrint("Error creating tab " .. tostring(tabName) .. ": " .. tostring(tabFrameOrError))
+        return nil
+    end
+
+    if not tabFrameOrError then return nil end
+
+    local tabFrame = tabFrameOrError
+    tabFrame:SetParent(self.content)
+    tabFrame:SetAllPoints(self.content)
+    tabFrame:Hide()
+    self.tabFrames[tabName] = tabFrame
+    return tabFrame
 end
 
 function KeyLab.UI:RefreshSelectedTab()
     local tabName = self.selectedTab
     if not tabName then return end
+
+    local tabFrame = self.tabFrames and self.tabFrames[tabName]
+    if not tabFrame then return end
+
+    local visible = tabFrame.IsVisible and tabFrame:IsVisible() or tabFrame:IsShown()
+    if not visible then return end
+
+    if tabFrame and type(tabFrame.Refresh) == "function" then
+        pcall(function()
+            tabFrame:Refresh()
+        end)
+        return
+    end
 
     local tabObjectKey = GetTabObjectKey(tabName)
     local tabObject = KeyLab.Tabs and KeyLab.Tabs[tabObjectKey]
@@ -328,14 +348,18 @@ end
 function KeyLab.UI:SelectTab(tabName)
     self:Create()
 
+    local selectedFrame = self:CreateTabFrame(tabName)
+    if not selectedFrame then return end
+
+    local previousTab = self.selectedTab
     self.selectedTab = tabName
 
-    for name, tabFrame in pairs(self.tabFrames or {}) do
-        if name == tabName then
-            tabFrame:Show()
-        else
-            tabFrame:Hide()
-        end
+    if previousTab and previousTab ~= tabName and self.tabFrames and self.tabFrames[previousTab] then
+        self.tabFrames[previousTab]:Hide()
+    end
+
+    if self.frame and self.frame:IsShown() then
+        selectedFrame:Show()
     end
 
     for name, button in pairs(self.tabButtons or {}) do
@@ -350,13 +374,12 @@ function KeyLab.UI:SelectTab(tabName)
         end
     end
 
-    self:RefreshSelectedTab()
 end
 
 function KeyLab.UI:Show()
     self:Create()
     self.frame:Show()
-    self:RefreshSelectedTab()
+    self:SelectTab(self.selectedTab or "Home")
 end
 
 function KeyLab.UI:Hide()
@@ -372,6 +395,6 @@ function KeyLab.UI:Toggle()
         self.frame:Hide()
     else
         self.frame:Show()
-        self:RefreshSelectedTab()
+        self:SelectTab(self.selectedTab or "Home")
     end
 end

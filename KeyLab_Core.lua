@@ -48,19 +48,36 @@ function KeyLab.Debug(message)
 end
 
 function KeyLab.RefreshTabs()
-    if not KeyLab.Tabs then return end
-
-    for _, tab in pairs(KeyLab.Tabs) do
-        if type(tab) == "table" and tab.Refresh then
-            pcall(function()
-                tab:Refresh()
-            end)
-        end
+    if KeyLab.UI and KeyLab.UI.RefreshSelectedTab then
+        KeyLab.UI:RefreshSelectedTab()
     end
 end
 
 local function Print(msg)
     KeyLab.Print(msg)
+end
+
+local function RunGearDebug()
+    KeyLabDB = KeyLabDB or {}
+
+    local analysis = KeyLab and KeyLab.GearingAnalysis
+    if not analysis then
+        KeyLabDB.gearDashboardDebugError = "KeyLab.GearingAnalysis is not loaded."
+        Print("Gear Dashboard debug is not loaded. Try /reload; if this repeats, send me the Lua error.")
+        return
+    end
+
+    if type(analysis.PrintGearDebug) ~= "function" then
+        KeyLabDB.gearDashboardDebugError = "PrintGearDebug is missing."
+        Print("Gear Dashboard debug helper is missing.")
+        return
+    end
+
+    local ok, err = pcall(analysis.PrintGearDebug)
+    if not ok then
+        KeyLabDB.gearDashboardDebugError = tostring(err)
+        Print("Gear Dashboard debug failed: " .. tostring(err))
+    end
 end
 
 local function Initialize()
@@ -207,6 +224,11 @@ SlashCmdList["KEYLAB"] = function(msg)
         return
     end
 
+    if msg == "geardebug" or msg == "gear debug" or msg == "gear-debug" then
+        RunGearDebug()
+        return
+    end
+
     if msg == "debug" then
         KeyLabDB = KeyLabDB or {}
         KeyLabDB.settings = KeyLabDB.settings or {}
@@ -216,5 +238,11 @@ SlashCmdList["KEYLAB"] = function(msg)
         return
     end
 
-    Print("Commands: /keylab, /keylab count, /keylab status, /keylab finalize, /keylab resetcapture, /keylab reset, /keylab debug")
+    Print("Commands: /keylab, /keylab count, /keylab status, /keylab finalize, /keylab resetcapture, /keylab reset, /keylab geardebug, /keylab debug")
+end
+
+SLASH_KEYLABGEARDEBUG1 = "/keylabgeardebug"
+SLASH_KEYLABGEARDEBUG2 = "/klgeardebug"
+SlashCmdList["KEYLABGEARDEBUG"] = function()
+    RunGearDebug()
 end
