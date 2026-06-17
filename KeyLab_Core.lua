@@ -169,6 +169,15 @@ SlashCmdList["KEYLAB"] = function(msg)
         return
     end
 
+    if msg == "minimap" then
+        if KeyLab.Minimap and KeyLab.Minimap.ToggleHidden then
+            KeyLab.Minimap.ToggleHidden()
+        else
+            Print("Minimap icon is not available.")
+        end
+        return
+    end
+
     if msg == "count" then
         local count = 0
 
