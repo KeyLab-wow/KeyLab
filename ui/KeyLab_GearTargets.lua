@@ -22,16 +22,16 @@ KeyLab.Tabs.GearTargets = GearTargets
 
 local CFG = {
     colors = {
-        bg = {0.025, 0.035, 0.070, 0.96},
-        panel = {0.035, 0.055, 0.105, 0.94},
-        box = {0.030, 0.050, 0.095, 0.92},
-        border = {0.35, 0.55, 0.95, 0.55},
-        gold = {0.95, 0.76, 0.32, 1.0},
-        text = {0.88, 0.90, 0.96, 1.0},
-        muted = {0.62, 0.70, 0.82, 1.0},
-        blue = {0.38, 0.68, 1.0, 1.0},
-        green = {0.45, 0.95, 0.60, 1.0},
-        warning = {1.0, 0.72, 0.35, 1.0},
+        bg = {0.018, 0.026, 0.056, 0.96},
+        panel = {0.026, 0.046, 0.086, 0.94},
+        box = {0.030, 0.052, 0.098, 0.92},
+        border = {0.240, 0.380, 0.620, 0.62},
+        gold = {0.820, 0.760, 0.580, 1.0},
+        text = {0.940, 0.960, 0.990, 1.0},
+        muted = {0.680, 0.730, 0.820, 1.0},
+        blue = {0.500, 0.680, 0.940, 1.0},
+        green = {0.460, 0.780, 0.500, 1.0},
+        warning = {0.840, 0.720, 0.420, 1.0},
     },
     rowHeight = 38,
 }
@@ -76,11 +76,11 @@ local STATUS_MENU_OPTIONS = {
 }
 
 local STATUS_COLORS = {
-    wanted = {0.45, 0.95, 0.60, 1.0},
-    bis = {1.0, 0.86, 0.36, 1.0},
-    ignore = {1.0, 0.72, 0.35, 1.0},
-    acquired = {0.70, 0.85, 1.0, 1.0},
-    unmarked = {0.62, 0.70, 0.82, 1.0},
+    wanted = {0.460, 0.780, 0.500, 1.0},
+    bis = {0.820, 0.760, 0.580, 1.0},
+    ignore = {0.840, 0.720, 0.420, 1.0},
+    acquired = {0.500, 0.680, 0.940, 1.0},
+    unmarked = {0.680, 0.730, 0.820, 1.0},
 }
 
 local STATUS_SORT_RANK = {
@@ -102,11 +102,21 @@ local GUIDANCE_SORT_RANK = {
 }
 
 local function SetBackdrop(frame, color, borderColor)
+    local edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border"
+    local edgeSize = 7
+    local insets = { left = 2, right = 2, top = 2, bottom = 2 }
+    if frame.GetHeight and (frame:GetHeight() or 0) <= 20 then
+        edgeFile = "Interface\\Buttons\\WHITE8x8"
+        edgeSize = 1
+        insets = nil
+    end
+
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = edgeFile,
         tile = false,
-        edgeSize = 1,
+        edgeSize = edgeSize,
+        insets = insets,
     })
     frame:SetBackdropColor(unpack(color or CFG.colors.panel))
     frame:SetBackdropBorderColor(unpack(borderColor or CFG.colors.border))
@@ -464,7 +474,7 @@ function GearTargets:MakeHeaderButton(parent, key)
     local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
     button:SetPoint("LEFT", parent, "LEFT", column.x - 4, 0)
     button:SetSize(column.width, 22)
-    SetBackdrop(button, {0.03, 0.05, 0.09, 0.65}, {0.20, 0.35, 0.65, 0.45})
+    SetBackdrop(button, CFG.colors.box, CFG.colors.border)
 
     local label = column.label
     if self.sortKey == key then
@@ -492,7 +502,7 @@ function GearTargets:MakeHeaderButton(parent, key)
         GameTooltip:Show()
     end)
     button:SetScript("OnLeave", function(btn)
-        btn:SetBackdropBorderColor(0.20, 0.35, 0.65, 0.45)
+        btn:SetBackdropBorderColor(unpack(CFG.colors.border))
         GameTooltip:Hide()
     end)
     return button
@@ -779,7 +789,7 @@ function GearTargets:RefreshContent()
     header:SetPoint("TOPLEFT", self.content, "TOPLEFT", 0, 0)
     header:SetPoint("RIGHT", self.content, "RIGHT", 0, 0)
     header:SetHeight(26)
-    SetBackdrop(header, {0.02, 0.03, 0.06, 0.92}, CFG.colors.border)
+    SetBackdrop(header, CFG.colors.box, CFG.colors.border)
 
     self:MakeHeaderButton(header, "item")
     self:MakeHeaderButton(header, "slot")

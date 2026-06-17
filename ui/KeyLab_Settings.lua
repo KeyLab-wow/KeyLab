@@ -17,16 +17,16 @@ KeyLab.Tabs.Settings = Settings
 -- =========================================================
 
 local COLORS = {
-    bg       = {0.025, 0.035, 0.070, 0.96},
-    panel    = {0.035, 0.055, 0.105, 0.94},
-    box      = {0.030, 0.050, 0.095, 0.92},
-    border   = {0.35, 0.55, 0.95, 0.55},
-    divider  = {1.0, 1.0, 1.0, 0.13},
-    gold     = {0.95, 0.76, 0.32, 1.0},
-    text     = {0.88, 0.90, 0.96, 1.0},
-    muted    = {0.62, 0.70, 0.82, 1.0},
-    blue     = {0.38, 0.68, 1.0, 1.0},
-    danger   = {1.0, 0.48, 0.38, 1.0},
+    bg       = {0.018, 0.026, 0.056, 0.96},
+    panel    = {0.026, 0.046, 0.086, 0.94},
+    box      = {0.030, 0.052, 0.098, 0.92},
+    border   = {0.240, 0.380, 0.620, 0.62},
+    divider  = {0.440, 0.580, 0.780, 0.32},
+    gold     = {0.820, 0.760, 0.580, 1.0},
+    text     = {0.940, 0.960, 0.990, 1.0},
+    muted    = {0.680, 0.730, 0.820, 1.0},
+    blue     = {0.500, 0.680, 0.940, 1.0},
+    danger   = {0.840, 0.440, 0.420, 1.0},
 }
 
 local CONTENT_PAD = 24
@@ -43,11 +43,21 @@ local FONT_BODY_SPACING = 2
 -- =========================================================
 
 local function SetBackdrop(frame, color, borderColor)
+    local edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border"
+    local edgeSize = 7
+    local insets = { left = 2, right = 2, top = 2, bottom = 2 }
+    if frame.GetHeight and (frame:GetHeight() or 0) <= 20 then
+        edgeFile = "Interface\\Buttons\\WHITE8x8"
+        edgeSize = 1
+        insets = nil
+    end
+
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = edgeFile,
         tile = false,
-        edgeSize = 1,
+        edgeSize = edgeSize,
+        insets = insets,
     })
     frame:SetBackdropColor(unpack(color or COLORS.panel))
     frame:SetBackdropBorderColor(unpack(borderColor or COLORS.border))

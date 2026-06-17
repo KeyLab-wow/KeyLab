@@ -12,17 +12,17 @@ local HOME = {}
 KeyLab.Tabs.Home = HOME
 
 local COLORS = {
-    bg         = {0.015, 0.025, 0.055, 0.96},
-    panel      = {0.030, 0.045, 0.085, 0.78},
-    important  = {0.080, 0.055, 0.025, 0.74},
-    border     = {0.24, 0.36, 0.68, 0.55},
-    warnBorder = {0.95, 0.72, 0.25, 0.85},
-    text       = {0.86, 0.90, 0.96, 1.0},
-    muted      = {0.62, 0.68, 0.78, 1.0},
-    title      = {0.95, 0.78, 0.34, 1.0},
-    accent     = {0.58, 0.78, 1.00, 1.0},
-    warning    = {1.00, 0.80, 0.38, 1.0},
-    divider    = {1, 1, 1, 0.13},
+    bg         = {0.018, 0.026, 0.056, 0.96},
+    panel      = {0.026, 0.046, 0.086, 0.84},
+    important  = {0.030, 0.052, 0.094, 0.82},
+    border     = {0.240, 0.380, 0.620, 0.62},
+    warnBorder = {0.620, 0.560, 0.410, 0.70},
+    text       = {0.940, 0.960, 0.990, 1.0},
+    muted      = {0.680, 0.730, 0.820, 1.0},
+    title      = {0.820, 0.760, 0.580, 1.0},
+    accent     = {0.500, 0.680, 0.940, 1.0},
+    warning    = {0.840, 0.720, 0.420, 1.0},
+    divider    = {0.440, 0.580, 0.780, 0.32},
 }
 
 local CFG = {
@@ -33,11 +33,21 @@ local CFG = {
 }
 
 local function SetBackdrop(frame, color, borderColor)
+    local edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border"
+    local edgeSize = 7
+    local insets = { left = 2, right = 2, top = 2, bottom = 2 }
+    if frame.GetHeight and (frame:GetHeight() or 0) <= 20 then
+        edgeFile = "Interface\\Buttons\\WHITE8x8"
+        edgeSize = 1
+        insets = nil
+    end
+
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = edgeFile,
         tile = false,
-        edgeSize = 1,
+        edgeSize = edgeSize,
+        insets = insets,
     })
 
     frame:SetBackdropColor(unpack(color or COLORS.bg))
@@ -60,14 +70,6 @@ local function MakePanel(parent, x, y, width, height, important)
     panel:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     panel:SetSize(width, height)
     SetBackdrop(panel, important and COLORS.important or COLORS.panel, important and COLORS.warnBorder or COLORS.border)
-
-    if important then
-        local strip = panel:CreateTexture(nil, "ARTWORK")
-        strip:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
-        strip:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 0, 0)
-        strip:SetWidth(3)
-        strip:SetColorTexture(unpack(COLORS.warning))
-    end
 
     return panel
 end

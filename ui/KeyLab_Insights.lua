@@ -18,19 +18,19 @@ KeyLab.Tabs.Insights = Insights
 -- =========================================================
 
 local COLORS = {
-    bg       = {0.025, 0.035, 0.075, 0.96},
-    panel    = {0.035, 0.055, 0.105, 0.72},
-    border   = {0.22, 0.42, 0.78, 0.62},
-    gold     = {0.95, 0.72, 0.25, 1.0},
-    title    = {0.70, 0.86, 1.00, 1.0},
-    text     = {0.88, 0.90, 0.96, 1.0},
-    muted    = {0.64, 0.70, 0.82, 1.0},
-    accent   = {0.35, 0.68, 1.00, 1.0},
-    divider  = {1, 1, 1, 0.14},
-    softBg   = {0.030, 0.046, 0.090, 0.74},
-    headerBg = {0.020, 0.034, 0.074, 0.86},
-    cardBg   = {0.020, 0.032, 0.068, 0.82},
-    cardLine = {0.58, 0.78, 1.00, 0.48},
+    bg       = {0.018, 0.026, 0.056, 0.96},
+    panel    = {0.026, 0.046, 0.086, 0.84},
+    border   = {0.240, 0.380, 0.620, 0.62},
+    gold     = {0.820, 0.760, 0.580, 1.0},
+    title    = {0.780, 0.830, 0.900, 1.0},
+    text     = {0.940, 0.960, 0.990, 1.0},
+    muted    = {0.680, 0.730, 0.820, 1.0},
+    accent   = {0.500, 0.680, 0.940, 1.0},
+    divider  = {0.440, 0.580, 0.780, 0.32},
+    softBg   = {0.030, 0.052, 0.098, 0.84},
+    headerBg = {0.024, 0.042, 0.082, 0.92},
+    cardBg   = {0.026, 0.046, 0.086, 0.82},
+    cardLine = {0.240, 0.380, 0.620, 0.62},
 }
 
 local CONTENT_WIDTH = 900
@@ -47,11 +47,21 @@ local FONT_BODY_SPACING = 2
 -- =========================================================
 
 local function SetBackdrop(frame, color, borderColor)
+    local edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border"
+    local edgeSize = 7
+    local insets = { left = 2, right = 2, top = 2, bottom = 2 }
+    if frame.GetHeight and (frame:GetHeight() or 0) <= 20 then
+        edgeFile = "Interface\\Buttons\\WHITE8x8"
+        edgeSize = 1
+        insets = nil
+    end
+
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = edgeFile,
         tile = false,
-        edgeSize = 1,
+        edgeSize = edgeSize,
+        insets = insets,
     })
     frame:SetBackdropColor(unpack(color or COLORS.panel))
     frame:SetBackdropBorderColor(unpack(borderColor or COLORS.border))
@@ -92,27 +102,42 @@ local function AddDivider(parent, y, width)
     return line
 end
 
-local function AddAccent(parent, x, y, height)
-    local strip = parent:CreateTexture(nil, "ARTWORK")
-    strip:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    strip:SetSize(4, height or 24)
-    strip:SetColorTexture(unpack(COLORS.gold))
-    return strip
-end
+local function AddSectionHeader(parent, y, title, subtitle, panelHeight)
+    local hasSubtitle = subtitle and subtitle ~= ""
+    local headerHeight = hasSubtitle and 58 or 42
+    local panelWidth = CONTENT_WIDTH - (PAGE_PADDING * 2)
+    local panelTop = y + 8
+    local fullHeight = panelHeight or headerHeight
 
-local function AddSectionHeader(parent, y, title, subtitle)
-    local headerHeight = subtitle and 58 or 42
-    local headerBg = parent:CreateTexture(nil, "BACKGROUND")
-    headerBg:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, y + 8)
-    headerBg:SetSize(CONTENT_WIDTH - (PAGE_PADDING * 2), headerHeight)
+    local panelBg = parent:CreateTexture(nil, "BACKGROUND")
+    panelBg:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, panelTop)
+    panelBg:SetSize(panelWidth, fullHeight)
+    panelBg:SetColorTexture(unpack(COLORS.cardBg))
+
+    local headerBg = parent:CreateTexture(nil, "BORDER")
+    headerBg:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, panelTop)
+    headerBg:SetSize(panelWidth, headerHeight)
     headerBg:SetColorTexture(unpack(COLORS.headerBg))
 
     local topLine = parent:CreateTexture(nil, "ARTWORK")
-    topLine:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, y + 8)
-    topLine:SetSize(CONTENT_WIDTH - (PAGE_PADDING * 2), 1)
+    topLine:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, panelTop)
+    topLine:SetSize(panelWidth, 1)
     topLine:SetColorTexture(unpack(COLORS.border))
 
-    AddAccent(parent, PAGE_PADDING, y + 8, headerHeight)
+    local bottomLine = parent:CreateTexture(nil, "ARTWORK")
+    bottomLine:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, panelTop - fullHeight)
+    bottomLine:SetSize(panelWidth, 1)
+    bottomLine:SetColorTexture(unpack(COLORS.border))
+
+    local leftLine = parent:CreateTexture(nil, "ARTWORK")
+    leftLine:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, panelTop)
+    leftLine:SetSize(1, fullHeight)
+    leftLine:SetColorTexture(unpack(COLORS.border))
+
+    local rightLine = parent:CreateTexture(nil, "ARTWORK")
+    rightLine:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING + panelWidth - 1, panelTop)
+    rightLine:SetSize(1, fullHeight)
+    rightLine:SetColorTexture(unpack(COLORS.border))
 
     local h = MakeText(parent, title, "GameFontNormalLarge", FONT_SECTION_TITLE, COLORS.gold, "LEFT")
     h:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING + 16, y - 1)
@@ -120,7 +145,7 @@ local function AddSectionHeader(parent, y, title, subtitle)
 
     local nextY = y - 30
 
-    if subtitle and subtitle ~= "" then
+    if hasSubtitle then
         local s = MakeText(parent, subtitle, "GameFontHighlightSmall", FONT_SUBTITLE, COLORS.muted, "LEFT")
         s:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING + 16, y - 25)
         s:SetSize(CONTENT_WIDTH - 44, 32)
@@ -158,7 +183,7 @@ local function AddSoftBox(parent, x, y, width, height, title, body)
     strip:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
     strip:SetPoint("TOPRIGHT", box, "TOPRIGHT", 0, 0)
     strip:SetHeight(2)
-    strip:SetColorTexture(unpack(COLORS.cardLine))
+    strip:SetColorTexture(unpack(COLORS.border))
 
     local h = MakeText(box, title, "GameFontNormal", FONT_BLOCK_TITLE, COLORS.gold, "LEFT")
     h:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
@@ -175,7 +200,7 @@ local function AddColumnDivider(parent, x, y, height)
     local line = parent:CreateTexture(nil, "ARTWORK")
     line:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     line:SetSize(1, height)
-    line:SetColorTexture(unpack(COLORS.border))
+    line:SetColorTexture(unpack(COLORS.divider))
     return line
 end
 
@@ -187,7 +212,7 @@ local function BuildInsights(content)
     local y = -4
 
     -- Encounter Variables
-    y = AddSectionHeader(content, y, "Encounter Variables", "Gameplay factors that can change real Mythic+ outcomes from run to run.")
+    y = AddSectionHeader(content, y, "Encounter Variables", "Gameplay factors that can change real Mythic+ outcomes from run to run.", 210)
 
     local colW = 270
     AddTextBlock(content, PAGE_PADDING + 12, y, colW, "Core Variables", BulletList({
@@ -217,7 +242,7 @@ local function BuildInsights(content)
     y = y - 150
 
     -- Encounter Pressures
-    y = AddSectionHeader(content, y, "Encounter Pressures", "")
+    y = AddSectionHeader(content, y, "Encounter Pressures", "", 210)
 
     AddTextBlock(content, PAGE_PADDING + 12, y, 410, "Ranged Encounter Pressures", BulletList({
         "Cast interruption",
@@ -243,13 +268,13 @@ local function BuildInsights(content)
     y = y - 158
 
     -- Character Stats Reference
-    y = AddSectionHeader(content, y, "Character Stats Reference", "Stats can affect pacing, burst, survivability, and specialization-specific mechanics.")
+    y = AddSectionHeader(content, y, "Character Stats Reference", "Stats can affect pacing, burst, survivability, and specialization-specific mechanics.", 520)
 
-    AddSoftBox(content, PAGE_PADDING + 12, y, 280, 92, "Primary Stats", "Strength\nAgility\nIntellect\nStamina")
-    AddSoftBox(content, 318, y, 280, 92, "Secondary Stats", "Haste\nCritical Strike\nMastery\nVersatility")
-    AddSoftBox(content, 624, y, 260, 92, "Tertiary Stats", "Avoidance\nLeech\nSpeed\nParry, Block, Dodge, Miss")
+    AddSoftBox(content, PAGE_PADDING + 12, y, 280, 112, "Primary Stats", "Strength\nAgility\nIntellect\nStamina")
+    AddSoftBox(content, 318, y, 280, 112, "Secondary Stats", "Haste\nCritical Strike\nMastery\nVersatility")
+    AddSoftBox(content, 624, y, 260, 112, "Tertiary Stats", "Avoidance\nLeech\nSpeed\nParry, Block, Dodge, Miss")
 
-    y = y - 120
+    y = y - 140
 
     AddTextBlock(content, PAGE_PADDING + 12, y, 410, "Haste can affect:", DashList({
         "casting speed",
@@ -288,7 +313,7 @@ local function BuildInsights(content)
     y = y - 170
 
     -- Spell Queue Window
-    y = AddSectionHeader(content, y, "Spell Queue Window", "A game setting that changes how early the client accepts your next ability input.")
+    y = AddSectionHeader(content, y, "Spell Queue Window", "A game setting that changes how early the client accepts your next ability input.", 220)
 
     AddTextBlock(content, PAGE_PADDING + 12, y, 520, "", "Spell Queue Window affects how early the game accepts your next ability input before your current cast or global cooldown ends.\n\nDifferent values may change how responsive combat feels depending on latency and playstyle.")
 
@@ -298,7 +323,7 @@ local function BuildInsights(content)
     y = y - 150
 
     -- Macros
-    y = AddSectionHeader(content, y, "Macros", "Macros can reduce targeting friction, support different playstyles, and improve comfort.")
+    y = AddSectionHeader(content, y, "Macros", "Macros can reduce targeting friction, support different playstyles, and improve comfort.", 255)
 
     AddTextBlock(content, PAGE_PADDING + 12, y, 270, "Macros can help:", DashList({
         "Simplify repetitive actions",
@@ -319,7 +344,7 @@ local function BuildInsights(content)
     y = y - 190
 
     -- Conditional Macro Examples
-    y = AddSectionHeader(content, y, "Conditional Macro Examples", "")
+    y = AddSectionHeader(content, y, "Conditional Macro Examples", "", 300)
 
     AddTextBlock(content, PAGE_PADDING + 12, y, 870, "", "Macros can combine different targeting conditions to support utility, off-healing, dispels, and combat resurrection abilities from a single keybind.\n\nThese types of macros can help reduce targeting friction and improve reaction speed during fast-paced encounters.")
 
@@ -337,7 +362,7 @@ local function BuildInsights(content)
     y = y - 158
 
     -- Sims
-    y = AddSectionHeader(content, y, "Sims", "")
+    y = AddSectionHeader(content, y, "Sims", "", 150)
 
     AddTextBlock(content, PAGE_PADDING + 12, y, 870, "", "Simulation tools are often used to test builds, stats, and gear combinations in controlled environments.\n\nReal encounter results may still vary depending on mechanics, group composition, movement, and playstyle.")
 
@@ -360,12 +385,6 @@ function Insights:Create(parent)
     header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -14)
     header:SetHeight(62)
     SetBackdrop(header, COLORS.panel, COLORS.border)
-
-    local strip = header:CreateTexture(nil, "ARTWORK")
-    strip:SetPoint("TOPLEFT", header, "TOPLEFT", 0, 0)
-    strip:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 0, 0)
-    strip:SetWidth(3)
-    strip:SetColorTexture(unpack(COLORS.gold))
 
     local title = MakeText(header, "Insights", "GameFontNormalLarge", FONT_HEADER_TITLE, COLORS.gold, "LEFT")
     title:SetPoint("TOPLEFT", header, "TOPLEFT", 16, -10)

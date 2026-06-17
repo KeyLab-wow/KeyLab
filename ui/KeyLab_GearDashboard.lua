@@ -13,24 +13,26 @@ KeyLab.Tabs = KeyLab.Tabs or {}
 local GearDashboard = {}
 KeyLab.Tabs.GearDashboard = GearDashboard
 
-local COLORS = {
-    bg = {0.025, 0.035, 0.070, 0.96},
-    card = {0.030, 0.046, 0.090, 0.74},
-    slot = {0.030, 0.050, 0.095, 0.62},
-    icon = {0.020, 0.032, 0.068, 0.88},
-    border = {0.26, 0.30, 0.34, 0.70},
-    softBorder = {0.18, 0.22, 0.26, 0.62},
-    text = {0.88, 0.90, 0.94, 1.0},
-    muted = {0.62, 0.66, 0.72, 1.0},
-    gold = {0.95, 0.72, 0.25, 1.0},
-    purple = {0.62, 0.38, 0.88, 0.90},
-    blue = {0.34, 0.52, 0.78, 0.88},
-    green = {0.34, 0.66, 0.34, 0.86},
-    yellow = {0.72, 0.58, 0.18, 0.86},
-    orange = {0.78, 0.42, 0.20, 0.86},
-    red = {0.72, 0.24, 0.22, 0.86},
-    gray = {0.48, 0.50, 0.52, 1.0},
-    white = {0.54, 0.58, 0.64, 0.82},
+local Theme = KeyLab.UI and KeyLab.UI.Theme or {}
+
+local COLORS = Theme.colors or {
+    bg = {0.018, 0.026, 0.056, 0.98},
+    card = {0.030, 0.052, 0.098, 0.84},
+    slot = {0.030, 0.052, 0.098, 0.76},
+    icon = {0.012, 0.020, 0.044, 0.94},
+    border = {0.240, 0.380, 0.620, 0.62},
+    softBorder = {0.185, 0.300, 0.500, 0.50},
+    text = {0.940, 0.960, 0.990, 1.0},
+    muted = {0.680, 0.730, 0.820, 1.0},
+    gold = {0.820, 0.760, 0.580, 1.0},
+    purple = {0.680, 0.560, 0.880, 0.95},
+    blue = {0.500, 0.680, 0.940, 0.95},
+    green = {0.460, 0.780, 0.500, 0.95},
+    yellow = {0.840, 0.720, 0.420, 0.95},
+    orange = {0.860, 0.580, 0.340, 0.95},
+    red = {0.840, 0.440, 0.420, 0.95},
+    gray = {0.620, 0.670, 0.740, 1.0},
+    white = {0.900, 0.920, 0.960, 0.95},
 }
 
 local CONTENT_WIDTH = 960
@@ -67,11 +69,21 @@ local function IsVisible(frame)
 end
 
 local function SetBackdrop(frame, color, borderColor)
+    local edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border"
+    local edgeSize = 7
+    local insets = { left = 2, right = 2, top = 2, bottom = 2 }
+    if frame.GetHeight and (frame:GetHeight() or 0) <= 20 then
+        edgeFile = "Interface\\Buttons\\WHITE8x8"
+        edgeSize = 1
+        insets = nil
+    end
+
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = edgeFile,
         tile = false,
-        edgeSize = 1,
+        edgeSize = edgeSize,
+        insets = insets,
     })
     frame:SetBackdropColor(unpack(color or COLORS.card))
     frame:SetBackdropBorderColor(unpack(borderColor or COLORS.border))
@@ -307,7 +319,7 @@ local function MakeActivityRow(parent, y, width)
 end
 
 local function MakeProgressBar(parent)
-    local bar = MakeFrame(parent, 20, -46, 252, 16, {0.12, 0.14, 0.16, 0.95}, COLORS.softBorder)
+    local bar = MakeFrame(parent, 20, -46, 252, 16, COLORS.barBg or {0.012, 0.020, 0.044, 0.92}, COLORS.softBorder)
     bar.fill = bar:CreateTexture(nil, "ARTWORK")
     bar.fill:SetPoint("TOPLEFT", bar, "TOPLEFT", 1, -1)
     bar.fill:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 1, 1)
@@ -513,7 +525,7 @@ function GearDashboard:RefreshProgress(state)
     end
 end
 
-function GearDashboard:Refresh()
+local function RefreshDashboard(self)
     if not IsVisible(self.frame) then return end
     self.refreshQueued = false
 
@@ -538,6 +550,27 @@ function GearDashboard:Refresh()
     self:RefreshPrioritySlots(state)
     self:RefreshActivities(state)
     self:RefreshProgress(state)
+end
+
+function GearDashboard:Refresh()
+    if self.isRefreshing then
+        self.refreshQueued = false
+        self.refreshPending = true
+        return
+    end
+
+    self.isRefreshing = true
+    local ok = pcall(RefreshDashboard, self)
+    self.isRefreshing = false
+
+    if not ok then
+        self.refreshQueued = false
+    end
+
+    if self.refreshPending then
+        self.refreshPending = false
+        self:QueueRefresh()
+    end
 end
 
 function GearDashboard:QueueRefresh(delay)

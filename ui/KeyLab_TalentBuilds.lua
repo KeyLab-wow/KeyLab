@@ -43,30 +43,30 @@ local CFG = {
     },
 
     colors = {
-        bg = {0.035, 0.045, 0.075, 0.96},
-        controlBg = {0.055, 0.070, 0.105, 0.94},
+        bg = {0.018, 0.026, 0.056, 0.96},
+        controlBg = {0.026, 0.046, 0.088, 0.94},
 
-        cardBg = {0.045, 0.060, 0.105, 0.94},
-        cardBorder = {0.18, 0.28, 0.50, 0.85},
-        cardHoverBorder = {0.30, 0.52, 0.88, 0.95},
-        cardSelectedBorder = {0.95, 0.78, 0.35, 1.00},
+        cardBg = {0.030, 0.052, 0.098, 0.94},
+        cardBorder = {0.240, 0.380, 0.620, 0.62},
+        cardHoverBorder = {0.300, 0.420, 0.600, 0.78},
+        cardSelectedBorder = {0.620, 0.560, 0.410, 0.78},
 
-        detailBg = {0.040, 0.052, 0.088, 0.96},
-        detailBorder = {0.42, 0.56, 0.88, 0.88},
-        noteBg = {0.060, 0.080, 0.125, 0.92},
+        detailBg = {0.024, 0.042, 0.082, 0.96},
+        detailBorder = {0.220, 0.340, 0.560, 0.56},
+        noteBg = {0.030, 0.052, 0.094, 0.92},
 
-        text = {0.92, 0.92, 0.95, 1.0},
-        muted = {0.72, 0.72, 0.78, 1.0},
-        soft = {0.74, 0.80, 0.88, 1.0},
-        gold = {0.95, 0.82, 0.42, 1.0},
-        blue = {0.45, 0.72, 0.95, 1.0},
-        warning = {1.0, 0.52, 0.40, 1.0},
-        divider = {1, 1, 1, 0.13},
+        text = {0.940, 0.960, 0.990, 1.0},
+        muted = {0.680, 0.730, 0.820, 1.0},
+        soft = {0.780, 0.830, 0.900, 1.0},
+        gold = {0.820, 0.760, 0.580, 1.0},
+        blue = {0.500, 0.680, 0.940, 1.0},
+        warning = {0.840, 0.440, 0.420, 1.0},
+        divider = {0.440, 0.580, 0.780, 0.32},
 
-        barBg = {0.020, 0.030, 0.060, 0.90},
-        barBorder = {0.12, 0.20, 0.34, 0.90},
-        barFill = {0.45, 0.78, 1.00, 0.98},
-        barFillSelected = {0.95, 0.76, 0.32, 1.0},
+        barBg = {0.012, 0.020, 0.044, 0.90},
+        barBorder = {0.185, 0.300, 0.500, 0.50},
+        barFill = {0.500, 0.680, 0.940, 0.95},
+        barFillSelected = {0.820, 0.760, 0.580, 1.0},
     },
 
     header = {
@@ -149,11 +149,21 @@ local function ApplyColor(fs, color)
 end
 
 local function StylePanel(frame, bg, border)
+    local edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border"
+    local edgeSize = 7
+    local insets = { left = 2, right = 2, top = 2, bottom = 2 }
+    if frame.GetHeight and (frame:GetHeight() or 0) <= 20 then
+        edgeFile = "Interface\\Buttons\\WHITE8x8"
+        edgeSize = 1
+        insets = nil
+    end
+
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = edgeFile,
         tile = false,
-        edgeSize = 1,
+        edgeSize = edgeSize,
+        insets = insets,
     })
     frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
     frame:SetBackdropBorderColor(border[1], border[2], border[3], border[4] or 1)

@@ -20,14 +20,14 @@ local CFG = {
     minHeight = 245,
     maxHeight = 560,
     colors = {
-        bg = {0.015, 0.022, 0.050, 0.98},
-        panel = {0.025, 0.040, 0.085, 0.96},
-        border = {0.42, 0.62, 1.0, 0.92},
-        gold = {0.95, 0.76, 0.32, 1.0},
-        text = {0.88, 0.90, 0.96, 1.0},
-        muted = {0.62, 0.70, 0.82, 1.0},
-        blue = {0.38, 0.68, 1.0, 1.0},
-        warning = {1.0, 0.72, 0.35, 1.0},
+        bg = {0.018, 0.026, 0.056, 0.98},
+        panel = {0.026, 0.046, 0.086, 0.96},
+        border = {0.240, 0.380, 0.620, 0.62},
+        gold = {0.820, 0.760, 0.580, 1.0},
+        text = {0.940, 0.960, 0.990, 1.0},
+        muted = {0.680, 0.730, 0.820, 1.0},
+        blue = {0.500, 0.680, 0.940, 1.0},
+        warning = {0.840, 0.720, 0.420, 1.0},
     },
     maxThisDungeonItemsShown = 10,
     maxOtherDungeonsShown = 8,
@@ -36,11 +36,21 @@ local CFG = {
 local frame
 
 local function SetBackdrop(f, color, borderColor)
+    local edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border"
+    local edgeSize = 7
+    local insets = { left = 2, right = 2, top = 2, bottom = 2 }
+    if f.GetHeight and (f:GetHeight() or 0) <= 20 then
+        edgeFile = "Interface\\Buttons\\WHITE8x8"
+        edgeSize = 1
+        insets = nil
+    end
+
     f:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = edgeFile,
         tile = false,
-        edgeSize = 1,
+        edgeSize = edgeSize,
+        insets = insets,
     })
     f:SetBackdropColor(unpack(color or CFG.colors.panel))
     f:SetBackdropBorderColor(unpack(borderColor or CFG.colors.border))

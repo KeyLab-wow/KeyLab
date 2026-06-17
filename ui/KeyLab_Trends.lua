@@ -14,6 +14,7 @@
 --   - encounter.talents.talentString
 --   - encounter.stats
 --   - encounter.metrics
+--   - encounter.combatSessions
 --   - encounter.flags
 
 local ADDON_NAME, KeyLab = ...
@@ -27,36 +28,38 @@ KeyLab.Tabs = KeyLab.Tabs or {}
 local Trends = {}
 KeyLab.Tabs.Trends = Trends
 
+local Theme = KeyLab.UI.Theme or {}
+
 -- =========================================================
 -- EASY EDIT SETTINGS
 -- =========================================================
 
 local CFG = {
-    colors = {
-        bg = {0.035, 0.045, 0.075, 0.96},
-        controlBg = {0.055, 0.070, 0.105, 0.94},
+    colors = Theme.colors or {
+        bg = {0.018, 0.026, 0.056, 0.96},
+        controlBg = {0.026, 0.046, 0.088, 0.90},
 
-        cardBg = {0.045, 0.060, 0.105, 0.94},
-        cardBorder = {0.18, 0.28, 0.50, 0.85},
-        cardStrongBorder = {0.95, 0.78, 0.35, 0.95},
+        cardBg = {0.030, 0.052, 0.098, 0.84},
+        cardBorder = {0.240, 0.380, 0.620, 0.62},
+        cardStrongBorder = {0.620, 0.560, 0.410, 0.70},
 
-        text = {0.92, 0.92, 0.95, 1.0},
-        muted = {0.72, 0.72, 0.78, 1.0},
-        soft = {0.74, 0.80, 0.88, 1.0},
-        gold = {0.95, 0.82, 0.42, 1.0},
-        blue = {0.45, 0.72, 0.95, 1.0},
-        green = {0.45, 0.95, 0.60, 1.0},
-        red = {1.0, 0.42, 0.42, 1.0},
-        orange = {1.0, 0.62, 0.32, 1.0},
-        purple = {0.78, 0.58, 1.0, 1.0},
-        warning = {1.0, 0.72, 0.35, 1.0},
-        divider = {1, 1, 1, 0.13},
+        text = {0.940, 0.960, 0.990, 1.0},
+        muted = {0.680, 0.730, 0.820, 1.0},
+        soft = {0.780, 0.830, 0.900, 1.0},
+        gold = {0.820, 0.760, 0.580, 1.0},
+        blue = {0.500, 0.680, 0.940, 0.95},
+        green = {0.460, 0.780, 0.500, 0.95},
+        red = {0.840, 0.440, 0.420, 0.95},
+        orange = {0.860, 0.580, 0.340, 0.95},
+        purple = {0.680, 0.560, 0.880, 0.95},
+        warning = {0.840, 0.720, 0.420, 0.95},
+        divider = {0.440, 0.580, 0.780, 0.32},
 
-        crit = {1.00, 0.42, 0.42, 0.98},
-        haste = {0.95, 0.82, 0.32, 0.98},
-        mastery = {0.45, 0.72, 1.00, 0.98},
-        versatility = {0.45, 0.95, 0.60, 0.98},
-        fallback = {0.74, 0.80, 0.88, 0.98},
+        crit = {0.840, 0.440, 0.420, 0.95},
+        haste = {0.840, 0.720, 0.420, 0.95},
+        mastery = {0.500, 0.680, 0.940, 0.95},
+        versatility = {0.460, 0.780, 0.500, 0.95},
+        fallback = {0.780, 0.830, 0.900, 0.90},
     },
 
     header = {
@@ -108,29 +111,45 @@ local CFG = {
 
 local function ApplyColor(fs, color)
     if fs and color then
+        if Theme.ApplyColor then
+            Theme.ApplyColor(fs, color)
+            return
+        end
+
         fs:SetTextColor(color[1], color[2], color[3], color[4] or 1)
     end
 end
 
 local function StylePanel(frame, bg, border)
+    if Theme.StylePanel then
+        Theme.StylePanel(frame, bg, border)
+        return
+    end
+
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         tile = false,
-        edgeSize = 1,
+        edgeSize = 7,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
     frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
     frame:SetBackdropBorderColor(border[1], border[2], border[3], border[4] or 1)
 end
 
 local function AddFont(parent, text, template, x, y, width)
-    local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontNormal")
+    local fs
+    if Theme.CreateText then
+        fs = Theme.CreateText(parent, text, template or "GameFontNormal", nil, CFG.colors.text)
+    else
+        fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontNormal")
+        fs:SetText(text or "")
+    end
     fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     fs:SetWidth(width or 700)
     fs:SetJustifyH("LEFT")
     fs:SetJustifyV("TOP")
     fs:SetWordWrap(true)
-    fs:SetText(text or "")
     return fs
 end
 
@@ -211,6 +230,18 @@ local function FormatDateTime(value)
     value = SafeNumber(value)
     if value == nil then return "-" end
     return date("%b %d, %Y %I:%M %p", value)
+end
+
+local function FormatDuration(value)
+    value = SafeNumber(value)
+    if value == nil then return "-" end
+    local seconds = math.max(0, math.floor(value + 0.5))
+    local minutes = math.floor(seconds / 60)
+    seconds = seconds % 60
+    if minutes > 0 then
+        return string.format("%d:%02d", minutes, seconds)
+    end
+    return tostring(seconds) .. "s"
 end
 
 -- =========================================================
@@ -694,6 +725,13 @@ local function AddLine(parent, text, x, y, width, color, template)
 end
 
 local function MakePanel(parent, x, y, width, height, title, borderColor, accentColor)
+    if Theme.CreateCard then
+        return Theme.CreateCard(parent, x, y, width, height, title, accentColor or borderColor or CFG.colors.blue, {
+            bg = CFG.colors.cardBg,
+            border = borderColor or CFG.colors.cardBorder,
+        })
+    end
+
     local panel = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     panel:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     panel:SetSize(width, height)
@@ -702,9 +740,8 @@ local function MakePanel(parent, x, y, width, height, title, borderColor, accent
     local accent = panel:CreateTexture(nil, "ARTWORK")
     accent:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
     accent:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", 0, 0)
-    accent:SetWidth(4)
-    local c = accentColor or borderColor or CFG.colors.blue
-    accent:SetColorTexture(c[1], c[2], c[3], c[4] or 1)
+    accent:SetWidth(0)
+    accent:SetColorTexture(0, 0, 0, 0)
 
     if title and title ~= "" then
         AddLine(panel, title, 14, -10, width - 28, CFG.colors.gold, "GameFontNormal")
@@ -794,21 +831,25 @@ end
 
 
 local function AddTrendIcon(parent, trend, x, y, size)
-    local icon = parent:CreateTexture(nil, "ARTWORK")
-    icon:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x, y)
-    icon:SetSize(50, 50)
-
     local key = trend and trend.trendKey or "stable"
+    local marker = "="
     if key == "up" then
-        icon:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollUpButton-Up")
+        marker = "+"
     elseif key == "down" then
-        icon:SetTexture("Interface\\Buttons\\UI-ScrollBar-ScrollDownButton-Up")
-    else
-        icon:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+        marker = "-"
     end
 
+    local icon = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    icon:SetPoint("TOPRIGHT", parent, "TOPRIGHT", x, y)
+    icon:SetSize(size or 34, size or 34)
+    if STANDARD_TEXT_FONT then
+        icon:SetFont(STANDARD_TEXT_FONT, size or 30, "OUTLINE")
+    end
+    icon:SetJustifyH("CENTER")
+    icon:SetJustifyV("MIDDLE")
+    icon:SetText(marker)
     local color = trend and trend.color or CFG.colors.soft
-    icon:SetVertexColor(color[1], color[2], color[3], color[4] or 1)
+    ApplyColor(icon, color)
 
     return icon
 end
@@ -1208,27 +1249,25 @@ local TREND_METRICS = {
     "avoidableDamageTaken",
     "interrupts",
     "dispels",
-    "absorbs",
-    "deaths",
 }
 
 local function BuildTrendTile(parent, x, y, trend, averageLabel)
     local color = trend and trend.color or CFG.colors.blue
-    local panel = MakePanel(parent, x, y, 213, 78, "", CFG.colors.cardBorder, color)
+    local panel = MakePanel(parent, x, y, 286, 78, "", CFG.colors.cardBorder, color)
 
     if not trend then
-        AddLine(panel, "No trend", 12, -12, 190, CFG.colors.muted)
+        AddLine(panel, "No trend", 12, -12, 250, CFG.colors.muted)
         return panel
     end
 
-    AddLine(panel, trend.label, 12, -10, 154, CFG.colors.gold, "GameFontNormal")
-    AddTrendIcon(panel, trend, -12, -8, 18)
-    AddLine(panel, trend.trendText or "Stable", 12, -34, 150, color, "GameFontNormalLarge")
+    AddLine(panel, trend.label, 12, -10, 210, CFG.colors.gold, "GameFontNormal")
+    AddTrendIcon(panel, trend, -14, -7, 30)
+    AddLine(panel, trend.trendText or "Stable", 12, -35, 192, color, "GameFontNormalLarge")
 
     if trend.recentAverage then
-        AddLine(panel, (averageLabel or "Recent avg") .. ": " .. FormatMetric(trend.metricKey, trend.recentAverage), 12, -58, 185, CFG.colors.muted, "GameFontDisableSmall")
+        AddLine(panel, (averageLabel or "Recent avg") .. ": " .. FormatMetric(trend.metricKey, trend.recentAverage), 12, -58, 240, CFG.colors.muted, "GameFontDisableSmall")
     else
-        AddLine(panel, "Need more runs", 12, -58, 185, CFG.colors.muted, "GameFontDisableSmall")
+        AddLine(panel, "Need more runs", 12, -58, 240, CFG.colors.muted, "GameFontDisableSmall")
     end
 
     return panel
@@ -1247,11 +1286,250 @@ local function BuildPerformanceTrends(parent, x, y, encounters, title, subtitle,
     end
 
     for i, key in ipairs(TREND_METRICS) do
-        local row = math.floor((i - 1) / 4)
-        local col = (i - 1) % 4
-        local tx = 14 + (col * 221)
+        local row = math.floor((i - 1) / 3)
+        local col = (i - 1) % 3
+        local tx = 14 + (col * 296)
         local ty = -44 - (row * 88)
         BuildTrendTile(panel, tx, ty, BuildMetricDirectionFromList(encounters, key), averageLabel)
+    end
+
+    return panel
+end
+
+local RUN_HIGHLIGHT_PANEL_HEIGHT = 532
+
+local RUN_HIGHLIGHT_KEYS = {
+    "bestRunDps",
+    "bestRunHps",
+    "leastRunAvoidable",
+    "leastRunDamageTaken",
+    "mostRunInterrupts",
+    "mostRunDispels",
+}
+
+local SEGMENT_HIGHLIGHT_KEYS = {
+    "bestDpsSession",
+    "bestHpsSession",
+    "lowestAvoidableSession",
+    "highestAvoidableSession",
+    "bestInterruptSession",
+    "bestDispelSession",
+}
+
+local function RunHighlightContextText(highlight)
+    if not highlight then return "" end
+
+    local parts = {}
+    if highlight.dungeonName and highlight.dungeonName ~= "" then
+        local dungeon = tostring(highlight.dungeonName)
+        if string.len(dungeon) > 22 then
+            dungeon = string.sub(dungeon, 1, 19) .. "..."
+        end
+        if highlight.keyLevel and tonumber(highlight.keyLevel) and tonumber(highlight.keyLevel) > 0 then
+            dungeon = dungeon .. " +" .. tostring(highlight.keyLevel)
+        end
+        table.insert(parts, dungeon)
+    end
+
+    if highlight.durationSeconds then
+        table.insert(parts, FormatDuration(highlight.durationSeconds))
+    elseif highlight.timestamp then
+        local timestamp = tonumber(highlight.timestamp)
+        if timestamp then
+            table.insert(parts, date("%b %d", timestamp))
+        end
+    end
+
+    return table.concat(parts, "  |  ")
+end
+
+local function ShortText(value, maxLength)
+    value = tostring(value or "")
+    maxLength = tonumber(maxLength) or 24
+    if string.len(value) <= maxLength then return value end
+    return string.sub(value, 1, math.max(1, maxLength - 3)) .. "..."
+end
+
+local function RulesByKey(rules)
+    local out = {}
+    for _, rule in ipairs(rules or {}) do
+        out[rule.key] = rule
+    end
+    return out
+end
+
+local function CountExactUpgradeLevels(encounters, exactLevel)
+    local count = 0
+    local tracked = 0
+
+    for _, encounter in ipairs(encounters or {}) do
+        local challenge = GetChallenge(encounter)
+        local flags = encounter.flags or {}
+        local timed = challenge.timed
+        if timed == nil and encounter.result == "Timed" then
+            timed = true
+        elseif timed == nil and (encounter.result == "Untimed" or encounter.result == "Depleted") then
+            timed = false
+        end
+        if timed == nil and flags.timed ~= nil then
+            timed = flags.timed == true
+        end
+
+        local levels = tonumber(challenge.keystoneUpgradeLevels)
+        if not levels and timed == true and tonumber(challenge.durationSeconds) and tonumber(challenge.timeLimitSeconds) and tonumber(challenge.timeLimitSeconds) > 0 then
+            local remainingRatio = (tonumber(challenge.timeLimitSeconds) - tonumber(challenge.durationSeconds)) / tonumber(challenge.timeLimitSeconds)
+            if remainingRatio >= 0.40 then
+                levels = 3
+            elseif remainingRatio >= 0.20 then
+                levels = 2
+            elseif remainingRatio >= 0 then
+                levels = 1
+            end
+        end
+        if levels then
+            tracked = tracked + 1
+            if levels == exactLevel then
+                count = count + 1
+            end
+        end
+    end
+
+    return count, tracked
+end
+
+local function CountTimedRuns(encounters)
+    local count = 0
+    local total = 0
+
+    for _, encounter in ipairs(encounters or {}) do
+        local challenge = GetChallenge(encounter)
+        local flags = encounter.flags or {}
+        local timed = challenge.timed
+        if timed == nil and encounter.result == "Timed" then
+            timed = true
+        elseif timed == nil and (encounter.result == "Untimed" or encounter.result == "Depleted") then
+            timed = false
+        end
+        if timed == nil and flags.timed ~= nil then
+            timed = flags.timed == true
+        end
+
+        if timed ~= nil then
+            total = total + 1
+            if timed == true then
+                count = count + 1
+            end
+        end
+    end
+
+    return count, total
+end
+
+local function AverageRank(encounters, metricKey)
+    local totalRank = 0
+    local totalPlayers = 0
+    local count = 0
+
+    for _, encounter in ipairs(encounters or {}) do
+        local rank = encounter.metricRanks and encounter.metricRanks[metricKey]
+        if type(rank) == "table" and tonumber(rank.rank) and tonumber(rank.total) then
+            totalRank = totalRank + tonumber(rank.rank)
+            totalPlayers = totalPlayers + tonumber(rank.total)
+            count = count + 1
+        end
+    end
+
+    if count == 0 then return nil end
+    return totalRank / count, totalPlayers / count, count
+end
+
+local function FormatAverageRank(encounters, metricKey)
+    local avgRank, avgTotal = AverageRank(encounters, metricKey)
+    if not avgRank then return "New runs needed" end
+    return string.format("%.1f / %.0f", avgRank, avgTotal or 0)
+end
+
+local function BuildRunHighlightCard(parent, x, y, rule, highlight, emptyText)
+    local color = MetricColor(rule and rule.metricKey)
+    local card = MakePanel(parent, x, y, 286, 62, "", CFG.colors.cardBorder, color)
+
+    if not highlight then
+        AddLine(card, rule and rule.label or "Highlight", 10, -8, 260, CFG.colors.gold, "GameFontNormal")
+        AddLine(card, emptyText or "No data yet", 10, -36, 250, CFG.colors.muted, "GameFontDisableSmall")
+        return card
+    end
+
+    AddLine(card, ShortText(highlight.label or (rule and rule.label) or "Highlight", 31), 10, -8, 260, CFG.colors.gold, "GameFontNormal")
+    AddLine(card, FormatMetric(highlight.metricKey, highlight.value), 10, -29, 82, color, "GameFontNormal")
+    local subject = highlight.sessionName or (highlight.isRunHighlight and "Overall saved run") or "Unknown Segment"
+    AddLine(card, ShortText(subject, 24), 100, -29, 174, CFG.colors.text, "GameFontHighlightSmall")
+    AddLine(card, RunHighlightContextText(highlight), 10, -46, 260, CFG.colors.muted, "GameFontDisableSmall")
+
+    return card
+end
+
+local function BuildPatternCard(parent, x, y, label, value, note, color)
+    local card = MakePanel(parent, x, y, 168, 62, "", CFG.colors.cardBorder, color or CFG.colors.blue)
+    AddLine(card, label, 10, -8, 140, CFG.colors.gold, "GameFontNormal")
+    AddLine(card, value or "-", 10, -29, 144, color or CFG.colors.text, "GameFontNormalLarge")
+    AddLine(card, note or "", 10, -48, 144, CFG.colors.muted, "GameFontDisableSmall")
+    return card
+end
+
+local function BuildRunPattern(parent, x, y, encounters)
+    AddLine(parent, "Run Pattern", x, y, 250, CFG.colors.gold, "GameFontNormal")
+    local twoChest, twoChestTracked = CountExactUpgradeLevels(encounters, 2)
+    local threeChest, threeChestTracked = CountExactUpgradeLevels(encounters, 3)
+    local timed, total = CountTimedRuns(encounters)
+
+    BuildPatternCard(parent, x, y - 24, "++ Runs", twoChestTracked > 0 and tostring(twoChest) or "New", twoChestTracked > 0 and "2-chested" or "needed", CFG.colors.green)
+    BuildPatternCard(parent, x + 180, y - 24, "+++ Runs", threeChestTracked > 0 and tostring(threeChest) or "New", threeChestTracked > 0 and "3-chested" or "needed", CFG.colors.purple)
+    BuildPatternCard(parent, x + 360, y - 24, "Timed Runs", total > 0 and (tostring(timed) .. " / " .. tostring(total)) or "New", total > 0 and "saved" or "needed", CFG.colors.green)
+    BuildPatternCard(parent, x + 540, y - 24, "Avg DPS", FormatAverageRank(encounters, "dps"), "rank", CFG.colors.orange)
+    BuildPatternCard(parent, x + 720, y - 24, "Avg HPS", FormatAverageRank(encounters, "hps"), "rank", CFG.colors.green)
+end
+
+local function BuildRunHighlightsPanel(parent, x, y, encounters)
+    local panel = MakePanel(parent, x, y, 908, RUN_HIGHLIGHT_PANEL_HEIGHT, "Run Highlights", CFG.colors.cardBorder, CFG.colors.purple)
+    AddLine(panel, "Fewer, stronger signals from saved runs: overall bests, chest timing, lineup rank, and key segments.", 14, -32, 820, CFG.colors.muted, "GameFontDisableSmall")
+
+    local analyzer = KeyLab.RunHighlights
+    local data = analyzer and analyzer.BuildHighlightsForEncounters and analyzer.BuildHighlightsForEncounters(encounters) or nil
+
+    if not data or (data.hasRunData ~= true and data.hasSessionData ~= true) then
+        AddLine(panel, "New completed runs will show run and segment highlights here once combat data is saved.", 14, -70, 840, CFG.colors.muted, "GameFontNormal")
+        return panel
+    end
+
+    AddLine(panel, "Overall Best Run Highlights", 14, -58, 320, CFG.colors.gold, "GameFontNormal")
+    local runRules = analyzer.GetRunRules and analyzer.GetRunRules() or {}
+    local runRulesByKey = RulesByKey(runRules)
+    for index, key in ipairs(RUN_HIGHLIGHT_KEYS) do
+        local rule = runRulesByKey[key]
+        local row = math.floor((index - 1) / 3)
+        local col = (index - 1) % 3
+        local cx = 14 + (col * 296)
+        local cy = -80 - (row * 68)
+        BuildRunHighlightCard(panel, cx, cy, rule, rule and data.runByKey and data.runByKey[rule.key], "No run yet")
+    end
+
+    BuildRunPattern(panel, 14, -232, encounters)
+
+    AddLine(panel, "Key Segment Highlights", 14, -342, 300, CFG.colors.gold, "GameFontNormal")
+    if data.hasSessionData ~= true then
+        AddLine(panel, "New completed runs will show segment highlights here once combat sessions are saved.", 14, -368, 840, CFG.colors.muted, "GameFontNormal")
+        return panel
+    end
+
+    local segmentRules = analyzer.GetSegmentRules and analyzer.GetSegmentRules() or analyzer.GetRules and analyzer.GetRules() or {}
+    local segmentRulesByKey = RulesByKey(segmentRules)
+    for index, key in ipairs(SEGMENT_HIGHLIGHT_KEYS) do
+        local rule = segmentRulesByKey[key]
+        local row = math.floor((index - 1) / 3)
+        local col = (index - 1) % 3
+        local cx = 14 + (col * 296)
+        local cy = -366 - (row * 68)
+        BuildRunHighlightCard(panel, cx, cy, rule, rule and data.segmentByKey and data.segmentByKey[rule.key], "No segment yet")
     end
 
     return panel
@@ -1311,9 +1589,9 @@ local function BuildProgressionSnapshot(parent, x, y, encounters, selectedDungeo
     AddLine(panel, subtitle, 14, -32, 760, CFG.colors.muted, "GameFontDisableSmall")
 
     for i, key in ipairs(TREND_METRICS) do
-        local row = math.floor((i - 1) / 4)
-        local col = (i - 1) % 4
-        local tx = 14 + (col * 221)
+        local row = math.floor((i - 1) / 3)
+        local col = (i - 1) % 3
+        local tx = 14 + (col * 296)
         local ty = -44 - (row * 88)
         BuildTrendTile(panel, tx, ty, BuildMetricComparison(key, baselineRuns, progressionRuns), "+" .. tostring(highestKey) .. " avg")
     end
@@ -1380,13 +1658,15 @@ function Trends:RefreshContent()
 
     if self.selectedDungeon and usableCount < 2 then
         BuildMessagePanel(self.content, 0, 0, "Performance Direction", "Run this dungeon more to unlock trends.", CFG.colors.warning)
-        self.content:SetHeight(120)
+        BuildRunHighlightsPanel(self.content, 0, -112, filtered)
+        self.content:SetHeight(670)
         return
     end
 
     if self.selectedDungeon then
         BuildProgressionSnapshot(self.content, 0, 0, filtered, self.selectedDungeon)
-        self.content:SetHeight(240)
+        BuildRunHighlightsPanel(self.content, 0, -224, filtered)
+        self.content:SetHeight(790)
         return
     end
 
@@ -1400,7 +1680,9 @@ function Trends:RefreshContent()
         "Recent avg"
     )
 
-    self.content:SetHeight(240)
+    BuildRunHighlightsPanel(self.content, 0, -224, filtered)
+
+    self.content:SetHeight(790)
 end
 
 function Trends:Refresh()
