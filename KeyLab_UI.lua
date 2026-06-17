@@ -18,6 +18,8 @@ _G.KeyLab = KeyLab
 KeyLab.UI = KeyLab.UI or {}
 KeyLab.RegisteredTabs = KeyLab.RegisteredTabs or {}
 
+local Theme = KeyLab.UI.Theme or {}
+
 -- =========================================================
 -- EASY EDIT SETTINGS
 -- Adjust layout/colors here first.
@@ -43,8 +45,8 @@ local CFG = {
         text = "KeyLab",
         x = 24,
         y = 0,
-        font = "Fonts\\FRIZQT__.TTF",
-        size = 32,
+        font = (Theme.fonts and Theme.fonts.heading) or "Fonts\\FRIZQT__.TTF",
+        size = (Theme.fonts and Theme.fonts.titleSize) or 32,
     },
 
     sidebar = {
@@ -64,32 +66,29 @@ local CFG = {
         height = 820,
     },
 
-    colors = {
-        windowBg = {0.015, 0.020, 0.050, 0.98},
-        windowBorder = {0.24, 0.36, 0.68, 0.92},
-
-        headerBg = {0.035, 0.045, 0.090, 0.00},
-        headerBorder = {0.24, 0.36, 0.68, 0.95},
-
-        sidebarBg = {0.020, 0.028, 0.065, 0.70},
-        sidebarBorder = {0.16, 0.24, 0.44, 0.72},
-
-        contentBg = {0.025, 0.032, 0.070, 0.60},
-        contentBorder = {0.12, 0.20, 0.38, 0.45},
-
-        buttonBg = {0.030, 0.050, 0.110, 0.72},
-        buttonBorder = {0.18, 0.28, 0.50, 0.80},
-        buttonHover = {0.16, 0.32, 0.62, 0.95},
-        buttonSelected = {0.34, 0.58, 1.00, 1.00},
-
-        gold = {1.00, 0.86, 0.46, 1},
-        text = {0.92, 0.92, 0.95, 1},
-        muted = {0.82, 0.84, 0.90, 1},
+    colors = Theme.colors or {
+        windowBg = {0.018, 0.026, 0.056, 0.98},
+        windowBorder = {0.240, 0.380, 0.620, 0.62},
+        headerBg = {0.020, 0.034, 0.066, 0.64},
+        headerBorder = {0.240, 0.380, 0.620, 0.58},
+        sidebarBg = {0.016, 0.026, 0.052, 0.90},
+        sidebarBorder = {0.220, 0.340, 0.560, 0.55},
+        contentBg = {0.012, 0.020, 0.044, 0.86},
+        contentBorder = {0.200, 0.320, 0.520, 0.46},
+        buttonBg = {0.022, 0.038, 0.076, 0.82},
+        buttonBorder = {0.220, 0.340, 0.560, 0.58},
+        buttonHover = {0.300, 0.420, 0.600, 0.78},
+        buttonSelected = {0.820, 0.760, 0.580, 1.0},
+        buttonSelectedBg = {0.030, 0.050, 0.086, 0.95},
+        gold = {0.820, 0.760, 0.580, 1.0},
+        text = {0.940, 0.960, 0.990, 1.0},
+        muted = {0.680, 0.730, 0.820, 1.0},
     },
 
     tabs = {
         "Home",
         "Encounters",
+        "Last Run",
         "Talent Builds",
         "Stat Profiles",
         "Trends",
@@ -106,17 +105,38 @@ local CFG = {
 
 local function ApplyColor(fs, color)
     if not fs or not color then return end
+
+    if Theme.ApplyColor then
+        Theme.ApplyColor(fs, color)
+        return
+    end
+
     fs:SetTextColor(color[1], color[2], color[3], color[4] or 1)
 end
 
 local function StylePanel(frame, bg, border)
     if not frame then return end
 
+    if Theme.StylePanel then
+        Theme.StylePanel(frame, bg, border)
+        return
+    end
+
+    local edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border"
+    local edgeSize = 7
+    local insets = { left = 2, right = 2, top = 2, bottom = 2 }
+    if frame.GetHeight and (frame:GetHeight() or 0) <= 20 then
+        edgeFile = "Interface\\Buttons\\WHITE8x8"
+        edgeSize = 1
+        insets = nil
+    end
+
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = edgeFile,
         tile = false,
-        edgeSize = 1,
+        edgeSize = edgeSize,
+        insets = insets,
     })
 
     frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
@@ -260,12 +280,30 @@ function KeyLab.UI:CreateTabButtons()
         button:SetSize(CFG.sidebar.width, CFG.sidebar.buttonHeight)
         StylePanel(button, CFG.colors.buttonBg, CFG.colors.buttonBorder)
 
-        local label = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local accent
+        if Theme.AddAccent then
+            accent = Theme.AddAccent(button, CFG.colors.gold, 3)
+        else
+            accent = button:CreateTexture(nil, "ARTWORK")
+            accent:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
+            accent:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 0, 0)
+            accent:SetWidth(3)
+            accent:SetColorTexture(CFG.colors.gold[1], CFG.colors.gold[2], CFG.colors.gold[3], CFG.colors.gold[4] or 1)
+        end
+        accent:Hide()
+        button.accent = accent
+
+        local label
+        if Theme.CreateText then
+            label = Theme.CreateText(button, tabName, "GameFontNormal", nil, CFG.colors.text)
+        else
+            label = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            label:SetText(tabName)
+            ApplyColor(label, CFG.colors.text)
+        end
         label:SetPoint("LEFT", button, "LEFT", 14, 0)
         label:SetWidth(CFG.sidebar.width - 24)
         label:SetJustifyH("LEFT")
-        label:SetText(tabName)
-        ApplyColor(label, CFG.colors.text)
         button.label = label
 
         button:SetScript("OnClick", function()
@@ -364,13 +402,16 @@ function KeyLab.UI:SelectTab(tabName)
 
     for name, button in pairs(self.tabButtons or {}) do
         if name == tabName then
-            button:SetBackdropColor(0.055, 0.085, 0.160, 0.90)
+            local selectedBg = CFG.colors.buttonSelectedBg or {0.055, 0.085, 0.160, 0.90}
+            button:SetBackdropColor(selectedBg[1], selectedBg[2], selectedBg[3], selectedBg[4] or 1)
             button:SetBackdropBorderColor(CFG.colors.buttonSelected[1], CFG.colors.buttonSelected[2], CFG.colors.buttonSelected[3], CFG.colors.buttonSelected[4])
             ApplyColor(button.label, CFG.colors.gold)
+            if button.accent then button.accent:Show() end
         else
             button:SetBackdropColor(CFG.colors.buttonBg[1], CFG.colors.buttonBg[2], CFG.colors.buttonBg[3], CFG.colors.buttonBg[4])
             button:SetBackdropBorderColor(CFG.colors.buttonBorder[1], CFG.colors.buttonBorder[2], CFG.colors.buttonBorder[3], CFG.colors.buttonBorder[4])
             ApplyColor(button.label, CFG.colors.text)
+            if button.accent then button.accent:Hide() end
         end
     end
 
