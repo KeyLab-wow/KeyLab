@@ -241,7 +241,8 @@ local function SetBadge(badge, text, bg, border, textColor)
 end
 
 local function SetOutlineBadge(badge, text, borderColor, textColor)
-    SetBadge(badge, text, COLORS.card, borderColor or COLORS.softBorder, textColor or COLORS.text)
+    borderColor = borderColor or COLORS.softBorder
+    SetBadge(badge, text, Dimmed(borderColor, 0.24, 0.78), borderColor, textColor or COLORS.text)
 end
 
 local function MakeSlotCard(parent, x, y, slotName)
@@ -447,7 +448,7 @@ function GearDashboard:RefreshSlotRow(row, plan)
 
     local showSource = ShouldShowSource(plan)
     local rankColor = RankColor(plan)
-    SetOutlineBadge(row.trackBadge, plan.trackLabel or plan.trackName or "Unranked", COLORS.white, COLORS.text)
+    SetOutlineBadge(row.trackBadge, plan.trackLabel or plan.trackName or "Unranked", rankColor, COLORS.text)
     SetOutlineBadge(row.rankBadge, plan.rankText or "", rankColor, COLORS.text)
     SetOutlineBadge(row.statusBadge, StatusBadgeText(plan), stateColor, COLORS.text)
     SetOutlineBadge(row.sourceBadge, showSource and plan.sourceText or "", COLORS.white, COLORS.text)

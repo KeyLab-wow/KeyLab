@@ -9,6 +9,7 @@ local LastRun = {}
 KeyLab.Tabs.LastRun = LastRun
 
 local Theme = KeyLab.UI.Theme or {}
+local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
 
 local COLORS = Theme.colors or {
     bg = {0.018, 0.026, 0.056, 0.96},
@@ -28,10 +29,6 @@ local COLORS = Theme.colors or {
 
 local function Analysis()
     return KeyLab.LastRunAnalysis or {}
-end
-
-local function Highlights()
-    return KeyLab.RunHighlights or {}
 end
 
 local function SetBackdrop(frame, bg, border)
@@ -180,7 +177,7 @@ local function RankText(rank, metricKey, state)
         if metricKey == "dispels" and (tonumber(metrics.dispels) or 0) <= 0 then
             return "0 / " .. tostring(RankGroupSize(state and state.ranks))
         end
-        return "New run needed"
+        return "No rank"
     end
     return tostring(rank.rank) .. " / " .. tostring(rank.total or "?")
 end
@@ -290,45 +287,359 @@ local function BuildTotals(parent, state)
     return card
 end
 
-local function HighlightContext(highlight)
-    if not highlight then return "" end
-    local parts = {}
-    if highlight.sessionName then table.insert(parts, highlight.sessionName) end
-    if highlight.durationSeconds then table.insert(parts, FormatDuration(highlight.durationSeconds)) end
-    return table.concat(parts, "  |  ")
+local GRAPH_METRICS = {
+    dps = { label = "DPS", color = COLORS.orange },
+    hps = { label = "HPS", color = COLORS.green },
+    damageDone = { label = "Damage", color = COLORS.orange },
+    healingDone = { label = "Healing", color = COLORS.green },
+    damageTaken = { label = "Damage Taken", color = COLORS.orange },
+    avoidableDamageTaken = { label = "Avoidable", color = COLORS.red },
+    interrupts = { label = "Interrupts", color = COLORS.purple },
+    dispels = { label = "Dispels", color = COLORS.purple },
+    deaths = { label = "Deaths", color = COLORS.red },
+}
+
+local TOOLTIP_METRICS = {
+    "dps",
+    "hps",
+    "damageDone",
+    "healingDone",
+    "damageTaken",
+    "avoidableDamageTaken",
+    "interrupts",
+    "dispels",
+    "deaths",
+}
+
+local function ShortText(value, maxLength)
+    value = tostring(value or "")
+    maxLength = tonumber(maxLength) or 24
+    if string.len(value) <= maxLength then return value end
+    return string.sub(value, 1, math.max(1, maxLength - 3)) .. "..."
 end
 
-local function BuildHighlightCard(parent, x, y, highlight)
-    local color = MetricColor(highlight and highlight.metricKey)
-    local card = MakeCard(parent, x, y, 286, 66, "", color)
+local function WithAlpha(color, alpha)
+    local c = color or COLORS.divider or COLORS.blue
+    return {c[1] or 1, c[2] or 1, c[3] or 1, alpha or c[4] or 1}
+end
 
-    if not highlight then
-        AddLine(card, "No segment yet", 10, -12, 250, COLORS.muted)
+local function GetGraphProfile(state)
+    local player = state and state.player or {}
+    local mapper = KeyLab.Mapping and KeyLab.Mapping.ClassSpecs
+
+    if mapper and mapper.GetGraphProfile then
+        return mapper.GetGraphProfile(player.specID, player.class or player.className, player.spec or player.specName)
+    end
+
+    local role = player.role or player.blizzardRole
+    if role == "Healer" or role == "HEALER" then
+        return {
+            role = "Healer",
+            title = "HPS by Pull",
+            subtitle = "Healing performance for each captured combat session in this run.",
+            metrics = { "hps" },
+        }
+    end
+    if role == "Tank" or role == "TANK" then
+        return {
+            role = "Tank",
+            title = "Damage Taken by Pull",
+            subtitle = "Tank pressure for each captured combat session in this run.",
+            metrics = { "damageTaken", "avoidableDamageTaken" },
+        }
+    end
+
+    return {
+        role = "Damage",
+        title = "DPS by Pull",
+        subtitle = "Damage performance for each captured combat session in this run.",
+        metrics = { "dps" },
+    }
+end
+
+local function GetCombatSessions(encounter)
+    if EncounterData.GetCombatSessions then
+        return EncounterData.GetCombatSessions(encounter)
+    end
+    if type(encounter) ~= "table" then return {} end
+    return encounter.combatSessions
+        or encounter.damageMeterSessions
+        or encounter.runCombatSessions
+        or {}
+end
+
+local function SessionMetric(session, metricKey)
+    local metrics = session and session.metrics or {}
+    return tonumber(metrics[metricKey])
+end
+
+local function SessionHasGraphMetric(session, metricKeys)
+    for _, metricKey in ipairs(metricKeys or {}) do
+        if SessionMetric(session, metricKey) ~= nil then
+            return true
+        end
+    end
+    return false
+end
+
+local function GetGraphSessions(encounter, metricKeys)
+    local out = {}
+
+    for _, session in ipairs(GetCombatSessions(encounter)) do
+        if type(session) == "table"
+            and session.isAggregateSession ~= true
+            and (tonumber(session.durationSeconds) or 0) > 0
+            and SessionHasGraphMetric(session, metricKeys)
+        then
+            table.insert(out, session)
+        end
+    end
+
+    return out
+end
+
+local function DrawLine(parent, x1, y1, x2, y2, color, thickness)
+    if math.abs(x1 - x2) < 1 or math.abs(y1 - y2) < 1 then
+        local line = parent:CreateTexture(nil, "ARTWORK")
+        local width = math.abs(x2 - x1)
+        local height = math.abs(y2 - y1)
+        if width < 1 then
+            width = thickness or 1
+        end
+        if height < 1 then
+            height = thickness or 1
+        end
+        line:SetPoint("TOPLEFT", parent, "TOPLEFT", math.min(x1, x2), math.max(y1, y2))
+        line:SetSize(width, height)
+        line:SetColorTexture(unpack(color or COLORS.blue))
+        return line
+    end
+
+    if parent.CreateLine then
+        local line = parent:CreateLine(nil, "ARTWORK")
+        if line.SetThickness then
+            line:SetThickness(thickness or 2)
+        end
+        if line.SetColorTexture then
+            line:SetColorTexture(unpack(color or COLORS.blue))
+        elseif line.SetVertexColor then
+            line:SetVertexColor(unpack(color or COLORS.blue))
+        end
+        line:SetStartPoint("TOPLEFT", parent, x1, y1)
+        line:SetEndPoint("TOPLEFT", parent, x2, y2)
+        return line
+    end
+
+    local line = parent:CreateTexture(nil, "ARTWORK")
+    local width = math.abs(x2 - x1)
+    local height = math.abs(y2 - y1)
+    if width < 1 then
+        width = thickness or 1
+    end
+    if height < 1 then
+        height = thickness or 1
+    end
+    line:SetPoint("TOPLEFT", parent, "TOPLEFT", math.min(x1, x2), math.max(y1, y2))
+    line:SetSize(width, height)
+    line:SetColorTexture(unpack(color or COLORS.blue))
+    return line
+end
+
+local function DrawDot(parent, x, y, color)
+    local dot = parent:CreateTexture(nil, "OVERLAY")
+    dot:SetPoint("CENTER", parent, "TOPLEFT", x, y)
+    dot:SetSize(5, 5)
+    dot:SetColorTexture(unpack(color or COLORS.blue))
+    return dot
+end
+
+local function IsBossSession(session)
+    if type(session) ~= "table" then return false end
+    if session.isBossSession ~= nil then return session.isBossSession == true end
+    return string.find(tostring(session.sessionName or session.name or ""), "%(!%)") ~= nil
+end
+
+local function CleanSessionName(session)
+    local name = tostring((session and (session.sessionName or session.name)) or "Unknown Pull")
+    name = name:gsub("^%s*%(!%)%s*", "")
+    name = name:gsub("^%s+", ""):gsub("%s+$", "")
+    if name == "" then
+        return "Unknown Pull"
+    end
+    return name
+end
+
+local function AddTooltipDoubleLine(label, value, color)
+    if not value then return end
+    color = color or COLORS.text
+    GameTooltip:AddDoubleLine(
+        label,
+        value,
+        COLORS.muted[1], COLORS.muted[2], COLORS.muted[3],
+        color[1] or 1, color[2] or 1, color[3] or 1
+    )
+end
+
+local function ShowPullTooltip(owner, session, pullIndex)
+    if not GameTooltip or type(session) ~= "table" then return end
+
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    GameTooltip:ClearLines()
+    GameTooltip:AddLine("Pull " .. tostring(pullIndex), COLORS.gold[1], COLORS.gold[2], COLORS.gold[3])
+    GameTooltip:AddLine(CleanSessionName(session), COLORS.text[1], COLORS.text[2], COLORS.text[3])
+    if IsBossSession(session) then
+        GameTooltip:AddLine("Boss pull", COLORS.gold[1], COLORS.gold[2], COLORS.gold[3])
+    end
+    GameTooltip:AddLine(" ")
+
+    AddTooltipDoubleLine("Duration:", FormatDuration(session.durationSeconds), COLORS.text)
+
+    for _, metricKey in ipairs(TOOLTIP_METRICS) do
+        local value = SessionMetric(session, metricKey)
+        if value ~= nil then
+            local metric = GRAPH_METRICS[metricKey] or { label = metricKey, color = MetricColor(metricKey) }
+            AddTooltipDoubleLine((metric.label or metricKey) .. ":", FormatMetric(metricKey, value), metric.color)
+        end
+    end
+
+    GameTooltip:Show()
+end
+
+local function AddPullHoverTarget(card, x, graphTopY, graphBottomY, width, session, pullIndex)
+    local hit = CreateFrame("Frame", nil, card)
+    hit:SetFrameLevel((card:GetFrameLevel() or 0) + 8)
+    hit:SetPoint("TOPLEFT", card, "TOPLEFT", x - (width / 2), graphTopY - 8)
+    hit:SetSize(width, math.abs(graphTopY - graphBottomY) + 44)
+    hit:EnableMouse(true)
+    hit:SetScript("OnEnter", function(self)
+        ShowPullTooltip(self, session, pullIndex)
+    end)
+    hit:SetScript("OnLeave", function()
+        if GameTooltip then
+            GameTooltip:Hide()
+        end
+    end)
+    return hit
+end
+
+local function BestSessionForMetric(sessions, metricKey)
+    local bestSession = nil
+    local bestValue = nil
+
+    for _, session in ipairs(sessions or {}) do
+        local value = SessionMetric(session, metricKey)
+        if value ~= nil and (bestValue == nil or value > bestValue) then
+            bestValue = value
+            bestSession = session
+        end
+    end
+
+    return bestSession, bestValue
+end
+
+local function BuildPullGraph(parent, state)
+    local profile = GetGraphProfile(state)
+    local card = MakeCard(parent, 0, -330, 908, 274, profile.title or "Pull Timeline", COLORS.blue)
+    local metricKeys = profile.metrics or { "dps" }
+    local sessions = GetGraphSessions(state and state.encounter, metricKeys)
+
+    AddLine(card, profile.subtitle or "Performance for each captured combat session in this run.", 14, -34, 700, COLORS.muted, "GameFontDisableSmall")
+
+    if #sessions == 0 then
+        AddLine(card, "No pull timeline yet.", 18, -74, 820, COLORS.gold, "GameFontNormal")
+        AddLine(card, "Complete a fresh Mythic+ run with combat sessions available and KeyLab will draw this graph here.", 18, -100, 820, COLORS.muted, "GameFontNormal")
         return card
     end
 
-    AddLine(card, highlight.label or "Highlight", 10, -8, 170, COLORS.gold, "GameFontNormal")
-    AddLine(card, FormatMetric(highlight.metricKey, highlight.value), 188, -8, 82, color, "GameFontNormal")
-    AddLine(card, HighlightContext(highlight), 10, -34, 254, COLORS.text, "GameFontHighlightSmall")
-    return card
-end
+    local graphX = 56
+    local graphTopY = -68
+    local graphWidth = 708
+    local graphHeight = 142
+    local graphBottomY = graphTopY - graphHeight
+    local maxValue = 0
 
-local function BuildHighlights(parent, state)
-    local card = MakeCard(parent, 0, -330, 908, 274, "Run Highlights", COLORS.purple)
-    local data = state.highlights
-    if not data or data.hasSessionData ~= true then
-        AddLine(card, "New completed runs will show boss/trash segment highlights here.", 18, -48, 820, COLORS.muted, "GameFontNormal")
-        return card
+    for _, session in ipairs(sessions) do
+        for _, metricKey in ipairs(metricKeys) do
+            local value = SessionMetric(session, metricKey)
+            if value and value > maxValue then
+                maxValue = value
+            end
+        end
     end
 
-    local shown = 0
-    for _, highlight in ipairs(data.segmentList or {}) do
-        shown = shown + 1
-        if shown > 9 then break end
-        local row = math.floor((shown - 1) / 3)
-        local col = (shown - 1) % 3
-        BuildHighlightCard(card, 14 + (col * 296), -42 - (row * 74), highlight)
+    if maxValue <= 0 then
+        maxValue = 1
     end
+
+    DrawLine(card, graphX, graphTopY, graphX, graphBottomY, COLORS.divider, 1)
+    DrawLine(card, graphX, graphBottomY, graphX + graphWidth, graphBottomY, COLORS.divider, 1)
+    DrawLine(card, graphX, graphTopY, graphX + graphWidth, graphTopY, COLORS.divider, 1)
+    DrawLine(card, graphX, graphBottomY + (graphHeight / 2), graphX + graphWidth, graphBottomY + (graphHeight / 2), COLORS.divider, 1)
+
+    AddLine(card, FormatNumber(maxValue), 10, graphTopY + 6, 42, COLORS.muted, "GameFontDisableSmall")
+    AddLine(card, FormatNumber(maxValue / 2), 10, graphBottomY + (graphHeight / 2) + 6, 42, COLORS.muted, "GameFontDisableSmall")
+    AddLine(card, "0", 10, graphBottomY + 6, 42, COLORS.muted, "GameFontDisableSmall")
+
+    local pullLabelSize = #sessions > 22 and 8 or 9
+    local pullLabelWidth = #sessions > 22 and 18 or 22
+    local pullHitWidth = #sessions <= 1 and 34 or math.max(18, math.min(54, (graphWidth / math.max(1, #sessions - 1)) * 0.58))
+
+    for metricIndex, metricKey in ipairs(metricKeys) do
+        local metric = GRAPH_METRICS[metricKey] or { label = metricKey, color = MetricColor(metricKey) }
+        local stemColor = WithAlpha(metric.color, 0.42)
+        local lastX, lastY
+
+        for index, session in ipairs(sessions) do
+            local x = graphX + (#sessions == 1 and graphWidth / 2 or ((index - 1) / (#sessions - 1)) * graphWidth)
+            local value = SessionMetric(session, metricKey)
+
+            if value ~= nil then
+                local y = graphBottomY + ((value / maxValue) * graphHeight)
+                if metricIndex == 1 then
+                    DrawLine(card, x, graphBottomY, x, y, stemColor, 2)
+                end
+                if lastX and lastY then
+                    DrawLine(card, lastX, lastY, x, y, metric.color, 2)
+                end
+                if #sessions <= 24 then
+                    DrawDot(card, x, y, metric.color)
+                end
+                lastX, lastY = x, y
+            end
+
+            if metricIndex == 1 then
+                AddPullHoverTarget(card, x, graphTopY, graphBottomY, pullHitWidth, session, index)
+
+                local label = MakeText(card, tostring(index), "GameFontDisableSmall", pullLabelSize, COLORS.muted, "CENTER")
+                label:SetPoint("TOP", card, "TOPLEFT", x, graphBottomY - 10)
+                label:SetSize(pullLabelWidth, 12)
+
+                if IsBossSession(session) then
+                    local bossMarker = MakeText(card, "B", "GameFontNormalSmall", 9, COLORS.gold, "CENTER")
+                    bossMarker:SetPoint("TOP", card, "TOPLEFT", x, graphBottomY - 25)
+                    bossMarker:SetSize(18, 12)
+                end
+            end
+        end
+    end
+
+    local legendX = 786
+    for index, metricKey in ipairs(metricKeys) do
+        local metric = GRAPH_METRICS[metricKey] or { label = metricKey, color = MetricColor(metricKey) }
+        local y = -72 - ((index - 1) * 70)
+        local bestSession, bestValue = BestSessionForMetric(sessions, metricKey)
+
+        DrawLine(card, legendX, y - 4, legendX + 22, y - 4, metric.color, 2)
+        AddLine(card, metric.label, legendX + 30, y - 12, 100, COLORS.gold, "GameFontNormal")
+
+        if bestValue then
+            AddLine(card, "Best: " .. FormatMetric(metricKey, bestValue), legendX, y - 34, 110, metric.color, "GameFontDisableSmall")
+            AddLine(card, ShortText(bestSession and (bestSession.sessionName or bestSession.name), 18), legendX, y - 52, 110, COLORS.muted, "GameFontDisableSmall")
+        end
+    end
+
+    AddLine(card, "Pull #", graphX, graphBottomY - 42, 80, COLORS.muted, "GameFontDisableSmall")
+    AddLine(card, "B = boss", graphX + 72, graphBottomY - 42, 90, COLORS.gold, "GameFontDisableSmall")
 
     return card
 end
@@ -348,7 +659,7 @@ function LastRun:Refresh()
     BuildSummary(self.content, state)
     BuildRanks(self.content, state)
     BuildTotals(self.content, state)
-    BuildHighlights(self.content, state)
+    BuildPullGraph(self.content, state)
     self.content:SetHeight(640)
 end
 
@@ -362,7 +673,7 @@ function LastRun:Create(parent)
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -18)
     title:SetSize(900, 24)
 
-    local subtitle = MakeText(frame, "Your newest Mythic+ recap: timer result, group lineup, run totals, and segment highlights.", "GameFontHighlightSmall", nil, COLORS.muted)
+    local subtitle = MakeText(frame, "Your newest Mythic+ recap: timer result, group lineup, run totals, and pull timeline.", "GameFontHighlightSmall", nil, COLORS.muted)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     subtitle:SetSize(900, 20)
 

@@ -27,6 +27,7 @@ KeyLab.Tabs = KeyLab.Tabs or {}
 
 local StatProfiles = {}
 KeyLab.Tabs.StatProfiles = StatProfiles
+local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
 
 -- =========================================================
 -- EASY EDIT SETTINGS
@@ -379,6 +380,10 @@ local function GetCurrentCharacterIdentity()
 end
 
 local function EncounterMatchesCurrentCharacter(encounter)
+    if EncounterData.EncounterMatchesCurrentCharacter then
+        return EncounterData.EncounterMatchesCurrentCharacter(encounter, { allowMissingIdentity = false })
+    end
+
     if type(encounter) ~= "table" then
         return false
     end
@@ -505,22 +510,27 @@ local function GetEncounterList()
 end
 
 local function GetChallenge(encounter)
+    if EncounterData.GetChallenge then return EncounterData.GetChallenge(encounter) end
     return encounter and encounter.challenge or {}
 end
 
 local function GetPlayer(encounter)
+    if EncounterData.GetPlayer then return EncounterData.GetPlayer(encounter) end
     return encounter and encounter.player or {}
 end
 
 local function GetStats(encounter)
+    if EncounterData.GetStats then return EncounterData.GetStats(encounter) end
     return encounter and encounter.stats or {}
 end
 
 local function GetMetrics(encounter)
+    if EncounterData.GetMetrics then return EncounterData.GetMetrics(encounter) end
     return encounter and encounter.metrics or {}
 end
 
 local function GetTalents(encounter)
+    if EncounterData.GetTalents then return EncounterData.GetTalents(encounter) end
     return encounter and encounter.talents or {}
 end
 
@@ -554,11 +564,13 @@ local function GetResultText(encounter)
 end
 
 local function GetMetricValue(encounter, metricKey)
+    if EncounterData.GetMetricValue then return EncounterData.GetMetricValue(encounter, metricKey) end
     local metrics = GetMetrics(encounter)
     return metrics and metrics[metricKey]
 end
 
 local function GetMetricInfoByKey(metricKey)
+    if EncounterData.GetMetricInfoByKey then return EncounterData.GetMetricInfoByKey(metricKey) end
     local metrics = KeyLab.Mapping and KeyLab.Mapping.Metrics
     if type(metrics) ~= "table" then return nil end
 
@@ -572,12 +584,14 @@ local function GetMetricInfoByKey(metricKey)
 end
 
 local function GetMetricInfoByType(metricType)
+    if EncounterData.GetMetricInfoByType then return EncounterData.GetMetricInfoByType(metricType) end
     return KeyLab.Mapping
         and KeyLab.Mapping.Metrics
         and KeyLab.Mapping.Metrics[metricType]
 end
 
 local function GetMetricLabel(metricKey)
+    if EncounterData.GetMetricLabel then return EncounterData.GetMetricLabel(metricKey) end
     local info = GetMetricInfoByKey(metricKey)
     return info and info.label or metricKey or "Outcome"
 end

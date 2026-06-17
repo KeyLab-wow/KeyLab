@@ -29,6 +29,7 @@ local Trends = {}
 KeyLab.Tabs.Trends = Trends
 
 local Theme = KeyLab.UI.Theme or {}
+local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
 
 -- =========================================================
 -- EASY EDIT SETTINGS
@@ -278,6 +279,10 @@ local function GetCurrentCharacterIdentity()
 end
 
 local function EncounterMatchesCurrentCharacter(encounter)
+    if EncounterData.EncounterMatchesCurrentCharacter then
+        return EncounterData.EncounterMatchesCurrentCharacter(encounter, { allowMissingIdentity = false })
+    end
+
     if type(encounter) ~= "table" then
         return false
     end
@@ -392,22 +397,37 @@ local function GetEncounterList()
 end
 
 local function GetChallenge(encounter)
+    if EncounterData.GetChallenge then
+        return EncounterData.GetChallenge(encounter)
+    end
     return encounter and encounter.challenge or {}
 end
 
 local function GetPlayer(encounter)
+    if EncounterData.GetPlayer then
+        return EncounterData.GetPlayer(encounter)
+    end
     return encounter and encounter.player or {}
 end
 
 local function GetStats(encounter)
+    if EncounterData.GetStats then
+        return EncounterData.GetStats(encounter)
+    end
     return encounter and encounter.stats or {}
 end
 
 local function GetMetrics(encounter)
+    if EncounterData.GetMetrics then
+        return EncounterData.GetMetrics(encounter)
+    end
     return encounter and encounter.metrics or {}
 end
 
 local function GetTalents(encounter)
+    if EncounterData.GetTalents then
+        return EncounterData.GetTalents(encounter)
+    end
     return encounter and encounter.talents or {}
 end
 
@@ -437,35 +457,46 @@ local function GetTalentString(encounter)
 end
 
 local function GetMetricValue(encounter, metricKey)
+    if EncounterData.GetMetricValue then
+        return EncounterData.GetMetricValue(encounter, metricKey)
+    end
     local metrics = GetMetrics(encounter)
     return metrics and metrics[metricKey]
 end
 
 local function GetMetricInfoByKey(metricKey)
-    local metrics = KeyLab.Mapping and KeyLab.Mapping.Metrics
-    if type(metrics) ~= "table" then return nil end
-
-    for _, info in pairs(metrics) do
-        if info.keylabKey == metricKey and info.store == true then
-            return info
-        end
+    if EncounterData.GetMetricInfoByKey then
+        return EncounterData.GetMetricInfoByKey(metricKey)
     end
 
+    local metrics = KeyLab.Mapping and KeyLab.Mapping.Metrics
+    if type(metrics) ~= "table" then return nil end
+    for _, info in pairs(metrics) do
+        if info.keylabKey == metricKey and info.store == true then return info end
+    end
     return nil
 end
 
 local function GetMetricInfoByType(metricType)
-    return KeyLab.Mapping
-        and KeyLab.Mapping.Metrics
-        and KeyLab.Mapping.Metrics[metricType]
+    if EncounterData.GetMetricInfoByType then
+        return EncounterData.GetMetricInfoByType(metricType)
+    end
+    return KeyLab.Mapping and KeyLab.Mapping.Metrics and KeyLab.Mapping.Metrics[metricType]
 end
 
 local function GetMetricLabel(metricKey)
+    if EncounterData.GetMetricLabel then
+        return EncounterData.GetMetricLabel(metricKey)
+    end
     local info = GetMetricInfoByKey(metricKey)
     return info and info.label or metricKey or "Metric"
 end
 
 local function GetMetricList()
+    if EncounterData.GetMetricList then
+        return EncounterData.GetMetricList()
+    end
+
     local list = {}
     local order = KeyLab.Mapping and KeyLab.Mapping.MetricOrder or {}
 
@@ -1296,68 +1327,6 @@ local function BuildPerformanceTrends(parent, x, y, encounters, title, subtitle,
     return panel
 end
 
-local RUN_HIGHLIGHT_PANEL_HEIGHT = 532
-
-local RUN_HIGHLIGHT_KEYS = {
-    "bestRunDps",
-    "bestRunHps",
-    "leastRunAvoidable",
-    "leastRunDamageTaken",
-    "mostRunInterrupts",
-    "mostRunDispels",
-}
-
-local SEGMENT_HIGHLIGHT_KEYS = {
-    "bestDpsSession",
-    "bestHpsSession",
-    "lowestAvoidableSession",
-    "highestAvoidableSession",
-    "bestInterruptSession",
-    "bestDispelSession",
-}
-
-local function RunHighlightContextText(highlight)
-    if not highlight then return "" end
-
-    local parts = {}
-    if highlight.dungeonName and highlight.dungeonName ~= "" then
-        local dungeon = tostring(highlight.dungeonName)
-        if string.len(dungeon) > 22 then
-            dungeon = string.sub(dungeon, 1, 19) .. "..."
-        end
-        if highlight.keyLevel and tonumber(highlight.keyLevel) and tonumber(highlight.keyLevel) > 0 then
-            dungeon = dungeon .. " +" .. tostring(highlight.keyLevel)
-        end
-        table.insert(parts, dungeon)
-    end
-
-    if highlight.durationSeconds then
-        table.insert(parts, FormatDuration(highlight.durationSeconds))
-    elseif highlight.timestamp then
-        local timestamp = tonumber(highlight.timestamp)
-        if timestamp then
-            table.insert(parts, date("%b %d", timestamp))
-        end
-    end
-
-    return table.concat(parts, "  |  ")
-end
-
-local function ShortText(value, maxLength)
-    value = tostring(value or "")
-    maxLength = tonumber(maxLength) or 24
-    if string.len(value) <= maxLength then return value end
-    return string.sub(value, 1, math.max(1, maxLength - 3)) .. "..."
-end
-
-local function RulesByKey(rules)
-    local out = {}
-    for _, rule in ipairs(rules or {}) do
-        out[rule.key] = rule
-    end
-    return out
-end
-
 local function CountExactUpgradeLevels(encounters, exactLevel)
     local count = 0
     local tracked = 0
@@ -1426,12 +1395,17 @@ local function CountTimedRuns(encounters)
 end
 
 local function AverageRank(encounters, metricKey)
+    if EncounterData.AverageRank then
+        return EncounterData.AverageRank(encounters, metricKey)
+    end
+
     local totalRank = 0
     local totalPlayers = 0
     local count = 0
 
     for _, encounter in ipairs(encounters or {}) do
-        local rank = encounter.metricRanks and encounter.metricRanks[metricKey]
+        local ranks = encounter and encounter.metricRanks or {}
+        local rank = ranks[metricKey]
         if type(rank) == "table" and tonumber(rank.rank) and tonumber(rank.total) then
             totalRank = totalRank + tonumber(rank.rank)
             totalPlayers = totalPlayers + tonumber(rank.total)
@@ -1445,27 +1419,8 @@ end
 
 local function FormatAverageRank(encounters, metricKey)
     local avgRank, avgTotal = AverageRank(encounters, metricKey)
-    if not avgRank then return "New runs needed" end
+    if not avgRank then return "No rank" end
     return string.format("%.1f / %.0f", avgRank, avgTotal or 0)
-end
-
-local function BuildRunHighlightCard(parent, x, y, rule, highlight, emptyText)
-    local color = MetricColor(rule and rule.metricKey)
-    local card = MakePanel(parent, x, y, 286, 62, "", CFG.colors.cardBorder, color)
-
-    if not highlight then
-        AddLine(card, rule and rule.label or "Highlight", 10, -8, 260, CFG.colors.gold, "GameFontNormal")
-        AddLine(card, emptyText or "No data yet", 10, -36, 250, CFG.colors.muted, "GameFontDisableSmall")
-        return card
-    end
-
-    AddLine(card, ShortText(highlight.label or (rule and rule.label) or "Highlight", 31), 10, -8, 260, CFG.colors.gold, "GameFontNormal")
-    AddLine(card, FormatMetric(highlight.metricKey, highlight.value), 10, -29, 82, color, "GameFontNormal")
-    local subject = highlight.sessionName or (highlight.isRunHighlight and "Overall saved run") or "Unknown Segment"
-    AddLine(card, ShortText(subject, 24), 100, -29, 174, CFG.colors.text, "GameFontHighlightSmall")
-    AddLine(card, RunHighlightContextText(highlight), 10, -46, 260, CFG.colors.muted, "GameFontDisableSmall")
-
-    return card
 end
 
 local function BuildPatternCard(parent, x, y, label, value, note, color)
@@ -1476,61 +1431,19 @@ local function BuildPatternCard(parent, x, y, label, value, note, color)
     return card
 end
 
-local function BuildRunPattern(parent, x, y, encounters)
-    AddLine(parent, "Run Pattern", x, y, 250, CFG.colors.gold, "GameFontNormal")
+local function BuildRunPatternPanel(parent, x, y, encounters)
+    local panel = MakePanel(parent, x, y, 908, 124, "Run Pattern", CFG.colors.cardBorder, CFG.colors.blue)
+    AddLine(panel, "Simple timing and lineup patterns from the selected saved runs.", 14, -32, 720, CFG.colors.muted, "GameFontDisableSmall")
+
     local twoChest, twoChestTracked = CountExactUpgradeLevels(encounters, 2)
     local threeChest, threeChestTracked = CountExactUpgradeLevels(encounters, 3)
     local timed, total = CountTimedRuns(encounters)
 
-    BuildPatternCard(parent, x, y - 24, "++ Runs", twoChestTracked > 0 and tostring(twoChest) or "New", twoChestTracked > 0 and "2-chested" or "needed", CFG.colors.green)
-    BuildPatternCard(parent, x + 180, y - 24, "+++ Runs", threeChestTracked > 0 and tostring(threeChest) or "New", threeChestTracked > 0 and "3-chested" or "needed", CFG.colors.purple)
-    BuildPatternCard(parent, x + 360, y - 24, "Timed Runs", total > 0 and (tostring(timed) .. " / " .. tostring(total)) or "New", total > 0 and "saved" or "needed", CFG.colors.green)
-    BuildPatternCard(parent, x + 540, y - 24, "Avg DPS", FormatAverageRank(encounters, "dps"), "rank", CFG.colors.orange)
-    BuildPatternCard(parent, x + 720, y - 24, "Avg HPS", FormatAverageRank(encounters, "hps"), "rank", CFG.colors.green)
-end
-
-local function BuildRunHighlightsPanel(parent, x, y, encounters)
-    local panel = MakePanel(parent, x, y, 908, RUN_HIGHLIGHT_PANEL_HEIGHT, "Run Highlights", CFG.colors.cardBorder, CFG.colors.purple)
-    AddLine(panel, "Fewer, stronger signals from saved runs: overall bests, chest timing, lineup rank, and key segments.", 14, -32, 820, CFG.colors.muted, "GameFontDisableSmall")
-
-    local analyzer = KeyLab.RunHighlights
-    local data = analyzer and analyzer.BuildHighlightsForEncounters and analyzer.BuildHighlightsForEncounters(encounters) or nil
-
-    if not data or (data.hasRunData ~= true and data.hasSessionData ~= true) then
-        AddLine(panel, "New completed runs will show run and segment highlights here once combat data is saved.", 14, -70, 840, CFG.colors.muted, "GameFontNormal")
-        return panel
-    end
-
-    AddLine(panel, "Overall Best Run Highlights", 14, -58, 320, CFG.colors.gold, "GameFontNormal")
-    local runRules = analyzer.GetRunRules and analyzer.GetRunRules() or {}
-    local runRulesByKey = RulesByKey(runRules)
-    for index, key in ipairs(RUN_HIGHLIGHT_KEYS) do
-        local rule = runRulesByKey[key]
-        local row = math.floor((index - 1) / 3)
-        local col = (index - 1) % 3
-        local cx = 14 + (col * 296)
-        local cy = -80 - (row * 68)
-        BuildRunHighlightCard(panel, cx, cy, rule, rule and data.runByKey and data.runByKey[rule.key], "No run yet")
-    end
-
-    BuildRunPattern(panel, 14, -232, encounters)
-
-    AddLine(panel, "Key Segment Highlights", 14, -342, 300, CFG.colors.gold, "GameFontNormal")
-    if data.hasSessionData ~= true then
-        AddLine(panel, "New completed runs will show segment highlights here once combat sessions are saved.", 14, -368, 840, CFG.colors.muted, "GameFontNormal")
-        return panel
-    end
-
-    local segmentRules = analyzer.GetSegmentRules and analyzer.GetSegmentRules() or analyzer.GetRules and analyzer.GetRules() or {}
-    local segmentRulesByKey = RulesByKey(segmentRules)
-    for index, key in ipairs(SEGMENT_HIGHLIGHT_KEYS) do
-        local rule = segmentRulesByKey[key]
-        local row = math.floor((index - 1) / 3)
-        local col = (index - 1) % 3
-        local cx = 14 + (col * 296)
-        local cy = -366 - (row * 68)
-        BuildRunHighlightCard(panel, cx, cy, rule, rule and data.segmentByKey and data.segmentByKey[rule.key], "No segment yet")
-    end
+    BuildPatternCard(panel, 14, -54, "++ Runs", twoChestTracked > 0 and tostring(twoChest) or "No data", twoChestTracked > 0 and "2-chested" or "chest data", CFG.colors.green)
+    BuildPatternCard(panel, 194, -54, "+++ Runs", threeChestTracked > 0 and tostring(threeChest) or "No data", threeChestTracked > 0 and "3-chested" or "chest data", CFG.colors.purple)
+    BuildPatternCard(panel, 374, -54, "Timed Runs", total > 0 and (tostring(timed) .. " / " .. tostring(total)) or "No data", total > 0 and "saved" or "timer data", CFG.colors.green)
+    BuildPatternCard(panel, 554, -54, "Avg DPS", FormatAverageRank(encounters, "dps"), "rank", CFG.colors.orange)
+    BuildPatternCard(panel, 734, -54, "Avg HPS", FormatAverageRank(encounters, "hps"), "rank", CFG.colors.green)
 
     return panel
 end
@@ -1658,15 +1571,23 @@ function Trends:RefreshContent()
 
     if self.selectedDungeon and usableCount < 2 then
         BuildMessagePanel(self.content, 0, 0, "Performance Direction", "Run this dungeon more to unlock trends.", CFG.colors.warning)
-        BuildRunHighlightsPanel(self.content, 0, -112, filtered)
-        self.content:SetHeight(670)
+        BuildRunPatternPanel(self.content, 0, -112, filtered)
+        self.content:SetHeight(260)
         return
     end
 
     if self.selectedDungeon then
-        BuildProgressionSnapshot(self.content, 0, 0, filtered, self.selectedDungeon)
-        BuildRunHighlightsPanel(self.content, 0, -224, filtered)
-        self.content:SetHeight(790)
+        BuildPerformanceTrends(
+            self.content,
+            0,
+            0,
+            filtered,
+            "Performance Direction",
+            "This dungeon's recent runs compared against earlier saved runs.",
+            "Recent avg"
+        )
+        BuildRunPatternPanel(self.content, 0, -224, filtered)
+        self.content:SetHeight(372)
         return
     end
 
@@ -1680,9 +1601,9 @@ function Trends:RefreshContent()
         "Recent avg"
     )
 
-    BuildRunHighlightsPanel(self.content, 0, -224, filtered)
+    BuildRunPatternPanel(self.content, 0, -224, filtered)
 
-    self.content:SetHeight(790)
+    self.content:SetHeight(372)
 end
 
 function Trends:Refresh()
@@ -1711,7 +1632,7 @@ function Trends:Create(parent)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
     subtitle:SetWidth(CFG.header.subtitleWidth)
     subtitle:SetJustifyH("LEFT")
-    subtitle:SetText("Shows visual performance direction by spec, dungeon, and captured progression runs.")
+    subtitle:SetText("Shows whether recent saved runs are improving, stable, or slipping.")
     ApplyColor(subtitle, CFG.colors.muted)
 
     self.summaryText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")

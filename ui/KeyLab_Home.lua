@@ -10,6 +10,7 @@ KeyLab.Tabs = KeyLab.Tabs or {}
 
 local HOME = {}
 KeyLab.Tabs.Home = HOME
+local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
 
 local COLORS = {
     bg         = {0.018, 0.026, 0.056, 0.96},
@@ -74,14 +75,6 @@ local function MakePanel(parent, x, y, width, height, important)
     return panel
 end
 
-local function MakeButton(parent, label, width, height, onClick)
-    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    button:SetSize(width or 150, height or 26)
-    button:SetText(label)
-    button:SetScript("OnClick", onClick)
-    return button
-end
-
 local function NormalizeKeyLabName(value)
     value = tostring(value or "")
     value = value:gsub("%s+", "")
@@ -109,6 +102,10 @@ local function GetCurrentCharacterIdentity()
 end
 
 local function EncounterMatchesCurrentCharacter(encounter)
+    if EncounterData.EncounterMatchesCurrentCharacter then
+        return EncounterData.EncounterMatchesCurrentCharacter(encounter, { allowMissingIdentity = true })
+    end
+
     if type(encounter) ~= "table" then
         return false
     end
@@ -262,6 +259,24 @@ local function GetTrackingSinceText()
     return "Not started yet"
 end
 
+local function FormatHomeDate(value)
+    value = tonumber(value)
+    if not value then return "-" end
+    return date("%b %d %I:%M %p", value)
+end
+
+local function GetLatestRunState()
+    local analysis = KeyLab.LastRunAnalysis
+    if analysis and type(analysis.BuildState) == "function" then
+        local ok, state = pcall(analysis.BuildState)
+        if ok and type(state) == "table" then
+            return state
+        end
+    end
+
+    return { hasRun = false }
+end
+
 function HOME:Create(parent)
     local frame = CreateFrame("Frame", "KeyLabHomeTab", parent, "BackdropTemplate")
     frame:SetAllPoints(parent)
@@ -272,7 +287,7 @@ function HOME:Create(parent)
     local gap = CFG.gap
     local halfW = (width - gap) / 2
 
-    local hero = MakePanel(frame, CFG.x, y, width, 132, false)
+    local hero = MakePanel(frame, CFG.x, y, width, 150, false)
 
     local title = MakeText(hero, "KeyLab Journal", 20, COLORS.title, "LEFT")
     title:SetPoint("TOPLEFT", hero, "TOPLEFT", 16, -14)
@@ -288,9 +303,9 @@ function HOME:Create(parent)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
     subtitle:SetSize(540, 38)
 
-    local rhythm = MakeText(hero, "Try a build. Tune your stats. Target gear. Review results.", 14, COLORS.title, "LEFT")
-    rhythm:SetPoint("TOPLEFT", hero, "TOPLEFT", 16, -94)
-    rhythm:SetSize(560, 22)
+    local rhythm = MakeText(hero, "Try a build.\nAdjust your stats.\nRun content.\nReview the results.", 14, COLORS.title, "LEFT")
+    rhythm:SetPoint("TOPLEFT", hero, "TOPLEFT", 16, -78)
+    rhythm:SetSize(560, 66)
 
     local sinceLabel = MakeText(hero, "Tracking Since", 11, COLORS.muted, "LEFT")
     sinceLabel:SetPoint("TOPLEFT", hero, "TOPLEFT", 620, -22)
@@ -308,42 +323,51 @@ function HOME:Create(parent)
     runsValue:SetPoint("TOPLEFT", runsLabel, "BOTTOMLEFT", 0, -4)
     runsValue:SetSize(180, 22)
 
-    y = y - 132 - gap
+    y = y - 150 - gap
 
-    local gearPanel = MakePanel(frame, CFG.x, y, width, 126, false)
+    local latest = MakePanel(frame, CFG.x, y, width, 106, false)
 
-    local gearTitle = MakeText(gearPanel, "Selected Gear Targets Window", 15, COLORS.title, "LEFT")
-    gearTitle:SetPoint("TOPLEFT", gearPanel, "TOPLEFT", 14, -12)
-    gearTitle:SetSize(width - 220, 20)
+    local latestTitle = MakeText(latest, "Latest Run", 14, COLORS.title, "LEFT")
+    latestTitle:SetPoint("TOPLEFT", latest, "TOPLEFT", 14, -12)
+    latestTitle:SetSize(150, 18)
 
-    local gearBody = MakeText(
-        gearPanel,
-        "Opens a small companion window with the items you marked Target or BIS in the Gear Targets tab. Keep it open while browsing Premade Groups to quickly see target drops for the dungeon you are considering.",
-        12,
-        COLORS.text,
-        "LEFT"
-    )
-    gearBody:SetPoint("TOPLEFT", gearTitle, "BOTTOMLEFT", 0, -8)
-    gearBody:SetSize(width - 238, 56)
+    local latestDungeonLabel = MakeText(latest, "Dungeon", 10, COLORS.muted, "LEFT")
+    latestDungeonLabel:SetPoint("TOPLEFT", latest, "TOPLEFT", 14, -38)
+    latestDungeonLabel:SetSize(180, 14)
 
-    local gearHint = MakeText(
-        gearPanel,
-        "Use the sidebar Gear Targets tab to browse loot, set stat goals, and mark items.",
-        11,
-        COLORS.muted,
-        "LEFT"
-    )
-    gearHint:SetPoint("TOPLEFT", gearPanel, "TOPLEFT", 14, -92)
-    gearHint:SetSize(width - 238, 18)
+    local latestDungeon = MakeText(latest, "No completed run yet", 13, COLORS.text, "LEFT")
+    latestDungeon:SetPoint("TOPLEFT", latest, "TOPLEFT", 14, -56)
+    latestDungeon:SetSize(270, 22)
 
-    local openTargets = MakeButton(gearPanel, "Open Selected Items", 178, 28, function()
-        if KeyLab.GearTargetsWindow and KeyLab.GearTargetsWindow.ShowManual then
-            KeyLab.GearTargetsWindow.ShowManual()
-        end
-    end)
-    openTargets:SetPoint("TOPRIGHT", gearPanel, "TOPRIGHT", -18, -48)
+    local latestKeyLabel = MakeText(latest, "Key", 10, COLORS.muted, "CENTER")
+    latestKeyLabel:SetPoint("TOPLEFT", latest, "TOPLEFT", 320, -38)
+    latestKeyLabel:SetSize(80, 14)
 
-    y = y - 126 - gap
+    local latestKey = MakeText(latest, "-", 13, COLORS.accent, "CENTER")
+    latestKey:SetPoint("TOPLEFT", latest, "TOPLEFT", 320, -56)
+    latestKey:SetSize(80, 22)
+
+    local latestResultLabel = MakeText(latest, "Result", 10, COLORS.muted, "CENTER")
+    latestResultLabel:SetPoint("TOPLEFT", latest, "TOPLEFT", 444, -38)
+    latestResultLabel:SetSize(120, 14)
+
+    local latestResult = MakeText(latest, "-", 13, COLORS.warning, "CENTER")
+    latestResult:SetPoint("TOPLEFT", latest, "TOPLEFT", 444, -56)
+    latestResult:SetSize(120, 22)
+
+    local latestSavedLabel = MakeText(latest, "Saved", 10, COLORS.muted, "RIGHT")
+    latestSavedLabel:SetPoint("TOPRIGHT", latest, "TOPRIGHT", -16, -38)
+    latestSavedLabel:SetSize(190, 14)
+
+    local latestSaved = MakeText(latest, "-", 12, COLORS.muted, "RIGHT")
+    latestSaved:SetPoint("TOPRIGHT", latest, "TOPRIGHT", -16, -56)
+    latestSaved:SetSize(190, 22)
+
+    local latestHint = MakeText(latest, "Open Last Run to review the full summary, group lineup, totals, and pull graph.", 11, COLORS.muted, "LEFT")
+    latestHint:SetPoint("TOPLEFT", latest, "TOPLEFT", 14, -84)
+    latestHint:SetSize(width - 28, 18)
+
+    y = y - 106 - gap
 
     local required = MakePanel(frame, CFG.x, y, halfW, 170, true)
 
@@ -373,8 +397,8 @@ function HOME:Create(parent)
 
     local macroBody = MakeText(
         macro,
-        "Use /keylab to open or close the journal.\n\n" ..
-        "For an action bar button, create a General Macro named KeyLab, add /keylab as the command, then drag it to an action bar.",
+        "Use the minimap icon to open or close the journal.\n\n" ..
+        "You can also type /keylab, or create a General Macro named KeyLab with /keylab as the command.",
         12,
         COLORS.text,
         "LEFT"
@@ -382,56 +406,29 @@ function HOME:Create(parent)
     macroBody:SetPoint("TOPLEFT", macroTitle, "BOTTOMLEFT", 0, -8)
     macroBody:SetSize(halfW - 28, 116)
 
-    y = y - 170 - gap
-
-    local tracks = MakePanel(frame, CFG.x, y, width, 158, false)
-
-    local tracksTitle = MakeText(tracks, "What KeyLab Tracks", 15, COLORS.title, "LEFT")
-    tracksTitle:SetPoint("TOPLEFT", tracks, "TOPLEFT", 14, -12)
-    tracksTitle:SetSize(width - 28, 22)
-
-    local tracksIntro = MakeText(
-        tracks,
-        "KeyLab keeps personal run context together so you can compare what changed and what actually worked.",
-        12,
-        COLORS.muted,
-        "LEFT"
-    )
-    tracksIntro:SetPoint("TOPLEFT", tracksTitle, "BOTTOMLEFT", 0, -4)
-    tracksIntro:SetSize(width - 28, 20)
-
-    local leftTracks = MakeText(
-        tracks,
-        "- Dungeon and key level\n" ..
-        "- Affixes\n" ..
-        "- Talent string\n" ..
-        "- Character stats",
-        12,
-        COLORS.text,
-        "LEFT"
-    )
-    leftTracks:SetPoint("TOPLEFT", tracks, "TOPLEFT", 24, -62)
-    leftTracks:SetSize(360, 84)
-
-    local rightTracks = MakeText(
-        tracks,
-        "- Metric outcomes\n" ..
-        "- Stat profiles\n" ..
-        "- Gear targets\n" ..
-        "- Personal notes and trends",
-        12,
-        COLORS.text,
-        "LEFT"
-    )
-    rightTracks:SetPoint("TOPLEFT", tracks, "TOPLEFT", 454, -62)
-    rightTracks:SetSize(360, 84)
-
     frame.summarySince = trackingValue
     frame.summaryRuns = runsValue
+    frame.latestDungeon = latestDungeon
+    frame.latestKey = latestKey
+    frame.latestResult = latestResult
+    frame.latestSaved = latestSaved
 
     function frame:Refresh()
         self.summarySince:SetText(GetTrackingSinceText())
         self.summaryRuns:SetText(tostring(CountEncounters()))
+
+        local state = GetLatestRunState()
+        if state and state.hasRun then
+            self.latestDungeon:SetText(tostring(state.dungeonName or "Unknown Dungeon"))
+            self.latestKey:SetText("+" .. tostring(state.keyLevel or 0))
+            self.latestResult:SetText(tostring(state.resultText or "Completed"))
+            self.latestSaved:SetText(FormatHomeDate(state.timestamp))
+        else
+            self.latestDungeon:SetText("No completed run yet")
+            self.latestKey:SetText("-")
+            self.latestResult:SetText("-")
+            self.latestSaved:SetText("-")
+        end
     end
 
     frame:SetScript("OnShow", function(self)
