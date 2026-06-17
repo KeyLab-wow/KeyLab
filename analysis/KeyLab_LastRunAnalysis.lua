@@ -4,6 +4,7 @@ _G.KeyLab = KeyLab
 
 KeyLab.LastRunAnalysis = KeyLab.LastRunAnalysis or {}
 local Analysis = KeyLab.LastRunAnalysis
+local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
 
 --[[
 KeyLab_LastRunAnalysis.lua
@@ -37,6 +38,10 @@ local function CurrentCharacter()
 end
 
 local function EncounterMatchesCurrentCharacter(encounter)
+    if EncounterData.EncounterMatchesCurrentCharacter then
+        return EncounterData.EncounterMatchesCurrentCharacter(encounter, { allowMissingIdentity = false })
+    end
+
     local currentName, currentRealm = CurrentCharacter()
     if not currentName or currentName == "" then return true end
 
@@ -93,14 +98,37 @@ local function GetAllEncounters()
 end
 
 local function GetChallenge(encounter)
+    if EncounterData.GetChallenge then
+        return EncounterData.GetChallenge(encounter)
+    end
     return encounter and encounter.challenge or {}
 end
 
 local function GetMetrics(encounter)
+    if EncounterData.GetMetrics then
+        return EncounterData.GetMetrics(encounter)
+    end
     return encounter and encounter.metrics or {}
 end
 
+local function GetPlayer(encounter)
+    if EncounterData.GetPlayer then
+        return EncounterData.GetPlayer(encounter)
+    end
+    return encounter and encounter.player or {}
+end
+
+local function GetStats(encounter)
+    if EncounterData.GetStats then
+        return EncounterData.GetStats(encounter)
+    end
+    return encounter and encounter.stats or {}
+end
+
 local function GetMetricRanks(encounter)
+    if EncounterData.GetMetricRanks then
+        return EncounterData.GetMetricRanks(encounter)
+    end
     return encounter and encounter.metricRanks or {}
 end
 
@@ -171,17 +199,14 @@ function Analysis.BuildState()
     end
 
     local challenge = GetChallenge(encounter)
-    local highlights = KeyLab.RunHighlights and KeyLab.RunHighlights.BuildEncounterHighlights and KeyLab.RunHighlights.BuildEncounterHighlights(encounter) or nil
-
     return {
         hasRun = true,
         encounter = encounter,
         challenge = challenge,
-        player = encounter.player or {},
-        stats = encounter.stats or {},
+        player = GetPlayer(encounter),
+        stats = GetStats(encounter),
         metrics = GetMetrics(encounter),
         ranks = GetMetricRanks(encounter),
-        highlights = highlights,
         resultText = GetResultText(encounter),
         chestText = GetChestText(challenge),
         keystoneUpgradeLevels = GetUpgradeLevels(challenge),

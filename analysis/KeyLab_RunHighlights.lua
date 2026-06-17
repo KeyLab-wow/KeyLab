@@ -4,6 +4,7 @@ _G.KeyLab = KeyLab
 
 KeyLab.RunHighlights = KeyLab.RunHighlights or {}
 local Highlights = KeyLab.RunHighlights
+local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
 
 --[[
 KeyLab_RunHighlights.lua
@@ -48,10 +49,16 @@ local function SafeNumber(value)
 end
 
 local function GetChallenge(encounter)
+    if EncounterData.GetChallenge then
+        return EncounterData.GetChallenge(encounter)
+    end
     return encounter and encounter.challenge or {}
 end
 
 local function GetSessions(encounter)
+    if EncounterData.GetCombatSessions then
+        return EncounterData.GetCombatSessions(encounter)
+    end
     if type(encounter) ~= "table" then return {} end
     return encounter.combatSessions
         or encounter.damageMeterSessions
@@ -60,6 +67,9 @@ local function GetSessions(encounter)
 end
 
 local function GetEncounterMetrics(encounter)
+    if EncounterData.GetMetrics then
+        return EncounterData.GetMetrics(encounter)
+    end
     return encounter and encounter.metrics or {}
 end
 
