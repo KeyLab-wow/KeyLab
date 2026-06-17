@@ -51,6 +51,29 @@ end
 Sessions.SafeCall = SafeCall
 Sessions.CopyArray = CopyArray
 
+local function NormalizeSeconds(value)
+    value = tonumber(value)
+    if not value then return nil end
+    -- Some Blizzard timer fields are milliseconds in older/newer APIs.
+    if value > 100000 then
+        value = value / 1000
+    end
+    return value
+end
+
+local function AddMapTimerInfo(context)
+    if type(context) ~= "table" or not context.mapID then return context end
+    if not C_ChallengeMode or not C_ChallengeMode.GetMapUIInfo then return context end
+
+    local ok, name, id, timeLimit = SafeCall(C_ChallengeMode.GetMapUIInfo, context.mapID)
+    if ok then
+        context.timeLimitSeconds = NormalizeSeconds(timeLimit) or context.timeLimitSeconds
+        context.dungeonName = context.dungeonName or name
+    end
+
+    return context
+end
+
 function Sessions.EnsureCaptureDB()
     if type(KeyLabCaptureDB) ~= "table" then
         KeyLabCaptureDB = {}
@@ -98,8 +121,43 @@ function Sessions.GetChallengeContext()
         context.dungeonName = KeyLab.Mapping.GetMapName(context.mapID)
     end
 
+    AddMapTimerInfo(context)
+
     if not context.dungeonName and GetRealZoneText then
         context.dungeonName = GetRealZoneText()
+    end
+
+    return context
+end
+
+function Sessions.GetCompletionContext()
+    local context = Sessions.GetChallengeContext()
+
+    if C_ChallengeMode and C_ChallengeMode.GetCompletionInfo then
+        local ok, mapID, level, duration, onTime, keystoneUpgradeLevels = SafeCall(C_ChallengeMode.GetCompletionInfo)
+        if ok then
+            context.mapID = mapID or context.mapID
+            context.keyLevel = level or context.keyLevel
+            context.durationSeconds = NormalizeSeconds(duration) or context.durationSeconds
+            if onTime ~= nil then
+                context.timed = onTime == true
+            end
+            context.keystoneUpgradeLevels = keystoneUpgradeLevels
+        end
+    end
+
+    if context.mapID and KeyLab.Mapping and KeyLab.Mapping.GetMapName then
+        context.dungeonName = KeyLab.Mapping.GetMapName(context.mapID) or context.dungeonName
+    end
+
+    AddMapTimerInfo(context)
+
+    if context.timed == nil and context.durationSeconds and context.timeLimitSeconds then
+        context.timed = context.durationSeconds <= context.timeLimitSeconds
+    end
+
+    if context.timed ~= nil then
+        context.result = context.timed and "Timed" or "Untimed"
     end
 
     return context

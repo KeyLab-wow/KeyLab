@@ -43,35 +43,71 @@ local function BuildEncounterRecord()
         return nil, contextReason
     end
 
-    local metrics, metricError = DamageMeter.GetSnapshot()
+    local metrics, metricError, metricRanks = DamageMeter.GetSnapshot()
     if type(metrics) ~= "table" or next(metrics) == nil then
         return nil, metricError or "No mapped local-player metric values found"
     end
 
+    local playerDeaths = tonumber(captureDB.playerDeaths) or 0
+    if playerDeaths > (tonumber(metrics.deaths) or 0) then
+        metrics.deaths = playerDeaths
+    end
+
+    local combatSessions, combatSessionError = {}, nil
+    if DamageMeter.GetCombatSessionsSnapshot then
+        combatSessions, combatSessionError = DamageMeter.GetCombatSessionsSnapshot()
+    end
+
     local timestamp = time()
+    local durationSeconds = context.durationSeconds
+    if not durationSeconds and captureDB.startedAt and captureDB.completedAt then
+        durationSeconds = math.max(0, captureDB.completedAt - captureDB.startedAt)
+    end
+
+    local timed = context.timed
+    if timed == nil and durationSeconds and context.timeLimitSeconds then
+        timed = durationSeconds <= context.timeLimitSeconds
+    end
+    local resultText = context.result or (timed ~= nil and (timed and "Timed" or "Untimed")) or "Completed"
 
     local encounter = {
         id = Sessions.MakeEncounterID(context),
         timestamp = timestamp,
         dateText = date("%Y-%m-%d %H:%M:%S", timestamp),
+        result = resultText,
 
         challenge = {
             mapID = context.mapID,
             dungeonName = context.dungeonName,
             keyLevel = context.keyLevel,
             affixIDs = Sessions.CopyArray(context.affixIDs),
+            durationSeconds = durationSeconds,
+            timeLimitSeconds = context.timeLimitSeconds,
+            timed = timed,
+            keystoneUpgradeLevels = context.keystoneUpgradeLevels,
         },
 
         player = captureDB.playerSnapshot or PlayerCapture.GetSnapshot(),
         talents = captureDB.talentSnapshot or TalentCapture.GetSnapshot(),
         stats = captureDB.statSnapshot or StatCapture.GetSnapshot(),
         metrics = metrics,
+        metricRanks = metricRanks,
+        combatSessions = combatSessions,
+        capture = {
+            playerDeaths = playerDeaths,
+        },
 
         flags = {
             interrupted = captureDB.interrupted == true,
             excludedFromComparisons = captureDB.interrupted == true,
+            timed = timed == true,
         },
     }
+
+    if combatSessionError then
+        encounter.captureNotes = encounter.captureNotes or {}
+        encounter.captureNotes.combatSessions = combatSessionError
+    end
 
     return encounter, nil
 end
@@ -86,6 +122,8 @@ function Capture.StartChallenge()
     captureDB.startedAtText = date("%Y-%m-%d %H:%M:%S", captureDB.startedAt)
     captureDB.completedSeen = false
     captureDB.interrupted = false
+    captureDB.playerDeaths = 0
+    captureDB.playerDeathTimes = {}
     captureDB.challenge = context
     captureDB.lastStartReason = reason
 
@@ -100,6 +138,15 @@ function Capture.StartChallenge()
     end
 end
 
+function Capture.MarkPlayerDeath()
+    local captureDB = EnsureCaptureDB()
+    if captureDB.active == true and captureDB.completedSeen ~= true and captureDB.interrupted ~= true then
+        captureDB.playerDeaths = (tonumber(captureDB.playerDeaths) or 0) + 1
+        captureDB.playerDeathTimes = captureDB.playerDeathTimes or {}
+        table.insert(captureDB.playerDeathTimes, time())
+    end
+end
+
 function Capture.MarkCompleted()
     local captureDB = EnsureCaptureDB()
 
@@ -107,7 +154,7 @@ function Capture.MarkCompleted()
     captureDB.completedAt = time()
     captureDB.completedAtText = date("%Y-%m-%d %H:%M:%S", captureDB.completedAt)
 
-    local completionContext = Sessions.GetChallengeContext()
+    local completionContext = Sessions.GetCompletionContext and Sessions.GetCompletionContext() or Sessions.GetChallengeContext()
     if type(completionContext) == "table" then
         captureDB.challenge = captureDB.challenge or {}
         for key, value in pairs(completionContext) do
@@ -177,6 +224,7 @@ frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("CHALLENGE_MODE_START")
 frame:RegisterEvent("CHALLENGE_MODE_COMPLETED")
 frame:RegisterEvent("CHALLENGE_MODE_RESET")
+frame:RegisterEvent("PLAYER_DEAD")
 frame:RegisterEvent("PLAYER_LOGOUT")
 
 frame:SetScript("OnEvent", function(_, event, ...)
@@ -218,6 +266,11 @@ frame:SetScript("OnEvent", function(_, event, ...)
         return
     end
 
+    if event == "PLAYER_DEAD" then
+        Capture.MarkPlayerDeath()
+        return
+    end
+
     if event == "PLAYER_LOGOUT" then
         Capture.MarkInterrupted("PLAYER_LOGOUT")
         return
@@ -251,6 +304,7 @@ SlashCmdList["KEYLABCAPTURE"] = function(msg)
             "active=" .. tostring(captureDB.active)
             .. " completedSeen=" .. tostring(captureDB.completedSeen)
             .. " interrupted=" .. tostring(captureDB.interrupted)
+            .. " playerDeaths=" .. tostring(captureDB.playerDeaths or 0)
             .. " lastError=" .. tostring(captureDB.lastFinalizeError)
         )
         return
