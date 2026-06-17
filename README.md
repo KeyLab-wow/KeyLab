@@ -1,38 +1,48 @@
 # KeyLab (World of Warcraft Retail Addon) 
 
-A personal Mythic+ journal that helps players discover which builds, stats, and gear choices produce their best real-world results.
+KeyLab is a personal Mythic+ journal that helps players discover which builds, stats, and gear choices produce their best real-world results.
 
-## Overview
+Try a build.
+Adjust your stats.
+Run content.
+Review the results.
 
-KeyLab is designed to help players experiment with talent builds, stat profiles, and gear choices while tracking real Mythic+ encounter outcomes over time.
+Use /keylab or the minimap button to open the journal.
 
-Rather than focusing on simulations or rankings, KeyLab focuses on your own gameplay data and personal trends.
+Tabs & Features
+Home
+Quick overview of your journal, latest run, activity summary, and important setup reminders.
 
-## Features
+Encounters
+Browse completed Mythic+ runs with captured stats, talent builds, outcomes, and run details.
 
-- Automatic Mythic+ encounter capture
-- Talent build tracking
-- Character stat snapshots
-- Talent build comparisons
-- Stat profile comparisons
-- Gear Targets
-- Personal stat goal guidance
-- Encounter outcome tracking
-- Long-term trend analysis
-- Journal data export/import/reset
+Last Run
+Review your most recent Mythic+ run, including run summary, player totals, group rankings, and pull-by-pull performance.
 
-## Philosophy
+Talent Builds
+Compare talent setups you've actually played and see which builds produced the best results.
 
-KeyLab is built around:
+Stat Profiles
+Compare observed stat priority combinations and identify which stat distributions perform best for your character.
 
-Build + Stats + Context + Outcome
+Trends
+Track performance patterns over time, including DPS, HPS, interrupts, avoidable damage, and other key metrics.
 
-The goal is to help players answer:
+Gear Dashboard
+View your current gearing progress, upgrade priorities, target completion progress, and recommended next steps.
 
-"What actually works best for me?"
+Gear Targets
+Browse Mythic+ loot, build upgrade wishlists, set personal stat goals, and plan future dungeon targets.
 
-## Supported Content
+Insights
+Reference notes covering encounter variables, stat interactions, gameplay factors, and character performance concepts.
 
-- Mythic+ Dungeons (World of Warcraft)
+Settings
+Manage journal data, imports, exports, backups, and addon configuration.
+
+Supported Content
+Mythic+ Dungeons
+
+KeyLab focuses on your own results, helping you learn which builds, stats, and gearing choices work best for your playstyle.
 
 
