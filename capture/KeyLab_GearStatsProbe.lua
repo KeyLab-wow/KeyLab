@@ -68,6 +68,20 @@ local function CleanLine(text)
     return text
 end
 
+local function CountSocketedGems(itemLink)
+    local text = tostring(itemLink or "")
+    local _, gem1, gem2, gem3, gem4 = text:match("item:%d+:(%d*):(%d*):(%d*):(%d*):(%d*)")
+    local count = 0
+
+    for _, gemID in ipairs({ gem1, gem2, gem3, gem4 }) do
+        if tonumber(gemID) and tonumber(gemID) > 0 then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
 local function CopySlotDefs()
     local source = KeyLab.GearingDatabase and KeyLab.GearingDatabase.InventorySlots or FALLBACK_SLOTS
     local out = {}
@@ -205,12 +219,14 @@ local function ExtractPrimaryStatLines(lines)
     return ExtractStatLines(lines, defs)
 end
 
-local function AnalyzeTooltipLines(lines)
+local function AnalyzeTooltipLines(lines, itemLink)
     local enchantLines = {}
     local gemLines = {}
     local craftedLines = {}
     local tierLines = {}
-    local emptySocketCount = 0
+    local explicitEmptySocketCount = 0
+    local genericSocketCount = 0
+    local socketedGemCount = CountSocketedGems(itemLink)
 
     for _, line in ipairs(lines or {}) do
         local clean = CleanLine(line)
@@ -221,17 +237,24 @@ local function AnalyzeTooltipLines(lines)
         end
 
         local isSocketLine = lower:find("socket", 1, true) ~= nil
-        local socketLooksEmpty = isSocketLine
-            and not lower:find("socket bonus", 1, true)
-            and not lower:find("add a socket", 1, true)
-            and not lower:find("socketed", 1, true)
+        local ignoreSocketLine = lower:find("socket bonus", 1, true)
+            or lower:find("add a socket", 1, true)
+            or lower:find("socketed", 1, true)
+        local isExplicitEmptySocket = isSocketLine
+            and not ignoreSocketLine
             and (
                 lower:find("empty socket", 1, true)
-                or lower:match("^%s*[%a%s%-]+socket%s*$") ~= nil
+                or lower:match("empty[%a%s%-]*socket") ~= nil
             )
+        local socketLooksEmpty = isSocketLine
+            and not ignoreSocketLine
+            and lower:match("^%s*[%a%s%-]+socket%s*$") ~= nil
 
-        if socketLooksEmpty then
-            emptySocketCount = emptySocketCount + 1
+        if isExplicitEmptySocket then
+            explicitEmptySocketCount = explicitEmptySocketCount + 1
+            table.insert(gemLines, clean)
+        elseif socketLooksEmpty then
+            genericSocketCount = genericSocketCount + 1
             table.insert(gemLines, clean)
         elseif isSocketLine or lower:find("gem", 1, true) then
             table.insert(gemLines, clean)
@@ -259,7 +282,8 @@ local function AnalyzeTooltipLines(lines)
         enchantLines = enchantLines,
         gemsDetected = #gemLines > 0,
         gemLines = gemLines,
-        emptySocketCount = emptySocketCount,
+        emptySocketCount = explicitEmptySocketCount + math.max(0, genericSocketCount - socketedGemCount),
+        socketedGemCount = socketedGemCount,
         craftedIndicatorVisible = #craftedLines > 0,
         craftedLines = craftedLines,
         tierIndicatorVisible = #tierLines > 0,
@@ -369,7 +393,7 @@ local function CaptureGearSlot(slotDef)
     local itemID = GetItemIDFromLink(link)
     local rawLines, structuredLines = ReadInventoryTooltip(slotID, link)
     local upgrade = ParseUpgradeTrack(rawLines)
-    local tooltipAnalysis = AnalyzeTooltipLines(rawLines)
+    local tooltipAnalysis = AnalyzeTooltipLines(rawLines, link)
 
     local equipLoc, icon
     if itemID and GetItemInfoInstant then
@@ -400,6 +424,7 @@ local function CaptureGearSlot(slotDef)
         gemsDetected = tooltipAnalysis.gemsDetected,
         gemLines = tooltipAnalysis.gemLines,
         emptySocketCount = tooltipAnalysis.emptySocketCount,
+        socketedGemCount = tooltipAnalysis.socketedGemCount,
         craftedIndicatorVisible = tooltipAnalysis.craftedIndicatorVisible,
         craftedLines = tooltipAnalysis.craftedLines,
         tierIndicatorVisible = tooltipAnalysis.tierIndicatorVisible,

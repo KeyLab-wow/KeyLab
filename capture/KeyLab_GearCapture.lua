@@ -84,6 +84,20 @@ local function CleanLine(text)
     return text
 end
 
+local function CountSocketedGems(itemLink)
+    local text = tostring(itemLink or "")
+    local _, gem1, gem2, gem3, gem4 = text:match("item:%d+:(%d*):(%d*):(%d*):(%d*):(%d*)")
+    local count = 0
+
+    for _, gemID in ipairs({ gem1, gem2, gem3, gem4 }) do
+        if tonumber(gemID) and tonumber(gemID) > 0 then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
 local function GetItemIDFromLink(link)
     return tonumber(tostring(link or ""):match("item:(%d+)"))
 end
@@ -179,8 +193,10 @@ local function DetectEnchant(lines)
     return #found > 0, found
 end
 
-local function DetectSockets(lines)
-    local emptyCount = 0
+local function DetectSockets(lines, itemLink)
+    local explicitEmptyCount = 0
+    local genericSocketCount = 0
+    local socketedGemCount = CountSocketedGems(itemLink)
     local gemLines = {}
 
     for _, line in ipairs(lines or {}) do
@@ -188,23 +204,31 @@ local function DetectSockets(lines)
         local lower = text:lower()
 
         local isSocketLine = lower:find("socket", 1, true) ~= nil
-        local socketLooksEmpty = isSocketLine
-            and not lower:find("socket bonus", 1, true)
-            and not lower:find("add a socket", 1, true)
-            and not lower:find("socketed", 1, true)
+        local ignoreSocketLine = lower:find("socket bonus", 1, true)
+            or lower:find("add a socket", 1, true)
+            or lower:find("socketed", 1, true)
+        local isExplicitEmptySocket = isSocketLine
+            and not ignoreSocketLine
             and (
                 lower:find("empty socket", 1, true)
-                or lower:match("^%s*[%a%s%-]+socket%s*$") ~= nil
+                or lower:match("empty[%a%s%-]*socket") ~= nil
             )
+        local socketLooksEmpty = isSocketLine
+            and not ignoreSocketLine
+            and lower:match("^%s*[%a%s%-]+socket%s*$") ~= nil
 
-        if socketLooksEmpty then
-            emptyCount = emptyCount + 1
+        if isExplicitEmptySocket then
+            explicitEmptyCount = explicitEmptyCount + 1
+            table.insert(gemLines, text)
+        elseif socketLooksEmpty then
+            genericSocketCount = genericSocketCount + 1
             table.insert(gemLines, text)
         elseif isSocketLine or lower:find("gem", 1, true) then
             table.insert(gemLines, text)
         end
     end
 
+    local emptyCount = explicitEmptyCount + math.max(0, genericSocketCount - socketedGemCount)
     return emptyCount, gemLines
 end
 
@@ -344,6 +368,7 @@ local function EmptySlot(slotName)
         enchantDetected = false,
         enchantLines = {},
         emptySocketCount = 0,
+        socketedGemCount = 0,
         gemLines = {},
         tierEligible = DB().TierSlots and DB().TierSlots[BaseSlotName(slotName)] == true or false,
         tierIndicatorVisible = false,
@@ -388,7 +413,8 @@ local function ScanEquippedSlot(slotName)
     local tooltipText, tooltipLines = ReadTooltip(slotDef.slotID, itemLink)
     local upgrade = ParseUpgrade(tooltipLines)
     local enchantDetected, enchantLines = DetectEnchant(tooltipLines)
-    local emptySocketCount, gemLines = DetectSockets(tooltipLines)
+    local emptySocketCount, gemLines = DetectSockets(tooltipLines, itemLink)
+    local socketedGemCount = CountSocketedGems(itemLink)
     local tierDetected, tierLines = DetectTier(info.baseName, tooltipLines)
     local craftedDetected, craftedLines = DetectCrafted(tooltipLines)
     local craftQualityTier, craftQualityLine = ParseCraftQuality(tooltipLines)
@@ -426,6 +452,7 @@ local function ScanEquippedSlot(slotName)
     info.enchantDetected = enchantDetected
     info.enchantLines = enchantLines
     info.emptySocketCount = emptySocketCount
+    info.socketedGemCount = socketedGemCount
     info.gemLines = gemLines
     info.tierIndicatorVisible = tierDetected
     info.tierDetected = tierDetected

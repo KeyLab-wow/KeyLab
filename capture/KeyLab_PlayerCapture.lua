@@ -21,20 +21,34 @@ function PlayerCapture.GetSnapshot()
 
     local name = UnitName and UnitName("player") or nil
     local realm = GetRealmName and GetRealmName() or nil
-    local className = UnitClass and select(1, UnitClass("player")) or nil
+    local className, classFile, classID
+    if UnitClass then
+        className, classFile, classID = UnitClass("player")
+    end
     local specName = nil
+    local specID = nil
+    local blizzardRole = nil
 
     if GetSpecialization and GetSpecializationInfo then
         local specIndex = GetSpecialization()
         if specIndex then
-            specName = select(2, GetSpecializationInfo(specIndex))
+            specID, specName, _, _, blizzardRole = GetSpecializationInfo(specIndex)
         end
     end
 
     player.playerName = name
     player.realm = realm
     player.class = className
+    player.classFile = classFile
+    player.classID = classID
     player.spec = specName
+    player.specID = specID
+    player.blizzardRole = blizzardRole
+    player.role = KeyLab.Mapping
+        and KeyLab.Mapping.ClassSpecs
+        and KeyLab.Mapping.ClassSpecs.GetRole
+        and KeyLab.Mapping.ClassSpecs.GetRole(specID, className, specName)
+        or blizzardRole
 
     return player
 end
