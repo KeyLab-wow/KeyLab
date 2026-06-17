@@ -243,10 +243,23 @@ local function getPrimaryForPlayer(playerClass, playerSpecID, playerSpecName)
     return nil
 end
 
+local tooltipTextLookupBusy = false
+
 local function getTooltipText(item)
     if KeyLab and KeyLab.GearCapture and KeyLab.GearCapture.GetItemTooltipText then
-        return KeyLab.GearCapture.GetItemTooltipText(item)
+        if tooltipTextLookupBusy then
+            return ""
+        end
+
+        tooltipTextLookupBusy = true
+        local ok, text = pcall(KeyLab.GearCapture.GetItemTooltipText, item)
+        tooltipTextLookupBusy = false
+
+        if ok then
+            return text or ""
+        end
     end
+
     return ""
 end
 

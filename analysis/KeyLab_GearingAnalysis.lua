@@ -769,7 +769,32 @@ local function BuildDebugRows(slotStates)
     return rows
 end
 
-function Analysis.GetDashboardState()
+local dashboardStateBusy = false
+local lastDashboardState
+
+local function EmptyDashboardState(message)
+    return {
+        itemLevel = nil,
+        history = { completed = 0, highestCompleted = 0, highestTimed = 0 },
+        capability = {},
+        specID = 0,
+        statPriorityText = "Stats unavailable",
+        currentStatPriorityText = "Stats unavailable",
+        statPriorityMismatch = false,
+        currencyState = {},
+        craftWatch = {},
+        progress = { total = 0, acquired = 0 },
+        craftedCount = 0,
+        slotStates = {},
+        plansBySlot = {},
+        priorityPlans = {},
+        activities = {},
+        blockedMessage = message,
+        debugRows = {},
+    }
+end
+
+local function BuildDashboardState()
     local itemLevel = GetEquippedItemLevel()
     local history = GetRunHistory()
     local specID = GetCurrentSpecID()
@@ -881,6 +906,23 @@ function Analysis.GetDashboardState()
         blockedMessage = blockedMessage,
         debugRows = debugRows,
     }
+end
+
+function Analysis.GetDashboardState()
+    if dashboardStateBusy then
+        return lastDashboardState or EmptyDashboardState("Gear Dashboard is already refreshing. Try again in a moment.")
+    end
+
+    dashboardStateBusy = true
+    local ok, state = pcall(BuildDashboardState)
+    dashboardStateBusy = false
+
+    if ok and type(state) == "table" then
+        lastDashboardState = state
+        return state
+    end
+
+    return lastDashboardState or EmptyDashboardState("Gear Dashboard could not refresh yet. Try /reload if this repeats.")
 end
 
 function Analysis.GetTrackRank(trackName)
