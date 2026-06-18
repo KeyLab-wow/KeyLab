@@ -445,7 +445,8 @@ local function GetDungeonName(encounter)
 end
 
 local function GetKeyLevel(encounter)
-    return GetChallenge(encounter).keyLevel or encounter.keyLevel or 0
+    if EncounterData.GetKeyLevel then return EncounterData.GetKeyLevel(encounter) or 0 end
+    return tonumber(GetChallenge(encounter).keyLevel or encounter.keyLevel or 0) or 0
 end
 
 local function GetSpecName(encounter)
@@ -470,10 +471,18 @@ local function GetMetricInfoByKey(metricKey)
     end
 
     local metrics = KeyLab.Mapping and KeyLab.Mapping.Metrics
-    if type(metrics) ~= "table" then return nil end
-    for _, info in pairs(metrics) do
-        if info.keylabKey == metricKey and info.store == true then return info end
+    if type(metrics) == "table" then
+        for _, info in pairs(metrics) do
+            if info.keylabKey == metricKey and info.store == true then return info end
+        end
     end
+
+    local virtualMetrics = KeyLab.Mapping and KeyLab.Mapping.VirtualMetrics
+    local virtualInfo = type(virtualMetrics) == "table" and virtualMetrics[metricKey]
+    if virtualInfo and virtualInfo.store == true then
+        return virtualInfo
+    end
+
     return nil
 end
 
@@ -745,7 +754,7 @@ local function MetricColor(metricKey)
     if metricKey == "healingDone" or metricKey == "hps" then return CFG.colors.green end
     if metricKey == "absorbs" then return CFG.colors.blue end
     if metricKey == "interrupts" or metricKey == "dispels" then return CFG.colors.purple end
-    if metricKey == "damageTaken" or metricKey == "avoidableDamageTaken" or metricKey == "deaths" then return CFG.colors.red end
+    if metricKey == "damageTaken" or metricKey == "avoidableDamageTaken" or metricKey == "deaths" or metricKey == "groupDeaths" then return CFG.colors.red end
     return CFG.colors.blue
 end
 
@@ -1327,73 +1336,6 @@ local function BuildPerformanceTrends(parent, x, y, encounters, title, subtitle,
     return panel
 end
 
-local function CountExactUpgradeLevels(encounters, exactLevel)
-    local count = 0
-    local tracked = 0
-
-    for _, encounter in ipairs(encounters or {}) do
-        local challenge = GetChallenge(encounter)
-        local flags = encounter.flags or {}
-        local timed = challenge.timed
-        if timed == nil and encounter.result == "Timed" then
-            timed = true
-        elseif timed == nil and (encounter.result == "Untimed" or encounter.result == "Depleted") then
-            timed = false
-        end
-        if timed == nil and flags.timed ~= nil then
-            timed = flags.timed == true
-        end
-
-        local levels = tonumber(challenge.keystoneUpgradeLevels)
-        if not levels and timed == true and tonumber(challenge.durationSeconds) and tonumber(challenge.timeLimitSeconds) and tonumber(challenge.timeLimitSeconds) > 0 then
-            local remainingRatio = (tonumber(challenge.timeLimitSeconds) - tonumber(challenge.durationSeconds)) / tonumber(challenge.timeLimitSeconds)
-            if remainingRatio >= 0.40 then
-                levels = 3
-            elseif remainingRatio >= 0.20 then
-                levels = 2
-            elseif remainingRatio >= 0 then
-                levels = 1
-            end
-        end
-        if levels then
-            tracked = tracked + 1
-            if levels == exactLevel then
-                count = count + 1
-            end
-        end
-    end
-
-    return count, tracked
-end
-
-local function CountTimedRuns(encounters)
-    local count = 0
-    local total = 0
-
-    for _, encounter in ipairs(encounters or {}) do
-        local challenge = GetChallenge(encounter)
-        local flags = encounter.flags or {}
-        local timed = challenge.timed
-        if timed == nil and encounter.result == "Timed" then
-            timed = true
-        elseif timed == nil and (encounter.result == "Untimed" or encounter.result == "Depleted") then
-            timed = false
-        end
-        if timed == nil and flags.timed ~= nil then
-            timed = flags.timed == true
-        end
-
-        if timed ~= nil then
-            total = total + 1
-            if timed == true then
-                count = count + 1
-            end
-        end
-    end
-
-    return count, total
-end
-
 local function AverageRank(encounters, metricKey)
     if EncounterData.AverageRank then
         return EncounterData.AverageRank(encounters, metricKey)
@@ -1433,17 +1375,74 @@ end
 
 local function BuildRunPatternPanel(parent, x, y, encounters)
     local panel = MakePanel(parent, x, y, 908, 124, "Run Pattern", CFG.colors.cardBorder, CFG.colors.blue)
-    AddLine(panel, "Simple timing and lineup patterns from the selected saved runs.", 14, -32, 720, CFG.colors.muted, "GameFontDisableSmall")
+    AddLine(panel, "Simple chest, group rank, and lineup patterns from the selected saved runs.", 14, -32, 720, CFG.colors.muted, "GameFontDisableSmall")
 
-    local twoChest, twoChestTracked = CountExactUpgradeLevels(encounters, 2)
-    local threeChest, threeChestTracked = CountExactUpgradeLevels(encounters, 3)
-    local timed, total = CountTimedRuns(encounters)
+    local twoChest, twoChestTracked = EncounterData.CountExactUpgradeLevels(encounters, 2)
+    local threeChest, threeChestTracked = EncounterData.CountExactUpgradeLevels(encounters, 3)
 
     BuildPatternCard(panel, 14, -54, "++ Runs", twoChestTracked > 0 and tostring(twoChest) or "No data", twoChestTracked > 0 and "2-chested" or "chest data", CFG.colors.green)
     BuildPatternCard(panel, 194, -54, "+++ Runs", threeChestTracked > 0 and tostring(threeChest) or "No data", threeChestTracked > 0 and "3-chested" or "chest data", CFG.colors.purple)
-    BuildPatternCard(panel, 374, -54, "Timed Runs", total > 0 and (tostring(timed) .. " / " .. tostring(total)) or "No data", total > 0 and "saved" or "timer data", CFG.colors.green)
+    BuildPatternCard(panel, 374, -54, "Avoidable Damage", FormatAverageRank(encounters, "avoidableDamageTaken"), "lower is better", CFG.colors.red)
     BuildPatternCard(panel, 554, -54, "Avg DPS", FormatAverageRank(encounters, "dps"), "rank", CFG.colors.orange)
     BuildPatternCard(panel, 734, -54, "Avg HPS", FormatAverageRank(encounters, "hps"), "rank", CFG.colors.green)
+
+    return panel
+end
+
+local function GetRoleFocusProfile(encounters)
+    local mapper = KeyLab.Mapping and KeyLab.Mapping.ClassSpecs
+    if not (mapper and mapper.GetRoleFocusProfile) then return nil end
+
+    for i = #(encounters or {}), 1, -1 do
+        local player = GetPlayer(encounters[i]) or {}
+        local profile = mapper.GetRoleFocusProfile(player.specID, player.class or player.className, player.spec or player.specName)
+        if profile then
+            return profile
+        end
+    end
+
+    return nil
+end
+
+local function RoleMetricKey(metric)
+    if type(metric) == "table" then
+        return metric.key
+    end
+    return metric
+end
+
+local function ApplyRoleMetricLabel(profile, metricKey, trend)
+    if not trend then return trend end
+
+    local labels = profile and profile.metricLabels
+    if type(labels) == "table" and labels[metricKey] then
+        trend.label = labels[metricKey]
+    end
+
+    return trend
+end
+
+local function BuildRoleFocusPanel(parent, x, y, encounters)
+    local profile = GetRoleFocusProfile(encounters)
+    if not profile then return nil end
+
+    local metricKeys = {}
+    for _, metric in ipairs(profile.metrics or {}) do
+        local key = RoleMetricKey(metric)
+        if key then
+            table.insert(metricKeys, key)
+        end
+    end
+    if #metricKeys == 0 then return nil end
+
+    local panel = MakePanel(parent, x, y, 908, 124, profile.trendTitle or "Role Focus", CFG.colors.cardBorder, CFG.colors.purple)
+    AddLine(panel, profile.trendSubtitle or "Role-specific signals from the selected saved runs.", 14, -32, 760, CFG.colors.muted, "GameFontDisableSmall")
+
+    for i, key in ipairs(metricKeys) do
+        local tx = 14 + ((i - 1) * 296)
+        local trend = ApplyRoleMetricLabel(profile, key, BuildMetricDirectionFromList(encounters, key))
+        BuildTrendTile(panel, tx, -44, trend, "Recent avg")
+    end
 
     return panel
 end
@@ -1572,7 +1571,8 @@ function Trends:RefreshContent()
     if self.selectedDungeon and usableCount < 2 then
         BuildMessagePanel(self.content, 0, 0, "Performance Direction", "Run this dungeon more to unlock trends.", CFG.colors.warning)
         BuildRunPatternPanel(self.content, 0, -112, filtered)
-        self.content:SetHeight(260)
+        BuildRoleFocusPanel(self.content, 0, -250, filtered)
+        self.content:SetHeight(402)
         return
     end
 
@@ -1587,7 +1587,8 @@ function Trends:RefreshContent()
             "Recent avg"
         )
         BuildRunPatternPanel(self.content, 0, -224, filtered)
-        self.content:SetHeight(372)
+        BuildRoleFocusPanel(self.content, 0, -362, filtered)
+        self.content:SetHeight(510)
         return
     end
 
@@ -1602,8 +1603,9 @@ function Trends:RefreshContent()
     )
 
     BuildRunPatternPanel(self.content, 0, -224, filtered)
+    BuildRoleFocusPanel(self.content, 0, -362, filtered)
 
-    self.content:SetHeight(372)
+    self.content:SetHeight(510)
 end
 
 function Trends:Refresh()

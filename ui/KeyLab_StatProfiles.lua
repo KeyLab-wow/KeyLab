@@ -556,11 +556,15 @@ local function GetTalentString(encounter)
 end
 
 local function GetResultText(encounter)
-    local flags = encounter and encounter.flags or {}
-    if flags.interrupted == true or (encounter and encounter.interrupted == true) then
-        return "Interrupted"
+    return EncounterData.GetResultText(encounter)
+end
+
+local function GetDurationSeconds(encounter)
+    if EncounterData.GetDurationSeconds then
+        return EncounterData.GetDurationSeconds(encounter)
     end
-    return encounter.result or "Completed"
+    local challenge = GetChallenge(encounter)
+    return challenge and challenge.durationSeconds
 end
 
 local function GetMetricValue(encounter, metricKey)
@@ -964,8 +968,9 @@ local function BuildDetails(panel, profile)
     yRun = AddDetailRow(panel, "Key Level", "+" .. tostring(GetKeyLevel(encounter)), CFG.details.colRunX, yRun, CFG.details.colRunW)
     yRun = AddDetailRow(panel, "Result", GetResultText(encounter), CFG.details.colRunX, yRun, CFG.details.colRunW)
 
-    if challenge.durationSeconds then
-        yRun = AddDetailRow(panel, "Duration", FormatDuration(challenge.durationSeconds), CFG.details.colRunX, yRun, CFG.details.colRunW)
+    local durationSeconds = GetDurationSeconds(encounter)
+    if durationSeconds then
+        yRun = AddDetailRow(panel, "Duration", FormatDuration(durationSeconds), CFG.details.colRunX, yRun, CFG.details.colRunW)
     end
 
     -- Stats

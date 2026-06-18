@@ -192,6 +192,10 @@ local function EncounterMatchesCurrentCharacter(encounter)
 end
 
 local function IsCompletedEncounter(encounter)
+    if EncounterData.IsCompletedEncounter then
+        return EncounterData.IsCompletedEncounter(encounter)
+    end
+
     if type(encounter) ~= "table" then return false end
 
     local flags = encounter.flags
@@ -216,7 +220,7 @@ local function IsCompletedEncounter(encounter)
         return true
     end
 
-    if type(encounter.challenge) == "table" or type(encounter.metrics) == "table" then
+    if type(encounter.metrics) == "table" and next(encounter.metrics) ~= nil then
         return true
     end
 
@@ -368,6 +372,24 @@ function HOME:Create(parent)
     latestHint:SetSize(width - 28, 18)
 
     y = y - 106 - gap
+
+    local releaseNote = MakePanel(frame, CFG.x, y, width, 76, false)
+
+    local releaseTitle = MakeText(releaseNote, "Release Note", 14, COLORS.title, "LEFT")
+    releaseTitle:SetPoint("TOPLEFT", releaseNote, "TOPLEFT", 14, -12)
+    releaseTitle:SetSize(160, 18)
+
+    local releaseBody = MakeText(
+        releaseNote,
+        "KeyLab now captures more official Mythic+ timing and role-focused pull data. Older saved runs still remain in your journal, but some new fields may show after you complete fresh runs with this version.",
+        12,
+        COLORS.muted,
+        "LEFT"
+    )
+    releaseBody:SetPoint("TOPLEFT", releaseTitle, "BOTTOMLEFT", 0, -8)
+    releaseBody:SetSize(width - 28, 38)
+
+    y = y - 76 - gap
 
     local required = MakePanel(frame, CFG.x, y, halfW, 170, true)
 

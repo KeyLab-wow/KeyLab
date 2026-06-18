@@ -27,6 +27,11 @@ local COLORS = Theme.colors or {
     divider = {0.440, 0.580, 0.780, 0.32},
 }
 
+local GRAPH_COLORS = {
+    avoidable = {0.930, 0.360, 0.420, 0.95},
+    death = {1.000, 0.240, 0.260, 1.00},
+}
+
 local function Analysis()
     return KeyLab.LastRunAnalysis or {}
 end
@@ -156,7 +161,8 @@ local function MetricColor(metricKey)
     if metricKey == "dps" or metricKey == "damageDone" then return COLORS.orange end
     if metricKey == "hps" or metricKey == "healingDone" then return COLORS.green end
     if metricKey == "interrupts" or metricKey == "dispels" then return COLORS.purple end
-    if metricKey == "avoidableDamageTaken" or metricKey == "deaths" then return COLORS.red end
+    if metricKey == "avoidableDamageTaken" then return GRAPH_COLORS.avoidable end
+    if metricKey == "deaths" or metricKey == "groupDeaths" then return GRAPH_COLORS.death end
     return COLORS.blue
 end
 
@@ -226,15 +232,18 @@ local function BuildSummary(parent, state)
     AddVerticalDivider(card, 226, -36, 76)
     AddValue(card, "Key", "+" .. tostring(state.keyLevel or 0), 238, -40, 52, COLORS.purple)
     AddVerticalDivider(card, 300, -36, 76)
-    AddValue(card, "Result", state.resultText or "Completed", 310, -40, 84, resultColor)
-    AddVerticalDivider(card, 404, -36, 76)
-    AddValue(card, "Chest", state.chestText or "-", 410, -40, 108, chestColor)
+    AddValue(card, "Result", state.resultText or "Completed", 310, -40, 112, resultColor)
+    AddVerticalDivider(card, 430, -36, 76)
+    AddValue(card, "Chest", state.chestText or "-", 438, -40, 80, chestColor)
     AddVerticalDivider(card, 524, -36, 76)
-    AddValue(card, "Duration", FormatDuration(state.durationSeconds), 534, -40, 88, COLORS.text)
+    local timeDelta = tonumber(state.timeDeltaSeconds)
+    local overTimer = timeDelta and timeDelta < 0
+    local durationColor = overTimer and COLORS.red or COLORS.text
+    AddValue(card, "Duration", FormatDuration(state.durationSeconds), 534, -40, 88, durationColor)
     AddVerticalDivider(card, 630, -36, 76)
 
     local deltaLabel = state.timed == false and "Overtime" or "Remaining"
-    local deltaColor = (tonumber(state.timeDeltaSeconds) or 0) >= 0 and COLORS.green or COLORS.orange
+    local deltaColor = (state.timed == false or overTimer) and COLORS.red or COLORS.green
     AddValue(card, deltaLabel, FormatDelta(state.timeDeltaSeconds), 640, -40, 88, deltaColor)
     AddVerticalDivider(card, 738, -36, 76)
     AddValue(card, "Saved", state.timestamp and FormatSummaryDateTime(state.timestamp) or tostring(state.dateText or "-"), 746, -40, 144, COLORS.muted)
@@ -274,7 +283,7 @@ local function BuildTotals(parent, state)
         { label = "HPS", key = "hps" },
         { label = "Damage", key = "damageDone" },
         { label = "Healing", key = "healingDone" },
-        { label = "Avoidable", key = "avoidableDamageTaken" },
+        { label = "Avoidable Damage", key = "avoidableDamageTaken" },
         { label = "Deaths", key = "deaths" },
     }
 
@@ -293,10 +302,11 @@ local GRAPH_METRICS = {
     damageDone = { label = "Damage", color = COLORS.orange },
     healingDone = { label = "Healing", color = COLORS.green },
     damageTaken = { label = "Damage Taken", color = COLORS.orange },
-    avoidableDamageTaken = { label = "Avoidable", color = COLORS.red },
+    avoidableDamageTaken = { label = "Avoidable Damage", color = GRAPH_COLORS.avoidable },
     interrupts = { label = "Interrupts", color = COLORS.purple },
     dispels = { label = "Dispels", color = COLORS.purple },
-    deaths = { label = "Deaths", color = COLORS.red },
+    deaths = { label = "Deaths", color = GRAPH_COLORS.death },
+    groupDeaths = { label = "Group Deaths", color = GRAPH_COLORS.death },
 }
 
 local TOOLTIP_METRICS = {
@@ -309,6 +319,7 @@ local TOOLTIP_METRICS = {
     "interrupts",
     "dispels",
     "deaths",
+    "groupDeaths",
 }
 
 local function ShortText(value, maxLength)
@@ -355,6 +366,123 @@ local function GetGraphProfile(state)
         subtitle = "Damage performance for each captured combat session in this run.",
         metrics = { "dps" },
     }
+end
+
+local function GetRoleFocusProfile(state)
+    local player = state and state.player or {}
+    local mapper = KeyLab.Mapping and KeyLab.Mapping.ClassSpecs
+
+    if mapper and mapper.GetRoleFocusProfile then
+        return mapper.GetRoleFocusProfile(player.specID, player.class or player.className, player.spec or player.specName)
+    end
+
+    local role = player.role or player.blizzardRole
+    if role == "Healer" or role == "HEALER" then
+        return {
+            role = "Healer",
+            title = "Group Survival by Pull",
+            subtitle = "Healing done and group deaths for each captured combat session.",
+            metrics = { "healingDone", "groupDeaths" },
+            scale = "perMetric",
+        }
+    end
+    if role == "Tank" or role == "TANK" then
+        return {
+            role = "Tank",
+            title = "Pull Stability by Pull",
+            subtitle = "Damage taken, avoidable damage, and group deaths for each captured combat session.",
+            metrics = { "damageTaken", "avoidableDamageTaken", "groupDeaths" },
+            scale = "perMetric",
+        }
+    end
+
+    return {
+        role = "Damage",
+        title = "Survival Pressure by Pull",
+        subtitle = "Avoidable damage, player deaths, and healing done for each captured combat session.",
+        metrics = { "avoidableDamageTaken", "deaths", "healingDone" },
+        scale = "perMetric",
+    }
+end
+
+local function MetricKey(metric)
+    if type(metric) == "table" then
+        return metric.key
+    end
+    return metric
+end
+
+local function MetricLabel(profile, metricKey)
+    local labels = profile and profile.metricLabels
+    if type(labels) == "table" and labels[metricKey] then
+        return labels[metricKey]
+    end
+    local metric = GRAPH_METRICS[metricKey]
+    return metric and metric.label or metricKey
+end
+
+local function GraphLegendLabel(profile, metricKey)
+    if metricKey == "avoidableDamageTaken" then
+        return "Avoidable Dmg"
+    end
+    return MetricLabel(profile, metricKey)
+end
+
+local function MetricLowerIsBetter(metricKey)
+    local info = EncounterData.GetMetricInfoByKey and EncounterData.GetMetricInfoByKey(metricKey)
+    return info and info.higherIsBetter == false
+end
+
+local function MetricKeyList(metrics)
+    local list = {}
+    for _, metric in ipairs(metrics or {}) do
+        local key = MetricKey(metric)
+        if key then
+            table.insert(list, key)
+        end
+    end
+    return list
+end
+
+local function ListHasValue(list, value)
+    for _, item in ipairs(list or {}) do
+        if item == value then return true end
+    end
+    return false
+end
+
+local function IsMarkerMetric(metricKey)
+    return metricKey == "deaths" or metricKey == "groupDeaths"
+end
+
+local function GetGraphMetricLists(profile)
+    local rawMetricKeys = MetricKeyList(profile and profile.metrics or { "dps" })
+    local markerMetricKeys = MetricKeyList(profile and profile.markerMetrics or {})
+    local plottedMetricKeys = {}
+    local allMetricKeys = {}
+
+    for _, metricKey in ipairs(rawMetricKeys) do
+        if IsMarkerMetric(metricKey) then
+            if not ListHasValue(markerMetricKeys, metricKey) then
+                table.insert(markerMetricKeys, metricKey)
+            end
+        else
+            table.insert(plottedMetricKeys, metricKey)
+        end
+    end
+
+    for _, metricKey in ipairs(plottedMetricKeys) do
+        if not ListHasValue(allMetricKeys, metricKey) then
+            table.insert(allMetricKeys, metricKey)
+        end
+    end
+    for _, metricKey in ipairs(markerMetricKeys) do
+        if not ListHasValue(allMetricKeys, metricKey) then
+            table.insert(allMetricKeys, metricKey)
+        end
+    end
+
+    return plottedMetricKeys, markerMetricKeys, allMetricKeys
 end
 
 local function GetCombatSessions(encounter)
@@ -453,6 +581,21 @@ local function DrawDot(parent, x, y, color)
     return dot
 end
 
+local function MarkerTextForSession(session, markerMetricKeys)
+    local totalDeaths = 0
+
+    for _, metricKey in ipairs(markerMetricKeys or {}) do
+        local value = SessionMetric(session, metricKey)
+        if value and value > 0 then
+            totalDeaths = totalDeaths + math.floor(value + 0.5)
+        end
+    end
+
+    if totalDeaths <= 0 then return nil end
+    if totalDeaths == 1 then return "D" end
+    return "D x" .. tostring(totalDeaths)
+end
+
 local function IsBossSession(session)
     if type(session) ~= "table" then return false end
     if session.isBossSession ~= nil then return session.isBossSession == true end
@@ -525,10 +668,11 @@ end
 local function BestSessionForMetric(sessions, metricKey)
     local bestSession = nil
     local bestValue = nil
+    local lowerIsBetter = MetricLowerIsBetter(metricKey)
 
     for _, session in ipairs(sessions or {}) do
         local value = SessionMetric(session, metricKey)
-        if value ~= nil and (bestValue == nil or value > bestValue) then
+        if value ~= nil and (bestValue == nil or (lowerIsBetter and value < bestValue) or ((not lowerIsBetter) and value > bestValue)) then
             bestValue = value
             bestSession = session
         end
@@ -537,11 +681,13 @@ local function BestSessionForMetric(sessions, metricKey)
     return bestSession, bestValue
 end
 
-local function BuildPullGraph(parent, state)
-    local profile = GetGraphProfile(state)
-    local card = MakeCard(parent, 0, -330, 908, 274, profile.title or "Pull Timeline", COLORS.blue)
-    local metricKeys = profile.metrics or { "dps" }
-    local sessions = GetGraphSessions(state and state.encounter, metricKeys)
+local function BuildPullGraph(parent, state, profile, yOffset)
+    profile = profile or GetGraphProfile(state)
+    local card = MakeCard(parent, 0, yOffset or -330, 908, 306, profile.title or "Pull Timeline", COLORS.blue)
+    local metricKeys, markerMetricKeys, allMetricKeys = GetGraphMetricLists(profile)
+    local sessions = GetGraphSessions(state and state.encounter, allMetricKeys)
+    local perMetricScale = profile.scale == "perMetric"
+    local drawStems = profile.showStems ~= false and #metricKeys <= 1
 
     AddLine(card, profile.subtitle or "Performance for each captured combat session in this run.", 14, -34, 700, COLORS.muted, "GameFontDisableSmall")
 
@@ -556,13 +702,19 @@ local function BuildPullGraph(parent, state)
     local graphWidth = 708
     local graphHeight = 142
     local graphBottomY = graphTopY - graphHeight
+    local markerY = graphBottomY - 30
+    local footerY = graphBottomY - 62
     local maxValue = 0
+    local maxByMetric = {}
 
     for _, session in ipairs(sessions) do
         for _, metricKey in ipairs(metricKeys) do
             local value = SessionMetric(session, metricKey)
             if value and value > maxValue then
                 maxValue = value
+            end
+            if value and value > (maxByMetric[metricKey] or 0) then
+                maxByMetric[metricKey] = value
             end
         end
     end
@@ -576,13 +728,42 @@ local function BuildPullGraph(parent, state)
     DrawLine(card, graphX, graphTopY, graphX + graphWidth, graphTopY, COLORS.divider, 1)
     DrawLine(card, graphX, graphBottomY + (graphHeight / 2), graphX + graphWidth, graphBottomY + (graphHeight / 2), COLORS.divider, 1)
 
-    AddLine(card, FormatNumber(maxValue), 10, graphTopY + 6, 42, COLORS.muted, "GameFontDisableSmall")
-    AddLine(card, FormatNumber(maxValue / 2), 10, graphBottomY + (graphHeight / 2) + 6, 42, COLORS.muted, "GameFontDisableSmall")
+    if perMetricScale then
+        AddLine(card, "High", 10, graphTopY + 6, 42, COLORS.muted, "GameFontDisableSmall")
+        AddLine(card, "Mid", 10, graphBottomY + (graphHeight / 2) + 6, 42, COLORS.muted, "GameFontDisableSmall")
+    else
+        AddLine(card, FormatNumber(maxValue), 10, graphTopY + 6, 42, COLORS.muted, "GameFontDisableSmall")
+        AddLine(card, FormatNumber(maxValue / 2), 10, graphBottomY + (graphHeight / 2) + 6, 42, COLORS.muted, "GameFontDisableSmall")
+    end
     AddLine(card, "0", 10, graphBottomY + 6, 42, COLORS.muted, "GameFontDisableSmall")
 
     local pullLabelSize = #sessions > 22 and 8 or 9
     local pullLabelWidth = #sessions > 22 and 18 or 22
     local pullHitWidth = #sessions <= 1 and 34 or math.max(18, math.min(54, (graphWidth / math.max(1, #sessions - 1)) * 0.58))
+
+    for index, session in ipairs(sessions) do
+        local x = graphX + (#sessions == 1 and graphWidth / 2 or ((index - 1) / (#sessions - 1)) * graphWidth)
+        AddPullHoverTarget(card, x, graphTopY, graphBottomY, pullHitWidth, session, index)
+
+        local label = MakeText(card, tostring(index), "GameFontDisableSmall", pullLabelSize, COLORS.muted, "CENTER")
+        label:SetPoint("TOP", card, "TOPLEFT", x, graphBottomY - 10)
+        label:SetSize(pullLabelWidth, 12)
+
+        local deathMarkerText = MarkerTextForSession(session, markerMetricKeys)
+        if IsBossSession(session) then
+            local bossMarker = MakeText(card, "B", "GameFontNormalSmall", 9, COLORS.gold, "CENTER")
+            local bossX = deathMarkerText and (x - 12) or x
+            bossMarker:SetPoint("TOP", card, "TOPLEFT", bossX, markerY)
+            bossMarker:SetSize(18, 12)
+        end
+
+        if deathMarkerText then
+            local deathMarker = MakeText(card, deathMarkerText, "GameFontNormalSmall", 9, GRAPH_COLORS.death, "CENTER")
+            local deathX = IsBossSession(session) and (x + 14) or x
+            deathMarker:SetPoint("TOP", card, "TOPLEFT", deathX, markerY)
+            deathMarker:SetSize(38, 12)
+        end
+    end
 
     for metricIndex, metricKey in ipairs(metricKeys) do
         local metric = GRAPH_METRICS[metricKey] or { label = metricKey, color = MetricColor(metricKey) }
@@ -594,8 +775,12 @@ local function BuildPullGraph(parent, state)
             local value = SessionMetric(session, metricKey)
 
             if value ~= nil then
-                local y = graphBottomY + ((value / maxValue) * graphHeight)
-                if metricIndex == 1 then
+                local scaleMax = perMetricScale and (maxByMetric[metricKey] or 0) or maxValue
+                if scaleMax <= 0 then
+                    scaleMax = 1
+                end
+                local y = graphBottomY + ((value / scaleMax) * graphHeight)
+                if metricIndex == 1 and drawStems then
                     DrawLine(card, x, graphBottomY, x, y, stemColor, 2)
                 end
                 if lastX and lastY then
@@ -606,40 +791,36 @@ local function BuildPullGraph(parent, state)
                 end
                 lastX, lastY = x, y
             end
-
-            if metricIndex == 1 then
-                AddPullHoverTarget(card, x, graphTopY, graphBottomY, pullHitWidth, session, index)
-
-                local label = MakeText(card, tostring(index), "GameFontDisableSmall", pullLabelSize, COLORS.muted, "CENTER")
-                label:SetPoint("TOP", card, "TOPLEFT", x, graphBottomY - 10)
-                label:SetSize(pullLabelWidth, 12)
-
-                if IsBossSession(session) then
-                    local bossMarker = MakeText(card, "B", "GameFontNormalSmall", 9, COLORS.gold, "CENTER")
-                    bossMarker:SetPoint("TOP", card, "TOPLEFT", x, graphBottomY - 25)
-                    bossMarker:SetSize(18, 12)
-                end
-            end
         end
     end
 
-    local legendX = 786
+    local legendX = 776
     for index, metricKey in ipairs(metricKeys) do
         local metric = GRAPH_METRICS[metricKey] or { label = metricKey, color = MetricColor(metricKey) }
         local y = -72 - ((index - 1) * 70)
         local bestSession, bestValue = BestSessionForMetric(sessions, metricKey)
+        local bestLabel = MetricLowerIsBetter(metricKey) and "Lowest: " or "Best: "
 
         DrawLine(card, legendX, y - 4, legendX + 22, y - 4, metric.color, 2)
-        AddLine(card, metric.label, legendX + 30, y - 12, 100, COLORS.gold, "GameFontNormal")
+        AddLine(card, GraphLegendLabel(profile, metricKey), legendX + 30, y - 12, 92, COLORS.gold, "GameFontNormal")
 
         if bestValue then
-            AddLine(card, "Best: " .. FormatMetric(metricKey, bestValue), legendX, y - 34, 110, metric.color, "GameFontDisableSmall")
+            AddLine(card, bestLabel .. FormatMetric(metricKey, bestValue), legendX, y - 34, 110, metric.color, "GameFontDisableSmall")
             AddLine(card, ShortText(bestSession and (bestSession.sessionName or bestSession.name), 18), legendX, y - 52, 110, COLORS.muted, "GameFontDisableSmall")
         end
     end
+    for markerIndex, metricKey in ipairs(markerMetricKeys) do
+        local y = -72 - ((#metricKeys + markerIndex - 1) * 70)
+        local markerLabel = MetricLabel(profile, metricKey)
+        AddLine(card, "D", legendX + 6, y - 12, 18, GRAPH_COLORS.death, "GameFontNormal")
+        AddLine(card, markerLabel, legendX + 30, y - 12, 100, COLORS.gold, "GameFontNormal")
+    end
 
-    AddLine(card, "Pull #", graphX, graphBottomY - 42, 80, COLORS.muted, "GameFontDisableSmall")
-    AddLine(card, "B = boss", graphX + 72, graphBottomY - 42, 90, COLORS.gold, "GameFontDisableSmall")
+    AddLine(card, "Pull #", graphX, footerY, 80, COLORS.muted, "GameFontDisableSmall")
+    AddLine(card, "B = boss", graphX + 72, footerY, 90, COLORS.gold, "GameFontDisableSmall")
+    if #markerMetricKeys > 0 then
+        AddLine(card, "D = death", graphX + 150, footerY, 90, GRAPH_COLORS.death, "GameFontDisableSmall")
+    end
 
     return card
 end
@@ -659,8 +840,9 @@ function LastRun:Refresh()
     BuildSummary(self.content, state)
     BuildRanks(self.content, state)
     BuildTotals(self.content, state)
-    BuildPullGraph(self.content, state)
-    self.content:SetHeight(640)
+    BuildPullGraph(self.content, state, GetGraphProfile(state), -330)
+    BuildPullGraph(self.content, state, GetRoleFocusProfile(state), -660)
+    self.content:SetHeight(1010)
 end
 
 function LastRun:Create(parent)
@@ -673,7 +855,7 @@ function LastRun:Create(parent)
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -18)
     title:SetSize(900, 24)
 
-    local subtitle = MakeText(frame, "Your newest Mythic+ recap: timer result, group lineup, run totals, and pull timeline.", "GameFontHighlightSmall", nil, COLORS.muted)
+    local subtitle = MakeText(frame, "Your newest Mythic+ recap: timer result, group lineup, run totals, pull timeline, and role focus.", "GameFontHighlightSmall", nil, COLORS.muted)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     subtitle:SetSize(900, 20)
 
@@ -682,7 +864,7 @@ function LastRun:Create(parent)
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
 
     local content = CreateFrame("Frame", nil, scrollFrame)
-    content:SetSize(908, 640)
+    content:SetSize(908, 1010)
     scrollFrame:SetScrollChild(content)
 
     self.scrollFrame = scrollFrame
