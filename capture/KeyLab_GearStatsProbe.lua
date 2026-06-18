@@ -27,7 +27,7 @@ local SECONDARY_STATS = {
 
 local TOOLTIP_TRACKS = { "Myth", "Hero", "Champion", "Veteran", "Adventurer" }
 
-local FALLBACK_SLOTS = {
+local DEFAULT_SLOTS = {
     { name = "Head", slotID = 1 },
     { name = "Neck", slotID = 2 },
     { name = "Shoulders", slotID = 3 },
@@ -83,7 +83,7 @@ local function CountSocketedGems(itemLink)
 end
 
 local function CopySlotDefs()
-    local source = KeyLab.GearingDatabase and KeyLab.GearingDatabase.InventorySlots or FALLBACK_SLOTS
+    local source = KeyLab.GearingDatabase and KeyLab.GearingDatabase.InventorySlots or DEFAULT_SLOTS
     local out = {}
     for _, slot in ipairs(source or {}) do
         table.insert(out, {

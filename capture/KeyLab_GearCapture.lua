@@ -337,14 +337,6 @@ local function GetItemEquipLoc(itemID)
     return equipLoc
 end
 
-local function GetTrackFallback(itemLevel)
-    if DB().GetTrackByItemLevel then
-        local track = DB().GetTrackByItemLevel(itemLevel)
-        return track and track.name or nil
-    end
-    return nil
-end
-
 local function EmptySlot(slotName)
     local slotDef = GetSlotDefs()[slotName]
     return {
@@ -421,7 +413,7 @@ local function ScanEquippedSlot(slotName)
     local embellishedDetected, embellishmentLine = DetectEmbellishment(tooltipLines)
     local voidforgedDetected, voidforgeLine = DetectVoidforged(tooltipLines)
     local equipLoc = GetItemEquipLoc(itemID)
-    local trackName = upgrade.track or GetTrackFallback(GetInventoryItemLevel(itemLink))
+    local trackName = upgrade.track
     local radianceCraftedDetected = tooltipText:lower():find("radiance crafted", 1, true) ~= nil
     local craftedIndicatorVisible = craftedDetected == true or radianceCraftedDetected == true or craftQualityTier ~= nil
     local voidforgeRules = DB().Voidforge or {}
@@ -674,6 +666,11 @@ local function EncounterMatchesCurrentCharacter(encounter)
 end
 
 local function IsCompletedEncounter(encounter)
+    local encounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData
+    if encounterData and encounterData.IsCompletedEncounter then
+        return encounterData.IsCompletedEncounter(encounter)
+    end
+
     if type(encounter) ~= "table" then return false end
     local flags = encounter.flags or {}
     if flags.interrupted == true or encounter.interrupted == true then return false end
@@ -681,13 +678,17 @@ local function IsCompletedEncounter(encounter)
     if encounter.completed == true or encounter.isComplete == true then return true end
     if encounter.result == "Completed" or encounter.result == "Complete" then return true end
     if encounter.result == "Timed" or encounter.result == "Untimed" or encounter.result == "Depleted" then return true end
-    return type(encounter.challenge) == "table" or type(encounter.metrics) == "table"
+    return type(encounter.metrics) == "table" and next(encounter.metrics) ~= nil
 end
 
 local function IsTimedEncounter(encounter)
+    local encounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData
+    if encounterData and encounterData.GetTimed then
+        return encounterData.GetTimed(encounter) == true
+    end
+
     local challenge = encounter and encounter.challenge or {}
-    local flags = encounter and encounter.flags or {}
-    return encounter and (encounter.result == "Timed" or challenge.timed == true or flags.timed == true)
+    return encounter and challenge.timed == true
 end
 
 local function GetEncounterKeyLevel(encounter)

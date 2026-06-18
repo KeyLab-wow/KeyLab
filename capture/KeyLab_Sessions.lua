@@ -19,7 +19,7 @@ Purpose:
 - Does NOT format UI text.
 ]]
 
-local CAPTURE_VERSION = "0.1.4"
+local CAPTURE_VERSION = "0.1.5"
 
 local function SafeCall(func, ...)
     if type(func) ~= "function" then
@@ -133,6 +133,10 @@ end
 function Sessions.GetCompletionContext()
     local context = Sessions.GetChallengeContext()
 
+    if KeyLab.Capture and KeyLab.Capture.ChallengeTimer and KeyLab.Capture.ChallengeTimer.Complete then
+        return KeyLab.Capture.ChallengeTimer.Complete(context)
+    end
+
     if C_ChallengeMode and C_ChallengeMode.GetCompletionInfo then
         local ok, mapID, level, duration, onTime, keystoneUpgradeLevels = SafeCall(C_ChallengeMode.GetCompletionInfo)
         if ok then
@@ -151,10 +155,6 @@ function Sessions.GetCompletionContext()
     end
 
     AddMapTimerInfo(context)
-
-    if context.timed == nil and context.durationSeconds and context.timeLimitSeconds then
-        context.timed = context.durationSeconds <= context.timeLimitSeconds
-    end
 
     if context.timed ~= nil then
         context.result = context.timed and "Timed" or "Untimed"

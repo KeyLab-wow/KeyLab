@@ -6,6 +6,7 @@ KeyLab.Capture = KeyLab.Capture or {}
 
 local Capture = KeyLab.Capture
 local Sessions = KeyLab.Capture.Sessions
+local ChallengeTimer = KeyLab.Capture.ChallengeTimer
 local DamageMeter = KeyLab.Capture.DamageMeter
 local PlayerCapture = KeyLab.Capture.Player
 local StatCapture = KeyLab.Capture.Stats
@@ -34,6 +35,68 @@ local function ResetCaptureDB()
     return Sessions.ResetCaptureDB()
 end
 
+local function SumPullDeathMetrics(combatSessions)
+    local localDeaths = 0
+    local groupDeaths = 0
+    local hasLocalDeaths = false
+    local hasGroupDeaths = false
+    local deathPullCount = 0
+
+    if type(combatSessions) ~= "table" then
+        return localDeaths, groupDeaths, hasLocalDeaths, hasGroupDeaths, deathPullCount
+    end
+
+    for _, session in ipairs(combatSessions) do
+        if type(session) == "table"
+            and session.isAggregateSession ~= true
+            and type(session.metrics) == "table"
+        then
+            local deaths = tonumber(session.metrics.deaths)
+            local sessionGroupDeaths = tonumber(session.metrics.groupDeaths)
+
+            if deaths ~= nil then
+                localDeaths = localDeaths + deaths
+                hasLocalDeaths = true
+            end
+
+            if sessionGroupDeaths ~= nil then
+                groupDeaths = groupDeaths + sessionGroupDeaths
+                hasGroupDeaths = true
+            end
+
+            if (deaths and deaths > 0) or (sessionGroupDeaths and sessionGroupDeaths > 0) then
+                deathPullCount = deathPullCount + 1
+            end
+        end
+    end
+
+    return localDeaths, groupDeaths, hasLocalDeaths, hasGroupDeaths, deathPullCount
+end
+
+local function BuildDeathAudit(officialGroupDeaths, aggregateLocalDeaths, aggregateGroupDeaths, pullDeaths, pullGroupDeaths, hasPullDeaths, hasPullGroupDeaths)
+    local audit = {
+        officialGroupDeaths = officialGroupDeaths,
+        aggregateLocalDeaths = aggregateLocalDeaths,
+        aggregateGroupDeaths = aggregateGroupDeaths,
+        pullSessionLocalDeaths = hasPullDeaths and pullDeaths or nil,
+        pullSessionGroupDeaths = hasPullGroupDeaths and pullGroupDeaths or nil,
+        localDeathSource = hasPullDeaths and "pullSessions" or (aggregateLocalDeaths ~= nil and "aggregateSession" or nil),
+        groupDeathSource = officialGroupDeaths ~= nil and "challengeModeDeathCount"
+            or (hasPullGroupDeaths and "pullSessions")
+            or (aggregateGroupDeaths ~= nil and "aggregateSession" or nil),
+    }
+
+    if officialGroupDeaths ~= nil and hasPullGroupDeaths then
+        audit.officialMatchesPullSessions = officialGroupDeaths == pullGroupDeaths
+    end
+
+    if officialGroupDeaths ~= nil and aggregateGroupDeaths ~= nil then
+        audit.officialMatchesAggregate = officialGroupDeaths == aggregateGroupDeaths
+    end
+
+    return audit
+end
+
 local function BuildEncounterRecord()
     local captureDB = EnsureCaptureDB()
     local context = captureDB.challenge or Sessions.GetChallengeContext()
@@ -43,32 +106,48 @@ local function BuildEncounterRecord()
         return nil, contextReason
     end
 
-    local metrics, metricError, metricRanks = DamageMeter.GetSnapshot()
+    local metrics, metricError, metricRanks = DamageMeter.GetSnapshot(context)
     if type(metrics) ~= "table" or next(metrics) == nil then
         return nil, metricError or "No mapped local-player metric values found"
     end
 
-    local playerDeaths = tonumber(captureDB.playerDeaths) or 0
-    if playerDeaths > (tonumber(metrics.deaths) or 0) then
-        metrics.deaths = playerDeaths
-    end
+    local aggregateMeterDeaths = tonumber(metrics.deaths)
+    local aggregateMeterGroupDeaths = tonumber(metrics.groupDeaths)
 
     local combatSessions, combatSessionError = {}, nil
     if DamageMeter.GetCombatSessionsSnapshot then
-        combatSessions, combatSessionError = DamageMeter.GetCombatSessionsSnapshot()
+        combatSessions, combatSessionError = DamageMeter.GetCombatSessionsSnapshot(context)
+    end
+
+    local pullDeaths, pullGroupDeaths, hasPullDeaths, hasPullGroupDeaths, deathPullCount = SumPullDeathMetrics(combatSessions)
+    if hasPullDeaths then
+        metrics.deaths = pullDeaths
+    end
+
+    local officialGroupDeaths = nil
+    if context.deathCountSource == "challengeModeDeathCount" or context.officialDeathCount ~= nil then
+        officialGroupDeaths = tonumber(context.officialDeathCount or context.deathCount)
+    end
+    if officialGroupDeaths ~= nil then
+        metrics.groupDeaths = officialGroupDeaths
+    elseif hasPullGroupDeaths then
+        metrics.groupDeaths = pullGroupDeaths
     end
 
     local timestamp = time()
     local durationSeconds = context.durationSeconds
-    if not durationSeconds and captureDB.startedAt and captureDB.completedAt then
-        durationSeconds = math.max(0, captureDB.completedAt - captureDB.startedAt)
-    end
 
     local timed = context.timed
-    if timed == nil and durationSeconds and context.timeLimitSeconds then
-        timed = durationSeconds <= context.timeLimitSeconds
-    end
     local resultText = context.result or (timed ~= nil and (timed and "Timed" or "Untimed")) or "Completed"
+    local deathAudit = BuildDeathAudit(
+        officialGroupDeaths,
+        aggregateMeterDeaths,
+        aggregateMeterGroupDeaths,
+        pullDeaths,
+        pullGroupDeaths,
+        hasPullDeaths,
+        hasPullGroupDeaths
+    )
 
     local encounter = {
         id = Sessions.MakeEncounterID(context),
@@ -83,8 +162,19 @@ local function BuildEncounterRecord()
             affixIDs = Sessions.CopyArray(context.affixIDs),
             durationSeconds = durationSeconds,
             timeLimitSeconds = context.timeLimitSeconds,
+            timeDeltaSeconds = context.timeDeltaSeconds,
+            remainingSeconds = context.remainingSeconds,
             timed = timed,
+            timingSource = context.timingSource,
+            durationSource = context.durationSource,
+            timedSource = context.timedSource,
+            remainingSource = context.remainingSource,
+            timeLimitSource = context.timeLimitSource,
             keystoneUpgradeLevels = context.keystoneUpgradeLevels,
+            keystoneUpgradeLevelsSource = context.keystoneUpgradeLevelsSource,
+            deathCount = context.deathCount,
+            officialDeathCount = context.officialDeathCount,
+            deathCountSource = context.deathCountSource,
         },
 
         player = captureDB.playerSnapshot or PlayerCapture.GetSnapshot(),
@@ -94,19 +184,34 @@ local function BuildEncounterRecord()
         metricRanks = metricRanks,
         combatSessions = combatSessions,
         capture = {
-            playerDeaths = playerDeaths,
+            damageMeterDeaths = tonumber(metrics.deaths),
+            groupDeaths = tonumber(metrics.groupDeaths),
+            officialChallengeDeaths = officialGroupDeaths,
+            aggregateDamageMeterDeaths = aggregateMeterDeaths,
+            aggregateGroupDeaths = aggregateMeterGroupDeaths,
+            pullSessionDeaths = hasPullDeaths and pullDeaths or nil,
+            pullSessionGroupDeaths = hasPullGroupDeaths and pullGroupDeaths or nil,
+            deathPullCount = deathPullCount,
+            deathMetricSource = hasPullDeaths and "pullSessions" or (aggregateMeterDeaths ~= nil and "aggregateSession" or nil),
+            groupDeathMetricSource = officialGroupDeaths ~= nil and "challengeModeDeathCount"
+                or (hasPullGroupDeaths and "pullSessions")
+                or (aggregateMeterGroupDeaths ~= nil and "aggregateSession" or nil),
+            deathAudit = deathAudit,
         },
 
         flags = {
             interrupted = captureDB.interrupted == true,
             excludedFromComparisons = captureDB.interrupted == true,
-            timed = timed == true,
         },
     }
 
     if combatSessionError then
         encounter.captureNotes = encounter.captureNotes or {}
         encounter.captureNotes.combatSessions = combatSessionError
+    end
+    if deathAudit.officialMatchesPullSessions == false or deathAudit.officialMatchesAggregate == false then
+        encounter.captureNotes = encounter.captureNotes or {}
+        encounter.captureNotes.deathAudit = "Death totals differed between available sources; KeyLab kept source details for review."
     end
 
     return encounter, nil
@@ -115,6 +220,11 @@ end
 function Capture.StartChallenge()
     local captureDB = ResetCaptureDB()
     local context = Sessions.GetChallengeContext()
+
+    if ChallengeTimer and ChallengeTimer.Start then
+        context = ChallengeTimer.Start(context)
+    end
+
     local okContext, reason = Sessions.IsAllowedChallengeContext(context)
 
     captureDB.active = okContext == true
@@ -122,8 +232,6 @@ function Capture.StartChallenge()
     captureDB.startedAtText = date("%Y-%m-%d %H:%M:%S", captureDB.startedAt)
     captureDB.completedSeen = false
     captureDB.interrupted = false
-    captureDB.playerDeaths = 0
-    captureDB.playerDeathTimes = {}
     captureDB.challenge = context
     captureDB.lastStartReason = reason
 
@@ -133,17 +241,17 @@ function Capture.StartChallenge()
 
     if okContext then
         Print("Started tracking " .. tostring(context.dungeonName or context.mapID) .. " +" .. tostring(context.keyLevel))
+
+        if C_Timer and ChallengeTimer and ChallengeTimer.RefineStart then
+            C_Timer.After(10, function()
+                local activeCapture = EnsureCaptureDB()
+                if activeCapture.active == true and activeCapture.completedSeen ~= true and activeCapture.interrupted ~= true then
+                    activeCapture.challenge = ChallengeTimer.RefineStart(activeCapture.challenge)
+                end
+            end)
+        end
     else
         Print("Challenge start ignored: " .. tostring(reason))
-    end
-end
-
-function Capture.MarkPlayerDeath()
-    local captureDB = EnsureCaptureDB()
-    if captureDB.active == true and captureDB.completedSeen ~= true and captureDB.interrupted ~= true then
-        captureDB.playerDeaths = (tonumber(captureDB.playerDeaths) or 0) + 1
-        captureDB.playerDeathTimes = captureDB.playerDeathTimes or {}
-        table.insert(captureDB.playerDeathTimes, time())
     end
 end
 
@@ -224,7 +332,6 @@ frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("CHALLENGE_MODE_START")
 frame:RegisterEvent("CHALLENGE_MODE_COMPLETED")
 frame:RegisterEvent("CHALLENGE_MODE_RESET")
-frame:RegisterEvent("PLAYER_DEAD")
 frame:RegisterEvent("PLAYER_LOGOUT")
 
 frame:SetScript("OnEvent", function(_, event, ...)
@@ -266,11 +373,6 @@ frame:SetScript("OnEvent", function(_, event, ...)
         return
     end
 
-    if event == "PLAYER_DEAD" then
-        Capture.MarkPlayerDeath()
-        return
-    end
-
     if event == "PLAYER_LOGOUT" then
         Capture.MarkInterrupted("PLAYER_LOGOUT")
         return
@@ -304,7 +406,6 @@ SlashCmdList["KEYLABCAPTURE"] = function(msg)
             "active=" .. tostring(captureDB.active)
             .. " completedSeen=" .. tostring(captureDB.completedSeen)
             .. " interrupted=" .. tostring(captureDB.interrupted)
-            .. " playerDeaths=" .. tostring(captureDB.playerDeaths or 0)
             .. " lastError=" .. tostring(captureDB.lastFinalizeError)
         )
         return

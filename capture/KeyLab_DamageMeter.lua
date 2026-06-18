@@ -66,27 +66,37 @@ local function GetSessionName(sessionInfo)
     return nil
 end
 
-local function FindAggregateSessionID(sessions)
+local function Trim(value)
+    if type(value) ~= "string" then return "" end
+    return (value:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function GetExpectedAggregateSessionName(context)
+    if type(context) ~= "table" then return nil end
+    local dungeonName = Trim(tostring(context.dungeonName or ""))
+    local keyLevel = tonumber(context.keyLevel)
+    if dungeonName == "" or keyLevel == nil then return nil end
+    return dungeonName .. " +" .. tostring(keyLevel)
+end
+
+local function FindAggregateSessionID(sessions, context)
     if type(sessions) ~= "table" then
-        return nil
+        return nil, nil
     end
 
-    -- Probe validation showed the full dungeon aggregate was the longest session.
-    -- This avoids relying on session/source names.
-    local bestSessionID = nil
-    local bestDuration = -1
+    local expectedName = GetExpectedAggregateSessionName(context)
+    if expectedName then
+        for _, sessionInfo in pairs(sessions) do
+            local sessionID = GetSessionID(sessionInfo)
+            local name = Trim(GetSessionName(sessionInfo))
 
-    for _, sessionInfo in pairs(sessions) do
-        local sessionID = GetSessionID(sessionInfo)
-        local duration = GetSessionDuration(sessionInfo)
-
-        if sessionID ~= nil and duration > bestDuration then
-            bestDuration = duration
-            bestSessionID = sessionID
+            if sessionID ~= nil and name == expectedName then
+                return sessionID, "challengeContext"
+            end
         end
     end
 
-    return bestSessionID
+    return nil, nil
 end
 
 local function FindLocalSource(rawSession)
@@ -128,6 +138,9 @@ end
 
 local function BuildLocalRank(rawSession, metricInfo)
     if type(rawSession) ~= "table" or type(rawSession.combatSources) ~= "table" or type(metricInfo) ~= "table" then
+        return nil
+    end
+    if metricInfo.keylabKey == "deaths" then
         return nil
     end
 
@@ -212,6 +225,58 @@ local function NormalizeLocalSource(source)
     }
 end
 
+local function GetDeathEventValue(source)
+    if type(source) ~= "table" or not IsPlayerSource(source) then return nil end
+
+    local total = ReadSourceField(source, "totalAmount")
+    if total and total > 0 then return total end
+
+    local deathRecapID = ReadSourceField(source, "deathRecapID")
+    local deathTimeSeconds = ReadSourceField(source, "deathTimeSeconds")
+    if (deathRecapID and deathRecapID > 0) or (deathTimeSeconds and deathTimeSeconds > 0) then
+        return 1
+    end
+
+    return nil
+end
+
+local function ReadDeathEvents(rawSession)
+    local out = {
+        localDeaths = 0,
+        groupDeaths = 0,
+        localSource = nil,
+        events = {},
+    }
+
+    if type(rawSession) ~= "table" or type(rawSession.combatSources) ~= "table" then
+        return out
+    end
+
+    for _, source in pairs(rawSession.combatSources) do
+        local value = GetDeathEventValue(source)
+        if value then
+            out.groupDeaths = out.groupDeaths + value
+
+            if source.isLocalPlayer == true then
+                out.localDeaths = out.localDeaths + value
+                out.localSource = out.localSource or source
+            end
+
+            table.insert(out.events, {
+                sourceName = ReadAnySourceField(source, "name"),
+                classFile = ReadAnySourceField(source, "classFilename"),
+                sourceGUID = ReadAnySourceField(source, "sourceGUID"),
+                isLocalPlayer = source.isLocalPlayer == true,
+                deathCount = value,
+                deathRecapID = ReadAnySourceField(source, "deathRecapID"),
+                deathTimeSeconds = ReadAnySourceField(source, "deathTimeSeconds"),
+            })
+        end
+    end
+
+    return out
+end
+
 local function NormalizeEnemyDamage(rawSession)
     local out = {
         totalAmount = ReadAnySourceField(rawSession, "totalAmount") or 0,
@@ -259,21 +324,13 @@ end
 local function ReadMetricValue(rawSession, metricInfo)
     if type(rawSession) ~= "table" or type(metricInfo) ~= "table" then return nil, nil end
 
+    if metricInfo.keylabKey == "deaths" then
+        local deathEvents = ReadDeathEvents(rawSession)
+        return deathEvents.localDeaths, NormalizeLocalSource(deathEvents.localSource)
+    end
+
     local source = FindLocalSource(rawSession)
     if source then
-        if metricInfo.keylabKey == "deaths" then
-            local total = ReadSourceField(source, metricInfo.valueField)
-            if total and total > 0 then
-                return total, NormalizeLocalSource(source)
-            end
-
-            local deathRecapID = ReadSourceField(source, "deathRecapID")
-            local deathTimeSeconds = ReadSourceField(source, "deathTimeSeconds")
-            if (deathRecapID and deathRecapID > 0) or (deathTimeSeconds and deathTimeSeconds > 0) then
-                return 1, NormalizeLocalSource(source)
-            end
-        end
-
         local value = ReadSourceField(source, metricInfo.valueField)
         return value, NormalizeLocalSource(source)
     end
@@ -309,6 +366,11 @@ local function ReadMetricsForSession(sessionID)
                 if value ~= nil then
                     metrics[metricInfo.keylabKey] = value
                 end
+                if metricInfo.keylabKey == "deaths" then
+                    local deathEvents = ReadDeathEvents(rawSession)
+                    metrics.groupDeaths = deathEvents.groupDeaths
+                    sources.deathEvents = deathEvents.events
+                end
                 if source then
                     sources[metricInfo.keylabKey] = source
                 end
@@ -323,7 +385,7 @@ local function ReadMetricsForSession(sessionID)
     return metrics, sources, ranks, enemyDamageTaken
 end
 
-function DamageMeter.GetSnapshot()
+function DamageMeter.GetSnapshot(context)
     local metrics = {}
     local ranks = {}
 
@@ -337,7 +399,7 @@ function DamageMeter.GetSnapshot()
         return metrics, "GetAvailableCombatSessions did not return a table"
     end
 
-    local aggregateSessionID = FindAggregateSessionID(sessions)
+    local aggregateSessionID = FindAggregateSessionID(sessions, context)
 
     if aggregateSessionID == nil then
         return metrics, "No aggregate combat session found"
@@ -361,6 +423,10 @@ function DamageMeter.GetSnapshot()
                 if value ~= nil then
                     metrics[info.keylabKey] = value
                 end
+                if info.keylabKey == "deaths" then
+                    local deathEvents = ReadDeathEvents(rawSession)
+                    metrics.groupDeaths = deathEvents.groupDeaths
+                end
 
                 local rank = BuildLocalRank(rawSession, info)
                 if rank then
@@ -373,7 +439,7 @@ function DamageMeter.GetSnapshot()
     return metrics, nil, ranks
 end
 
-function DamageMeter.GetCombatSessionsSnapshot()
+function DamageMeter.GetCombatSessionsSnapshot(context)
     if not C_DamageMeter or not C_DamageMeter.GetAvailableCombatSessions or not C_DamageMeter.GetCombatSessionFromID then
         return {}, "C_DamageMeter API unavailable"
     end
@@ -385,24 +451,19 @@ function DamageMeter.GetCombatSessionsSnapshot()
     end
 
     local out = {}
-    local longestSession = nil
-    local longestDuration = -1
+    local aggregateSessionID, aggregateSource = FindAggregateSessionID(sessions, context)
 
     for _, sessionInfo in pairs(sessions) do
         local normalized = NormalizeSessionInfo(sessionInfo)
         if normalized.sessionID ~= nil then
             normalized.metrics, normalized.sources, normalized.ranks, normalized.enemyDamageTaken = ReadMetricsForSession(normalized.sessionID)
-            table.insert(out, normalized)
-            if (tonumber(normalized.durationSeconds) or 0) > longestDuration then
-                longestDuration = tonumber(normalized.durationSeconds) or 0
-                longestSession = normalized
+            if aggregateSessionID ~= nil and normalized.sessionID == aggregateSessionID then
+                normalized.isAggregateSession = true
+                normalized.isTrashSession = false
+                normalized.aggregateSource = aggregateSource
             end
+            table.insert(out, normalized)
         end
-    end
-
-    if longestSession then
-        longestSession.isAggregateSession = true
-        longestSession.isTrashSession = false
     end
 
     table.sort(out, function(a, b)
