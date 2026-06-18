@@ -2,9 +2,9 @@ local ADDON_NAME, KeyLab = ...
 KeyLab = KeyLab or {}
 _G.KeyLab = KeyLab
 
--- Fallback trinket effect tags for loot rows where saved item stats only carry
+-- Known trinket effect tags for loot rows where saved item stats only carry
 -- passive primary stats. Live tooltip keyword detection in KeyLab_ItemAnalysis
--- still runs first; this table keeps known trinket effects visible when tooltip
+-- still runs first; this table keeps known item effects visible when tooltip
 -- data is not loaded yet or is too sparse.
 KeyLab.TrinketEffectsDB = KeyLab.TrinketEffectsDB or {}
 local TrinketEffectsDB = KeyLab.TrinketEffectsDB
