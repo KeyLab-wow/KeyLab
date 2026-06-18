@@ -103,10 +103,18 @@ function ClassSpecs.GetRole(specID, className, specName)
     return entry and entry.role or nil
 end
 
+local function IsHealer(role)
+    return role == "Healer" or role == "HEALER"
+end
+
+local function IsTank(role)
+    return role == "Tank" or role == "TANK"
+end
+
 function ClassSpecs.GetGraphProfile(specID, className, specName)
     local role = ClassSpecs.GetRole(specID, className, specName)
 
-    if role == "Healer" then
+    if IsHealer(role) then
         return {
             role = role,
             title = "HPS by Pull",
@@ -115,7 +123,7 @@ function ClassSpecs.GetGraphProfile(specID, className, specName)
         }
     end
 
-    if role == "Tank" then
+    if IsTank(role) then
         return {
             role = role,
             title = "Damage Taken by Pull",
@@ -129,6 +137,58 @@ function ClassSpecs.GetGraphProfile(specID, className, specName)
         title = "DPS by Pull",
         subtitle = "Damage performance for each captured combat session in this run.",
         metrics = { "dps" },
+    }
+end
+
+function ClassSpecs.GetRoleFocusProfile(specID, className, specName)
+    local role = ClassSpecs.GetRole(specID, className, specName)
+
+    if IsHealer(role) then
+        return {
+            role = role,
+            title = "Group Survival by Pull",
+            trendTitle = "Role Focus: Group Survival",
+            subtitle = "Healing done and group deaths for each captured combat session.",
+            trendSubtitle = "Recent healer-focused run signals compared against earlier saved runs.",
+            metrics = { "healingDone", "groupDeaths" },
+            metricLabels = {
+                healingDone = "Healing Done",
+                groupDeaths = "Group Deaths",
+            },
+            scale = "perMetric",
+        }
+    end
+
+    if IsTank(role) then
+        return {
+            role = role,
+            title = "Pull Stability by Pull",
+            trendTitle = "Role Focus: Pull Stability",
+            subtitle = "Damage taken, avoidable damage, and group deaths for each captured combat session.",
+            trendSubtitle = "Recent tank-focused run signals compared against earlier saved runs.",
+            metrics = { "damageTaken", "avoidableDamageTaken", "groupDeaths" },
+            metricLabels = {
+                damageTaken = "Damage Taken",
+                avoidableDamageTaken = "Avoidable Damage",
+                groupDeaths = "Group Deaths",
+            },
+            scale = "perMetric",
+        }
+    end
+
+    return {
+        role = role or "Damage",
+        title = "Survival Pressure by Pull",
+        trendTitle = "Role Focus: Survival Pressure",
+        subtitle = "Avoidable damage, player deaths, and healing done for each captured combat session.",
+        trendSubtitle = "Recent damage-role survival signals compared against earlier saved runs.",
+        metrics = { "avoidableDamageTaken", "deaths", "healingDone" },
+        metricLabels = {
+            avoidableDamageTaken = "Avoidable Damage",
+            deaths = "Your Deaths",
+            healingDone = "Healing Done",
+        },
+        scale = "perMetric",
     }
 end
 

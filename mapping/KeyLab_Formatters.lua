@@ -130,6 +130,12 @@ function Formatters.Metric(metricKey, value)
         end
     end
 
+    local virtualMetrics = KeyLab.Mapping and KeyLab.Mapping.VirtualMetrics
+    local virtualInfo = virtualMetrics and virtualMetrics[metricKey]
+    if virtualInfo then
+        return Formatters.ByDisplayType(value, virtualInfo.displayType)
+    end
+
     return Formatters.Text(value)
 end
 

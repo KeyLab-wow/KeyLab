@@ -142,3 +142,14 @@ KeyLab.Mapping.Metrics = {
         note = "Blizzard provides this, but KeyLab intentionally excludes it.",
     },
 }
+
+KeyLab.Mapping.VirtualMetrics = {
+    groupDeaths = {
+        keylabKey = "groupDeaths",
+        label = "Group Deaths",
+        displayType = "number",
+        higherIsBetter = false,
+        store = true,
+        note = "Derived from captured pull death events.",
+    },
+}

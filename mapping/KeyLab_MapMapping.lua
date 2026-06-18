@@ -98,6 +98,23 @@ KeyLab.Mapping.Maps = {
     [557] = { keylabKey = "map557", name = "Windrunner Spire", store = true },
 }
 
+KeyLab.Mapping.MythicPlusTimerSeconds = {
+    [558] = 34 * 60, -- Magisters' Terrace
+    [560] = 33 * 60, -- Maisara Caverns
+    [559] = 30 * 60, -- Nexus-Point Xenas
+    [557] = 33 * 60, -- Windrunner Spire
+    [402] = 31 * 60, -- Algeth'ar Academy
+    [556] = 30 * 60, -- Pit of Saron
+    [239] = 34 * 60, -- Seat of the Triumvirate
+    [583] = 34 * 60, -- Seat of the Triumvirate
+    [161] = 28 * 60, -- Skyreach
+}
+
+KeyLab.Mapping.MythicPlusChestRules = {
+    twoChestRemainingRatio = 0.20,
+    threeChestRemainingRatio = 0.40,
+}
+
 function KeyLab.Mapping.IsAllowedChallengeMap(mapID)
     return mapID and KeyLab.Mapping.Maps[mapID] and KeyLab.Mapping.Maps[mapID].store == true
 end
@@ -105,4 +122,29 @@ end
 function KeyLab.Mapping.GetMapName(mapID)
     local entry = mapID and KeyLab.Mapping.Maps[mapID]
     return entry and entry.name or nil
+end
+
+function KeyLab.Mapping.GetMapTimerSeconds(mapID)
+    mapID = tonumber(mapID)
+    return mapID and KeyLab.Mapping.MythicPlusTimerSeconds[mapID] or nil
+end
+
+function KeyLab.Mapping.GetTimerUpgradeLevels(durationSeconds, timeLimitSeconds, timed)
+    if timed ~= true then return nil end
+
+    local duration = tonumber(durationSeconds)
+    local limit = tonumber(timeLimitSeconds)
+    if not duration or not limit or limit <= 0 then return nil end
+
+    local remainingRatio = (limit - duration) / limit
+    if remainingRatio < 0 then return nil end
+
+    local rules = KeyLab.Mapping.MythicPlusChestRules or {}
+    if remainingRatio >= (tonumber(rules.threeChestRemainingRatio) or 0.40) then
+        return 3
+    end
+    if remainingRatio >= (tonumber(rules.twoChestRemainingRatio) or 0.20) then
+        return 2
+    end
+    return 1
 end
