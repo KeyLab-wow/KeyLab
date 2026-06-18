@@ -76,6 +76,10 @@ local function EncounterMatchesCurrentCharacter(encounter)
 end
 
 local function IsCompletedEncounter(encounter)
+    if EncounterData.IsCompletedEncounter then
+        return EncounterData.IsCompletedEncounter(encounter)
+    end
+
     if type(encounter) ~= "table" then return false end
     local flags = encounter.flags or {}
     if flags.interrupted == true or encounter.interrupted == true then return false end
@@ -84,7 +88,7 @@ local function IsCompletedEncounter(encounter)
     if encounter.completed == true or encounter.isComplete == true then return true end
     if encounter.result == "Completed" or encounter.result == "Complete" then return true end
     if encounter.result == "Timed" or encounter.result == "Untimed" or encounter.result == "Depleted" then return true end
-    return type(encounter.challenge) == "table" or type(encounter.metrics) == "table"
+    return type(encounter.metrics) == "table" and next(encounter.metrics) ~= nil
 end
 
 local function GetAllEncounters()
@@ -146,48 +150,6 @@ local function FindLatestEncounter()
     return latest
 end
 
-local function GetResultText(encounter)
-    local challenge = GetChallenge(encounter)
-    if encounter and encounter.result and encounter.result ~= "" then return encounter.result end
-    if challenge.timed ~= nil then return challenge.timed and "Timed" or "Untimed" end
-    return "Completed"
-end
-
-local function GetUpgradeLevels(challenge)
-    local value = tonumber(challenge and challenge.keystoneUpgradeLevels)
-    if value then return math.max(0, math.floor(value)) end
-
-    local duration = tonumber(challenge and challenge.durationSeconds)
-    local limit = tonumber(challenge and challenge.timeLimitSeconds)
-    if challenge and challenge.timed == true and duration and limit and limit > 0 then
-        local remainingRatio = (limit - duration) / limit
-        if remainingRatio >= 0.40 then return 3 end
-        if remainingRatio >= 0.20 then return 2 end
-        if remainingRatio >= 0 then return 1 end
-    end
-
-    return nil
-end
-
-local function GetChestText(challenge)
-    local levels = GetUpgradeLevels(challenge)
-    if levels and levels > 0 then
-        if levels == 1 then return "+" end
-        if levels == 2 then return "++" end
-        return "+++"
-    end
-    if challenge and challenge.timed == false then return "Untimed" end
-    if challenge and challenge.timed == true then return "Timed" end
-    return "-"
-end
-
-local function TimeDelta(challenge)
-    local duration = tonumber(challenge and challenge.durationSeconds)
-    local limit = tonumber(challenge and challenge.timeLimitSeconds)
-    if not duration or not limit then return nil end
-    return limit - duration
-end
-
 function Analysis.GetLatestRun()
     return FindLatestEncounter()
 end
@@ -207,15 +169,15 @@ function Analysis.BuildState()
         stats = GetStats(encounter),
         metrics = GetMetrics(encounter),
         ranks = GetMetricRanks(encounter),
-        resultText = GetResultText(encounter),
-        chestText = GetChestText(challenge),
-        keystoneUpgradeLevels = GetUpgradeLevels(challenge),
+        resultText = EncounterData.GetResultText(encounter),
+        chestText = EncounterData.GetChestText(encounter),
+        keystoneUpgradeLevels = EncounterData.GetUpgradeLevels(encounter),
         dungeonName = challenge.dungeonName or encounter.dungeonName or "Unknown Dungeon",
         keyLevel = challenge.keyLevel or encounter.keyLevel or 0,
-        durationSeconds = challenge.durationSeconds,
-        timeLimitSeconds = challenge.timeLimitSeconds,
-        timeDeltaSeconds = TimeDelta(challenge),
-        timed = challenge.timed,
+        durationSeconds = EncounterData.GetDurationSeconds and EncounterData.GetDurationSeconds(encounter) or challenge.durationSeconds,
+        timeLimitSeconds = EncounterData.GetTimeLimitSeconds and EncounterData.GetTimeLimitSeconds(encounter) or challenge.timeLimitSeconds,
+        timeDeltaSeconds = EncounterData.GetTimeDelta(encounter),
+        timed = EncounterData.GetTimed(encounter),
         timestamp = encounter.timestamp,
         dateText = encounter.dateText,
     }

@@ -279,7 +279,7 @@ local function getItemTextBlob(item)
     }, " "))
 end
 
-local function getFallbackTrinketTags(item)
+local function getKnownTrinketTags(item)
     if not isTrinket(item) then return {} end
     local db = KeyLab and KeyLab.TrinketEffectsDB
     if not db or not db.GetTags then return {} end
@@ -718,9 +718,9 @@ function Analysis.ExtractTrinketTags(item, playerClass, playerSpecID, playerSpec
         end
     end
 
-    for _, tag in ipairs(getFallbackTrinketTags(item)) do
-        -- Fallback effect tags should never reintroduce the wrong adaptive
-        -- primary. Primary stat display is handled by ResolvePrimaryStat above.
+    for _, tag in ipairs(getKnownTrinketTags(item)) do
+        -- Known effect tags should never reintroduce the wrong adaptive primary.
+        -- Primary stat display is handled by ResolvePrimaryStat above.
         if not TRINKET_PRIMARY_TAG_WORDS[tag] then
             addUnique(tags, tag)
         end

@@ -34,12 +34,12 @@ local function Capture()
     return KeyLab and KeyLab.GearCapture or {}
 end
 
-local function GetDashboardSlots(side, fallback)
+local function GetDashboardSlots(side, defaultSlots)
     if DB().GetDashboardSlots then
         local slots = DB().GetDashboardSlots(side)
         if type(slots) == "table" and #slots > 0 then return slots end
     end
-    return fallback
+    return defaultSlots
 end
 
 Analysis.LeftSlots = GetDashboardSlots("left", DEFAULT_LEFT_SLOTS)

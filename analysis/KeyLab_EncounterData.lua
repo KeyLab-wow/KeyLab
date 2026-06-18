@@ -12,15 +12,316 @@ KeyLab_EncounterData.lua
 
 Purpose:
 - Centralize read-only access to saved encounter tables.
-- Keep UI tabs from needing to know every legacy/fallback storage location.
+- Keep UI tabs from needing to know every supported storage shape.
 - Keep metric names aligned with KeyLab.Mapping.Metrics keylabKey values.
 ]]
+
+local function CopyTable(source)
+    if type(source) ~= "table" then return {} end
+
+    local out = {}
+    for key, value in pairs(source) do
+        out[key] = value
+    end
+    return out
+end
+
+local function GetSavedCombatSessions(encounter)
+    if type(encounter) ~= "table" then return {} end
+    if type(encounter.combatSessions) == "table" then return encounter.combatSessions end
+    if type(encounter.damageMeterSessions) == "table" then return encounter.damageMeterSessions end
+    if type(encounter.runCombatSessions) == "table" then return encounter.runCombatSessions end
+    return {}
+end
+
+local function GetPullSessionDeathTotals(encounter)
+    local localDeaths = 0
+    local groupDeaths = 0
+    local hasLocalDeaths = false
+    local hasGroupDeaths = false
+
+    for _, session in ipairs(GetSavedCombatSessions(encounter)) do
+        if type(session) == "table"
+            and session.isAggregateSession ~= true
+            and type(session.metrics) == "table"
+        then
+            local deaths = tonumber(session.metrics.deaths)
+            local sessionGroupDeaths = tonumber(session.metrics.groupDeaths)
+
+            if deaths ~= nil then
+                localDeaths = localDeaths + deaths
+                hasLocalDeaths = true
+            end
+
+            if sessionGroupDeaths ~= nil then
+                groupDeaths = groupDeaths + sessionGroupDeaths
+                hasGroupDeaths = true
+            end
+        end
+    end
+
+    return localDeaths, groupDeaths, hasLocalDeaths, hasGroupDeaths
+end
+
+local function NormalizeDeathsMetric(encounter, metrics)
+    local pullDeaths, pullGroupDeaths, hasPullDeaths, hasPullGroupDeaths = GetPullSessionDeathTotals(encounter)
+    local officialGroupDeaths = tonumber(
+        encounter
+        and encounter.capture
+        and (
+            encounter.capture.officialChallengeDeaths
+            or (encounter.capture.deathAudit and encounter.capture.deathAudit.officialGroupDeaths)
+        )
+    )
+
+    if hasPullDeaths or hasPullGroupDeaths or officialGroupDeaths ~= nil then
+        local out = CopyTable(metrics)
+        if hasPullDeaths then
+            out.deaths = pullDeaths
+        end
+        if officialGroupDeaths ~= nil then
+            out.groupDeaths = officialGroupDeaths
+        elseif hasPullGroupDeaths then
+            out.groupDeaths = pullGroupDeaths
+        end
+        return out
+    end
+
+    return metrics
+end
+
+local function IsBoolean(value)
+    return value == true or value == false
+end
+
+local function HasOfficialTiming(challenge)
+    if type(challenge) ~= "table" then return false end
+
+    local durationSource = tostring(challenge.durationSource or "")
+    local timingSource = tostring(challenge.timingSource or "")
+    local timedSource = tostring(challenge.timedSource or "")
+
+    if string.find(durationSource, "challengeMode") then return true end
+    if string.find(timingSource, "challengeModeCompletion")
+        or string.find(timingSource, "challengeModeRemainingAtCompletion")
+    then
+        return true
+    end
+    if string.find(timedSource, "challengeMode") then return true end
+    if IsBoolean(challenge.timed) then return true end
+
+    return false
+end
+
+local function GetChallengeFrom(value)
+    if type(value) == "table" and type(value.challenge) == "table" then
+        return value.challenge
+    end
+    return value
+end
+
+local function TableHasAnyValue(tbl)
+    if type(tbl) ~= "table" then return false end
+    return next(tbl) ~= nil
+end
+
+function EncounterData.HasSavedPerformanceData(encounter)
+    if type(encounter) ~= "table" then return false end
+    if TableHasAnyValue(encounter.metrics) then return true end
+    if TableHasAnyValue(encounter.metricRanks) then return true end
+    if TableHasAnyValue(encounter.combatSessions) then return true end
+    if TableHasAnyValue(encounter.damageMeterSessions) then return true end
+    if TableHasAnyValue(encounter.runCombatSessions) then return true end
+    return false
+end
+
+function EncounterData.IsCompletedEncounter(encounter)
+    if type(encounter) ~= "table" then return false end
+
+    local flags = encounter.flags or {}
+    if flags.interrupted == true or encounter.interrupted == true then return false end
+    if flags.excludedFromComparisons == true or encounter.excludeFromComparisons == true then return false end
+    if encounter.status == "capture_failed" then return false end
+
+    if encounter.completed == true or encounter.isComplete == true then return true end
+    if encounter.result == "Completed" or encounter.result == "Complete" then return true end
+    if encounter.result == "Timed" or encounter.result == "Untimed" or encounter.result == "Depleted" then return true end
+    if EncounterData.GetTimed(encounter) ~= nil then return true end
+
+    return EncounterData.HasSavedPerformanceData(encounter)
+end
 
 function EncounterData.GetChallenge(encounter)
     if type(encounter) == "table" and type(encounter.challenge) == "table" then
         return encounter.challenge
     end
     return {}
+end
+
+function EncounterData.GetTimingDurationSeconds(value)
+    local challenge = GetChallengeFrom(value)
+    local duration = tonumber(challenge and challenge.durationSeconds)
+    if duration and duration > 0 then
+        return duration
+    end
+
+    return nil
+end
+
+function EncounterData.GetTimeLimitSeconds(value)
+    local challenge = GetChallengeFrom(value)
+    local limit = tonumber(challenge and challenge.timeLimitSeconds)
+    if limit and limit > 0 then
+        return limit
+    end
+
+    local mapID = challenge and challenge.mapID
+    if not mapID and type(value) == "table" then
+        mapID = value.mapID
+    end
+
+    if KeyLab.Mapping and KeyLab.Mapping.GetMapTimerSeconds then
+        return KeyLab.Mapping.GetMapTimerSeconds(mapID)
+    end
+
+    return nil
+end
+
+function EncounterData.GetTimed(encounter)
+    local challenge = EncounterData.GetChallenge(encounter)
+    if IsBoolean(challenge.timed) then
+        return challenge.timed
+    end
+
+    if not HasOfficialTiming(challenge) then
+        return nil
+    end
+
+    local duration = EncounterData.GetTimingDurationSeconds(encounter)
+    local limit = EncounterData.GetTimeLimitSeconds(encounter)
+    if duration and limit then
+        return duration <= limit
+    end
+
+    return nil
+end
+
+function EncounterData.GetResultText(encounter)
+    local flags = type(encounter) == "table" and encounter.flags or nil
+    if type(flags) == "table" and flags.interrupted == true then
+        return "Interrupted"
+    end
+    if type(encounter) == "table" and encounter.interrupted == true then
+        return "Interrupted"
+    end
+
+    local result = type(encounter) == "table" and encounter.result or nil
+    if type(result) == "string" and result ~= "" and result ~= "Completed" and result ~= "Complete" then
+        return result
+    end
+
+    local timed = EncounterData.GetTimed(encounter)
+    if timed ~= nil then
+        return timed and "Timed" or "Untimed"
+    end
+
+    if type(result) == "string" and result ~= "" then
+        return result
+    end
+
+    if EncounterData.HasSavedPerformanceData(encounter) then
+        return "Completed"
+    end
+
+    if type(encounter) == "table" and type(encounter.challenge) == "table" then
+        return "Partial Capture"
+    end
+
+    return "Completed"
+end
+
+function EncounterData.GetUpgradeLevels(value)
+    local challenge = GetChallengeFrom(value)
+    local levels = tonumber(challenge and challenge.keystoneUpgradeLevels)
+    if levels then
+        return math.max(0, math.floor(levels))
+    end
+
+    if KeyLab.Mapping and KeyLab.Mapping.GetTimerUpgradeLevels and HasOfficialTiming(challenge) then
+        local timed = nil
+        if type(value) == "table" and type(value.challenge) == "table" then
+            timed = EncounterData.GetTimed(value)
+        elseif type(challenge) == "table" and IsBoolean(challenge.timed) then
+            timed = challenge.timed
+        end
+
+        return KeyLab.Mapping.GetTimerUpgradeLevels(
+            EncounterData.GetTimingDurationSeconds(value),
+            EncounterData.GetTimeLimitSeconds and EncounterData.GetTimeLimitSeconds(value) or (challenge and challenge.timeLimitSeconds),
+            timed
+        )
+    end
+
+    return nil
+end
+
+function EncounterData.GetChestText(value)
+    local levels = EncounterData.GetUpgradeLevels(value)
+    if levels and levels > 0 then
+        if levels == 1 then return "+" end
+        if levels == 2 then return "++" end
+        return "+++"
+    end
+
+    local timed = nil
+    if type(value) == "table" and type(value.challenge) == "table" then
+        timed = EncounterData.GetTimed(value)
+    elseif type(value) == "table" and IsBoolean(value.timed) then
+        timed = value.timed
+    end
+    if timed == false then return "Untimed" end
+    if timed == true then return "Timed" end
+    return "-"
+end
+
+function EncounterData.GetTimeDelta(value)
+    local challenge = GetChallengeFrom(value)
+    local storedDelta = tonumber(challenge and (challenge.timeDeltaSeconds or challenge.remainingSeconds))
+    if storedDelta then return storedDelta end
+
+    if not HasOfficialTiming(challenge) then
+        return nil
+    end
+
+    local duration = EncounterData.GetTimingDurationSeconds(value)
+    local limit = EncounterData.GetTimeLimitSeconds and EncounterData.GetTimeLimitSeconds(value)
+    if not duration or not limit then return nil end
+    return limit - duration
+end
+
+function EncounterData.CountExactUpgradeLevels(encounters, exactLevel)
+    local count = 0
+    local tracked = 0
+
+    for _, encounter in ipairs(encounters or {}) do
+        local levels = EncounterData.GetUpgradeLevels(encounter)
+        if levels then
+            tracked = tracked + 1
+            if levels == exactLevel then
+                count = count + 1
+            end
+        end
+    end
+
+    return count, tracked
+end
+
+function EncounterData.GetKeyLevel(encounter)
+    local challenge = EncounterData.GetChallenge(encounter)
+    local keyLevel = tonumber(challenge.keyLevel)
+        or tonumber(type(encounter) == "table" and encounter.keyLevel)
+        or tonumber(type(encounter) == "table" and encounter.level)
+    return keyLevel
 end
 
 function EncounterData.GetPlayer(encounter)
@@ -46,7 +347,7 @@ end
 
 function EncounterData.GetMetrics(encounter)
     if type(encounter) == "table" and type(encounter.metrics) == "table" then
-        return encounter.metrics
+        return NormalizeDeathsMetric(encounter, encounter.metrics)
     end
     return {}
 end
@@ -64,12 +365,19 @@ end
 
 function EncounterData.GetMetricInfoByKey(metricKey)
     local metrics = KeyLab.Mapping and KeyLab.Mapping.Metrics
-    if type(metrics) ~= "table" then return nil end
+    local virtualMetrics = KeyLab.Mapping and KeyLab.Mapping.VirtualMetrics
 
-    for _, info in pairs(metrics) do
-        if info.keylabKey == metricKey and info.store == true then
-            return info
+    if type(metrics) == "table" then
+        for _, info in pairs(metrics) do
+            if info.keylabKey == metricKey and info.store == true then
+                return info
+            end
         end
+    end
+
+    local virtualInfo = type(virtualMetrics) == "table" and virtualMetrics[metricKey]
+    if virtualInfo and virtualInfo.store == true then
+        return virtualInfo
     end
 
     return nil
@@ -219,11 +527,33 @@ function EncounterData.RankTableHasData(ranks)
 end
 
 function EncounterData.GetCombatSessions(encounter)
-    if type(encounter) ~= "table" then return {} end
-    if type(encounter.combatSessions) == "table" then return encounter.combatSessions end
-    if type(encounter.damageMeterSessions) == "table" then return encounter.damageMeterSessions end
-    if type(encounter.runCombatSessions) == "table" then return encounter.runCombatSessions end
-    return {}
+    return GetSavedCombatSessions(encounter)
+end
+
+function EncounterData.GetAggregateSession(encounter)
+    for _, session in ipairs(EncounterData.GetCombatSessions(encounter)) do
+        if type(session) == "table" and session.isAggregateSession == true then
+            return session
+        end
+    end
+
+    return nil
+end
+
+function EncounterData.GetDurationSeconds(encounter)
+    local challenge = EncounterData.GetChallenge(encounter)
+    local duration = tonumber(challenge and challenge.durationSeconds)
+    if duration and duration > 0 then
+        return duration
+    end
+
+    local aggregate = EncounterData.GetAggregateSession(encounter)
+    duration = tonumber(aggregate and aggregate.durationSeconds)
+    if duration and duration > 0 then
+        return duration
+    end
+
+    return nil
 end
 
 function EncounterData.GetAggregateSessionRanks(encounter)
@@ -235,8 +565,7 @@ function EncounterData.GetAggregateSessionRanks(encounter)
         end
     end
 
-    local challenge = EncounterData.GetChallenge(encounter)
-    local challengeDuration = tonumber(challenge and challenge.durationSeconds)
+    local challengeDuration = EncounterData.GetDurationSeconds(encounter)
     if not challengeDuration or challengeDuration <= 0 then
         return {}
     end
