@@ -119,7 +119,7 @@ function ClassSpecs.GetGraphProfile(specID, className, specName)
             role = role,
             title = "HPS by Pull",
             subtitle = "Healing performance for each captured combat session in this run.",
-            metrics = { "hps" },
+            metrics = { "hpsWithAbsorbs" },
         }
     end
 
@@ -150,9 +150,9 @@ function ClassSpecs.GetRoleFocusProfile(specID, className, specName)
             trendTitle = "Role Focus: Group Survival",
             subtitle = "Healing done and group deaths for each captured combat session.",
             trendSubtitle = "Recent healer-focused run signals compared against earlier saved runs.",
-            metrics = { "healingDone", "groupDeaths" },
+            metrics = { "healingDoneWithAbsorbs", "groupDeaths" },
             metricLabels = {
-                healingDone = "Healing Done",
+                healingDoneWithAbsorbs = "Healing Done",
                 groupDeaths = "Group Deaths",
             },
             scale = "perMetric",
@@ -182,11 +182,11 @@ function ClassSpecs.GetRoleFocusProfile(specID, className, specName)
         trendTitle = "Role Focus: Survival Pressure",
         subtitle = "Avoidable damage, player deaths, and healing done for each captured combat session.",
         trendSubtitle = "Recent damage-role survival signals compared against earlier saved runs.",
-        metrics = { "avoidableDamageTaken", "deaths", "healingDone" },
+        metrics = { "avoidableDamageTaken", "deaths", "healingDoneWithAbsorbs" },
         metricLabels = {
             avoidableDamageTaken = "Avoidable Damage",
             deaths = "Your Deaths",
-            healingDone = "Healing Done",
+            healingDoneWithAbsorbs = "Healing Done",
         },
         scale = "perMetric",
     }

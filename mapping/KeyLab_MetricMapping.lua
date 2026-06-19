@@ -152,4 +152,20 @@ KeyLab.Mapping.VirtualMetrics = {
         store = true,
         note = "Derived from captured pull death events.",
     },
+    healingDoneWithAbsorbs = {
+        keylabKey = "healingDoneWithAbsorbs",
+        label = "Healing Done",
+        displayType = "number",
+        higherIsBetter = true,
+        store = true,
+        note = "Display metric that includes absorbs when absorb data is captured.",
+    },
+    hpsWithAbsorbs = {
+        keylabKey = "hpsWithAbsorbs",
+        label = "HPS",
+        displayType = "number",
+        higherIsBetter = true,
+        store = true,
+        note = "Display metric that includes absorbs per second when absorb data is captured.",
+    },
 }
