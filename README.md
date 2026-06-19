@@ -1,6 +1,5 @@
-# KeyLab (World of Warcraft Retail Addon) 
-
-KeyLab is a personal Mythic+ journal that helps players discover which builds, stats, and gear choices produce their best real-world results.
+KeyLab
+KeyLab helps you compare real saved runs, practice sessions, talent builds, stat profiles, and gear targets so you can make better choices based on your own gameplay.
 
 Try a build.
 Adjust your stats.
@@ -9,40 +8,32 @@ Review the results.
 
 Use /keylab or the minimap button to open the journal.
 
-Tabs & Features
-Home
-Quick overview of your journal, latest run, activity summary, and important setup reminders.
+NEW: Practice Sessions
+KeyLab now includes a Practice tab for controlled training dummy tests.
 
-Encounters
-Browse completed Mythic+ runs with captured stats, talent builds, outcomes, and run details.
+Use it to compare damage, DPS, healing, and HPS across different talent builds, stat setups, gear choices, and session types.
 
-Last Run
-Review your most recent Mythic+ run, including run summary, player totals, group rankings, and pull-by-pull performance.
+Start a practice session, run your test, stop the session, and KeyLab saves the result with your current stats and talent string so you can compare attempts side by side.
 
-Talent Builds
-Compare talent setups you've actually played and see which builds produced the best results.
+Practice Sessions are great for:
+Testing single-target and multi-target setups
+Comparing talent builds before running keys
+Checking how stat changes affect your output
+Saving controlled dummy tests without needing a spreadsheet
+Tip: Reset your damage meter before starting a practice session, choose the correct session type, and recall pets or stop extra damage before ending the test.
 
-Stat Profiles
-Compare observed stat priority combinations and identify which stat distributions perform best for your character.
-
-Trends
-Track performance patterns over time, including DPS, HPS, interrupts, avoidable damage, and other key metrics.
-
-Gear Dashboard
-View your current gearing progress, upgrade priorities, target completion progress, and recommended next steps.
-
-Gear Targets
-Browse Mythic+ loot, build upgrade wishlists, set personal stat goals, and plan future dungeon targets.
-
-Insights
-Reference notes covering encounter variables, stat interactions, gameplay factors, and character performance concepts.
-
-Settings
-Manage journal data, imports, exports, backups, and addon configuration.
-
+Feature Snapshot
+Mythic+ Journal - saved encounters and run details
+Last Run - group rankings, player totals, and pull-by-pull performance
+Practice Sessions - controlled training dummy tests
+Talent Builds - compare builds you actually played
+Stat Profiles - compare observed stat results
+Trends - track performance across saved runs
+Gear Dashboard - upgrade priorities and next steps
+Gear Targets - loot planning, wishlist items, and stat goals
+Insights - gameplay and performance reference notes
+Settings - import, export, backup, and addon tools
 Supported Content
-Mythic+ Dungeons
-
-KeyLab focuses on your own results, helping you learn which builds, stats, and gearing choices work best for your playstyle.
+KeyLab currently focuses on Mythic+ dungeons and controlled practice sessions.
 
 
