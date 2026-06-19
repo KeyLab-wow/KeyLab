@@ -128,6 +128,8 @@ local function EnsureJournalDefaults(db)
     if type(db.lootTargets) ~= "table" then db.lootTargets = {} end
     if type(db.lootTargetStatuses) ~= "table" then db.lootTargetStatuses = {} end
     if type(db.statGoals) ~= "table" then db.statGoals = {} end
+    if type(db.practiceSessions) ~= "table" then db.practiceSessions = {} end
+    db.activePracticeSession = nil
 
     return db
 end
@@ -264,7 +266,7 @@ local function RegisterResetConfirmPopup()
     if StaticPopupDialogs["KEYLAB_CONFIRM_RESET_JOURNAL_DATA"] then return end
 
     StaticPopupDialogs["KEYLAB_CONFIRM_RESET_JOURNAL_DATA"] = {
-        text = "Permanently delete saved KeyLab journal data for all characters?\n\nThis deletes encounters, stat profiles, talent/build data, gear targets, stat goals, and settings. This cannot be undone.",
+        text = "Permanently delete saved KeyLab journal data for all characters?\n\nThis deletes encounters, stat profiles, talent/build data, practice sessions, gear targets, stat goals, and settings. This cannot be undone.",
         button1 = YES,
         button2 = CANCEL,
         OnAccept = function()

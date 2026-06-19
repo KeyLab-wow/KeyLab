@@ -48,6 +48,7 @@ function DB.Initialize()
     EnsureTable(KeyLabDB, "lootTargets")
     EnsureTable(KeyLabDB, "lootTargetStatuses")
     EnsureTable(KeyLabDB, "statGoals")
+    EnsureTable(KeyLabDB, "practiceSessions")
 
     for key, value in pairs(DEFAULT_SETTINGS) do
         if KeyLabDB.settings[key] == nil then
@@ -113,6 +114,7 @@ function DB.ResetAll()
         lootTargets = {},
         lootTargetStatuses = {},
         statGoals = {},
+        practiceSessions = {},
     }
 
     for key, value in pairs(DEFAULT_SETTINGS) do
