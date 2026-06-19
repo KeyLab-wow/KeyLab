@@ -91,11 +91,51 @@ local function IsCompletedEncounter(encounter)
     return type(encounter.metrics) == "table" and next(encounter.metrics) ~= nil
 end
 
+local function HasSavedPerformanceData(encounter)
+    if EncounterData.HasSavedPerformanceData then
+        return EncounterData.HasSavedPerformanceData(encounter)
+    end
+
+    if type(encounter) ~= "table" then return false end
+    if type(encounter.metrics) == "table" and next(encounter.metrics) ~= nil then return true end
+    if type(encounter.metricRanks) == "table" and next(encounter.metricRanks) ~= nil then return true end
+    if type(encounter.combatSessions) == "table" and next(encounter.combatSessions) ~= nil then return true end
+    if type(encounter.damageMeterSessions) == "table" and next(encounter.damageMeterSessions) ~= nil then return true end
+    if type(encounter.runCombatSessions) == "table" and next(encounter.runCombatSessions) ~= nil then return true end
+    return false
+end
+
+local function IsDisplayableLastRun(encounter)
+    if IsCompletedEncounter(encounter) then
+        return true
+    end
+
+    if type(encounter) ~= "table" then return false end
+    if HasSavedPerformanceData(encounter) then return true end
+
+    local challenge = encounter.challenge or {}
+    if type(challenge) == "table" then
+        return challenge.dungeonName ~= nil
+            or challenge.mapID ~= nil
+            or challenge.keyLevel ~= nil
+    end
+
+    return false
+end
+
 local function GetAllEncounters()
+    if EncounterData.GetEncounterList then
+        return EncounterData.GetEncounterList({
+            includeInterrupted = true,
+            includeExcluded = true,
+            currentCharacterOnly = false,
+        })
+    end
+
     if KeyLab.DB and KeyLab.DB.Encounters and KeyLab.DB.Encounters.GetFiltered then
         return KeyLab.DB.Encounters.GetFiltered({
-            includeInterrupted = false,
-            includeExcluded = false,
+            includeInterrupted = true,
+            includeExcluded = true,
         })
     end
     return KeyLabDB and KeyLabDB.encounters or {}
@@ -140,7 +180,7 @@ local function FindLatestEncounter()
     local latest = nil
 
     for _, encounter in ipairs(GetAllEncounters() or {}) do
-        if EncounterMatchesCurrentCharacter(encounter) and IsCompletedEncounter(encounter) then
+        if EncounterMatchesCurrentCharacter(encounter) and IsDisplayableLastRun(encounter) then
             if not latest or (tonumber(encounter.timestamp) or 0) > (tonumber(latest.timestamp) or 0) then
                 latest = encounter
             end

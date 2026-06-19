@@ -34,6 +34,23 @@ local function GetSavedCombatSessions(encounter)
     return {}
 end
 
+local function GetSavedDurationSeconds(encounter)
+    local challenge = type(encounter) == "table" and encounter.challenge or nil
+    local duration = tonumber(challenge and challenge.durationSeconds)
+    if duration and duration > 0 then
+        return duration
+    end
+
+    for _, session in ipairs(GetSavedCombatSessions(encounter)) do
+        duration = tonumber(session and session.durationSeconds)
+        if type(session) == "table" and session.isAggregateSession == true and duration and duration > 0 then
+            return duration
+        end
+    end
+
+    return nil
+end
+
 local function GetPullSessionDeathTotals(encounter)
     local localDeaths = 0
     local groupDeaths = 0
@@ -90,6 +107,54 @@ local function NormalizeDeathsMetric(encounter, metrics)
     return metrics
 end
 
+local function MetricNumber(metrics, metricKey)
+    if type(metrics) ~= "table" then return nil end
+    return tonumber(metrics[metricKey])
+end
+
+local function HealingDoneWithAbsorbs(metrics)
+    local healing = MetricNumber(metrics, "healingDone")
+    local absorbs = MetricNumber(metrics, "absorbs")
+
+    if healing == nil and not (absorbs and absorbs > 0) then
+        return nil
+    end
+
+    return (healing or 0) + (absorbs or 0)
+end
+
+local function HpsWithAbsorbs(metrics, durationSeconds)
+    local hps = MetricNumber(metrics, "hps")
+    local absorbs = MetricNumber(metrics, "absorbs")
+    local duration = tonumber(durationSeconds)
+
+    if hps == nil and not (absorbs and absorbs > 0 and duration and duration > 0) then
+        return nil
+    end
+
+    local absorbHps = 0
+    if absorbs and absorbs > 0 and duration and duration > 0 then
+        absorbHps = absorbs / duration
+    end
+
+    return (hps or 0) + absorbHps
+end
+
+local function AddDerivedHealingMetrics(metrics, durationSeconds)
+    local out = CopyTable(metrics)
+    local healingWithAbsorbs = HealingDoneWithAbsorbs(metrics)
+    local hpsWithAbsorbs = HpsWithAbsorbs(metrics, durationSeconds)
+
+    if healingWithAbsorbs ~= nil then
+        out.healingDoneWithAbsorbs = healingWithAbsorbs
+    end
+    if hpsWithAbsorbs ~= nil then
+        out.hpsWithAbsorbs = hpsWithAbsorbs
+    end
+
+    return out
+end
+
 local function IsBoolean(value)
     return value == true or value == false
 end
@@ -125,6 +190,15 @@ local function TableHasAnyValue(tbl)
     return next(tbl) ~= nil
 end
 
+local function HasCompletedResultSignal(encounter)
+    if type(encounter) ~= "table" then return false end
+    if encounter.completed == true or encounter.isComplete == true then return true end
+    if encounter.result == "Completed" or encounter.result == "Complete" then return true end
+    if encounter.result == "Timed" or encounter.result == "Untimed" or encounter.result == "Depleted" then return true end
+    if EncounterData.GetTimed(encounter) ~= nil then return true end
+    return false
+end
+
 function EncounterData.HasSavedPerformanceData(encounter)
     if type(encounter) ~= "table" then return false end
     if TableHasAnyValue(encounter.metrics) then return true end
@@ -138,15 +212,12 @@ end
 function EncounterData.IsCompletedEncounter(encounter)
     if type(encounter) ~= "table" then return false end
 
+    if encounter.status == "capture_failed" then return false end
+    if HasCompletedResultSignal(encounter) then return true end
+
     local flags = encounter.flags or {}
     if flags.interrupted == true or encounter.interrupted == true then return false end
     if flags.excludedFromComparisons == true or encounter.excludeFromComparisons == true then return false end
-    if encounter.status == "capture_failed" then return false end
-
-    if encounter.completed == true or encounter.isComplete == true then return true end
-    if encounter.result == "Completed" or encounter.result == "Complete" then return true end
-    if encounter.result == "Timed" or encounter.result == "Untimed" or encounter.result == "Depleted" then return true end
-    if EncounterData.GetTimed(encounter) ~= nil then return true end
 
     return EncounterData.HasSavedPerformanceData(encounter)
 end
@@ -207,14 +278,6 @@ function EncounterData.GetTimed(encounter)
 end
 
 function EncounterData.GetResultText(encounter)
-    local flags = type(encounter) == "table" and encounter.flags or nil
-    if type(flags) == "table" and flags.interrupted == true then
-        return "Interrupted"
-    end
-    if type(encounter) == "table" and encounter.interrupted == true then
-        return "Interrupted"
-    end
-
     local result = type(encounter) == "table" and encounter.result or nil
     if type(result) == "string" and result ~= "" and result ~= "Completed" and result ~= "Complete" then
         return result
@@ -227,6 +290,14 @@ function EncounterData.GetResultText(encounter)
 
     if type(result) == "string" and result ~= "" then
         return result
+    end
+
+    local flags = type(encounter) == "table" and encounter.flags or nil
+    if type(flags) == "table" and flags.interrupted == true then
+        return "Interrupted"
+    end
+    if type(encounter) == "table" and encounter.interrupted == true then
+        return "Interrupted"
     end
 
     if EncounterData.HasSavedPerformanceData(encounter) then
@@ -347,14 +418,30 @@ end
 
 function EncounterData.GetMetrics(encounter)
     if type(encounter) == "table" and type(encounter.metrics) == "table" then
-        return NormalizeDeathsMetric(encounter, encounter.metrics)
+        local metrics = NormalizeDeathsMetric(encounter, encounter.metrics)
+        return AddDerivedHealingMetrics(metrics, GetSavedDurationSeconds(encounter))
     end
     return {}
 end
 
+function EncounterData.GetMetricValueFromMetrics(metrics, metricKey, durationSeconds)
+    if metricKey == "healingDoneWithAbsorbs" then
+        return HealingDoneWithAbsorbs(metrics)
+    end
+    if metricKey == "hpsWithAbsorbs" then
+        return HpsWithAbsorbs(metrics, durationSeconds)
+    end
+    return MetricNumber(metrics, metricKey)
+end
+
 function EncounterData.GetMetricValue(encounter, metricKey)
     local metrics = EncounterData.GetMetrics(encounter)
-    return metrics and metrics[metricKey]
+    return EncounterData.GetMetricValueFromMetrics(metrics, metricKey, GetSavedDurationSeconds(encounter))
+end
+
+function EncounterData.GetSessionMetric(session, metricKey)
+    if type(session) ~= "table" then return nil end
+    return EncounterData.GetMetricValueFromMetrics(session.metrics, metricKey, session.durationSeconds)
 end
 
 function EncounterData.GetMetricInfoByType(metricType)
@@ -386,6 +473,57 @@ end
 function EncounterData.GetMetricLabel(metricKey)
     local info = EncounterData.GetMetricInfoByKey(metricKey)
     return info and info.label or metricKey or "Metric"
+end
+
+function EncounterData.GetEncounterList(options)
+    options = type(options) == "table" and options or {}
+
+    local raw = {}
+    if KeyLab.DB and KeyLab.DB.Encounters and KeyLab.DB.Encounters.GetAll then
+        raw = KeyLab.DB.Encounters.GetAll()
+    elseif KeyLab.DB and KeyLab.DB.Encounters and KeyLab.DB.Encounters.GetFiltered then
+        raw = KeyLab.DB.Encounters.GetFiltered({
+            includeInterrupted = options.includeInterrupted == true,
+            includeExcluded = options.includeExcluded == true,
+        })
+    elseif KeyLabDB and type(KeyLabDB.encounters) == "table" then
+        raw = KeyLabDB.encounters
+    end
+
+    local list = {}
+    for _, encounter in pairs(raw or {}) do
+        local flags = encounter and encounter.flags or {}
+        local hasCompletedResult = encounter and encounter.status ~= "capture_failed" and HasCompletedResultSignal(encounter)
+        local keep = true
+
+        if options.includeInterrupted ~= true then
+            keep = hasCompletedResult or (flags.interrupted ~= true and not (encounter and encounter.interrupted == true))
+        end
+
+        if keep and options.includeExcluded ~= true then
+            keep = hasCompletedResult or (flags.excludedFromComparisons ~= true and not (encounter and encounter.excludeFromComparisons == true))
+        end
+
+        if keep and options.completedOnly == true then
+            keep = EncounterData.IsCompletedEncounter(encounter)
+        end
+
+        if keep and options.currentCharacterOnly ~= false then
+            keep = EncounterData.EncounterMatchesCurrentCharacter(encounter, {
+                allowMissingIdentity = options.allowMissingIdentity == true,
+            })
+        end
+
+        if keep then
+            table.insert(list, encounter)
+        end
+    end
+
+    table.sort(list, function(a, b)
+        return (tonumber(a and a.timestamp) or 0) > (tonumber(b and b.timestamp) or 0)
+    end)
+
+    return list
 end
 
 function EncounterData.GetMetricList()
@@ -541,19 +679,7 @@ function EncounterData.GetAggregateSession(encounter)
 end
 
 function EncounterData.GetDurationSeconds(encounter)
-    local challenge = EncounterData.GetChallenge(encounter)
-    local duration = tonumber(challenge and challenge.durationSeconds)
-    if duration and duration > 0 then
-        return duration
-    end
-
-    local aggregate = EncounterData.GetAggregateSession(encounter)
-    duration = tonumber(aggregate and aggregate.durationSeconds)
-    if duration and duration > 0 then
-        return duration
-    end
-
-    return nil
+    return GetSavedDurationSeconds(encounter)
 end
 
 function EncounterData.GetAggregateSessionRanks(encounter)
