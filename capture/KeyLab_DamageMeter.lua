@@ -36,10 +36,65 @@ local function SafeCall(func, ...)
 
     local ok, a, b, c, d, e = pcall(func, ...)
     if not ok then
-        return false, tostring(a)
+        local okText, text = pcall(function()
+            return tostring(a)
+        end)
+        return false, okText and text or "call failed"
     end
 
     return true, a, b, c, d, e
+end
+
+local function SafeNumber(value)
+    if KeyLab.Utils and KeyLab.Utils.SafeNumber then
+        local number = KeyLab.Utils.SafeNumber(value)
+        if number ~= nil then
+            return number
+        end
+    end
+
+    local ok, number = pcall(function()
+        local n = tonumber(value)
+        if type(n) ~= "number" then return nil end
+        if n ~= n then return nil end
+        if not (n < math.huge and n > -math.huge) then return nil end
+        return n
+    end)
+
+    if ok and type(number) == "number" then
+        return number
+    end
+
+    return nil
+end
+
+local function SafeGreaterThanZero(value)
+    local number = SafeNumber(value)
+    if number == nil then return false end
+
+    local ok, result = pcall(function()
+        return number > 0
+    end)
+
+    return ok and result == true
+end
+
+local function SafeCompare(left, right, lowerIsBetter)
+    left = SafeNumber(left)
+    right = SafeNumber(right)
+    if left == nil or right == nil then
+        return nil
+    end
+
+    local ok, result = pcall(function()
+        if lowerIsBetter then
+            return left < right
+        end
+        return left > right
+    end)
+
+    if not ok then return nil end
+    return result == true
 end
 
 local function GetSessionID(sessionInfo)
@@ -52,7 +107,7 @@ end
 
 local function GetSessionDuration(sessionInfo)
     if type(sessionInfo) == "table" then
-        return tonumber(sessionInfo.durationSeconds or sessionInfo.duration or 0) or 0
+        return SafeNumber(sessionInfo.durationSeconds or sessionInfo.duration or 0) or 0
     end
 
     return 0
@@ -123,7 +178,7 @@ local function ReadSourceField(source, fieldName)
     end)
 
     if ok and type(value) == "number" then
-        return value
+        return SafeNumber(value)
     end
 
     return nil
@@ -164,24 +219,31 @@ local function BuildLocalRank(rawSession, metricInfo)
     end
 
     local rank = 1
+    local bestValue = localValue
     for _, value in ipairs(values) do
-        if lowerIsBetter then
-            if value < localValue then rank = rank + 1 end
-        elseif value > localValue then
+        local isBetterThanLocal = SafeCompare(value, localValue, lowerIsBetter)
+        if isBetterThanLocal == nil then
+            return nil
+        end
+
+        if isBetterThanLocal then
             rank = rank + 1
         end
-    end
 
-    table.sort(values, function(a, b)
-        if lowerIsBetter then return a < b end
-        return a > b
-    end)
+        local isBetterThanBest = SafeCompare(value, bestValue, lowerIsBetter)
+        if isBetterThanBest == nil then
+            return nil
+        end
+        if isBetterThanBest then
+            bestValue = value
+        end
+    end
 
     return {
         rank = rank,
         total = #values,
         value = localValue,
-        bestValue = values[1],
+        bestValue = bestValue,
         higherIsBetter = not lowerIsBetter,
     }
 end
@@ -218,8 +280,8 @@ local function NormalizeLocalSource(source)
     return {
         isLocalPlayer = source.isLocalPlayer == true,
         sourceName = ReadAnySourceField(source, "name"),
-        totalAmount = ReadAnySourceField(source, "totalAmount"),
-        amountPerSecond = ReadAnySourceField(source, "amountPerSecond"),
+        totalAmount = SafeNumber(ReadAnySourceField(source, "totalAmount")),
+        amountPerSecond = SafeNumber(ReadAnySourceField(source, "amountPerSecond")),
         classFile = ReadAnySourceField(source, "classFilename"),
         sourceGUID = ReadAnySourceField(source, "sourceGUID"),
     }
@@ -229,11 +291,11 @@ local function GetDeathEventValue(source)
     if type(source) ~= "table" or not IsPlayerSource(source) then return nil end
 
     local total = ReadSourceField(source, "totalAmount")
-    if total and total > 0 then return total end
+    if SafeGreaterThanZero(total) then return total end
 
     local deathRecapID = ReadSourceField(source, "deathRecapID")
     local deathTimeSeconds = ReadSourceField(source, "deathTimeSeconds")
-    if (deathRecapID and deathRecapID > 0) or (deathTimeSeconds and deathTimeSeconds > 0) then
+    if SafeGreaterThanZero(deathRecapID) or SafeGreaterThanZero(deathTimeSeconds) then
         return 1
     end
 
@@ -268,8 +330,8 @@ local function ReadDeathEvents(rawSession)
                 sourceGUID = ReadAnySourceField(source, "sourceGUID"),
                 isLocalPlayer = source.isLocalPlayer == true,
                 deathCount = value,
-                deathRecapID = ReadAnySourceField(source, "deathRecapID"),
-                deathTimeSeconds = ReadAnySourceField(source, "deathTimeSeconds"),
+                deathRecapID = SafeNumber(ReadAnySourceField(source, "deathRecapID")),
+                deathTimeSeconds = SafeNumber(ReadAnySourceField(source, "deathTimeSeconds")),
             })
         end
     end
@@ -279,7 +341,7 @@ end
 
 local function NormalizeEnemyDamage(rawSession)
     local out = {
-        totalAmount = ReadAnySourceField(rawSession, "totalAmount") or 0,
+        totalAmount = SafeNumber(ReadAnySourceField(rawSession, "totalAmount")) or 0,
         sources = {},
     }
 
@@ -292,7 +354,7 @@ local function NormalizeEnemyDamage(rawSession)
             table.insert(out.sources, {
                 creatureID = ReadAnySourceField(source, "sourceCreatureID"),
                 classification = ReadAnySourceField(source, "classification"),
-                enemyTotalAmount = ReadAnySourceField(source, "totalAmount"),
+                enemyTotalAmount = SafeNumber(ReadAnySourceField(source, "totalAmount")),
             })
         end
     end
@@ -321,32 +383,34 @@ local function MetricOrderForSessions()
     return out
 end
 
-local function ReadMetricValue(rawSession, metricInfo)
+local function ReadMetricValue(rawSession, metricInfo, options)
+    options = type(options) == "table" and options or {}
     if type(rawSession) ~= "table" or type(metricInfo) ~= "table" then return nil, nil end
 
     if metricInfo.keylabKey == "deaths" then
         local deathEvents = ReadDeathEvents(rawSession)
-        return deathEvents.localDeaths, NormalizeLocalSource(deathEvents.localSource)
+        return deathEvents.localDeaths, options.skipSources == true and nil or NormalizeLocalSource(deathEvents.localSource)
     end
 
     local source = FindLocalSource(rawSession)
     if source then
         local value = ReadSourceField(source, metricInfo.valueField)
-        return value, NormalizeLocalSource(source)
+        return value, options.skipSources == true and nil or NormalizeLocalSource(source)
     end
 
-    if ZERO_WHEN_MISSING[metricInfo.keylabKey] and tonumber(rawSession.totalAmount) == 0 then
+    if ZERO_WHEN_MISSING[metricInfo.keylabKey] and SafeNumber(rawSession.totalAmount) == 0 then
         return 0, nil
     end
 
     return nil, nil
 end
 
-local function ReadMetricsForSession(sessionID)
+local function ReadMetricsForSession(sessionID, options)
     local metrics = {}
     local sources = {}
     local ranks = {}
     local enemyDamageTaken = nil
+    options = type(options) == "table" and options or {}
 
     if sessionID == nil or not C_DamageMeter or not C_DamageMeter.GetCombatSessionFromID then
         return metrics, sources, ranks, enemyDamageTaken
@@ -360,23 +424,29 @@ local function ReadMetricsForSession(sessionID)
 
         if okRaw and type(rawSession) == "table" then
             if metricType == 10 then
-                enemyDamageTaken = NormalizeEnemyDamage(rawSession)
+                if options.skipEnemyDamage ~= true then
+                    enemyDamageTaken = NormalizeEnemyDamage(rawSession)
+                end
             elseif metricInfo and metricInfo.store == true and metricInfo.keylabKey then
-                local value, source = ReadMetricValue(rawSession, metricInfo)
+                local value, source = ReadMetricValue(rawSession, metricInfo, options)
                 if value ~= nil then
                     metrics[metricInfo.keylabKey] = value
                 end
                 if metricInfo.keylabKey == "deaths" then
                     local deathEvents = ReadDeathEvents(rawSession)
                     metrics.groupDeaths = deathEvents.groupDeaths
-                    sources.deathEvents = deathEvents.events
+                    if options.skipSources ~= true then
+                        sources.deathEvents = deathEvents.events
+                    end
                 end
-                if source then
+                if source and options.skipSources ~= true then
                     sources[metricInfo.keylabKey] = source
                 end
-                local rank = BuildLocalRank(rawSession, metricInfo)
-                if rank then
-                    ranks[metricInfo.keylabKey] = rank
+                if options.skipRanks ~= true then
+                    local rank = BuildLocalRank(rawSession, metricInfo)
+                    if rank then
+                        ranks[metricInfo.keylabKey] = rank
+                    end
                 end
             end
         end
@@ -467,8 +537,10 @@ function DamageMeter.GetCombatSessionsSnapshot(context)
     end
 
     table.sort(out, function(a, b)
-        return (tonumber(a.sessionID) or 0) < (tonumber(b.sessionID) or 0)
+        return (SafeNumber(a.sessionID) or 0) < (SafeNumber(b.sessionID) or 0)
     end)
 
     return out, nil
 end
+
+return DamageMeter

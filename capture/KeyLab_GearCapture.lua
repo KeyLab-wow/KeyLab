@@ -697,7 +697,19 @@ local function GetEncounterKeyLevel(encounter)
 end
 
 function Capture.GetRunHistory()
+    local encounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData
+    local usedSharedList = false
     local db = KeyLabDB and KeyLabDB.encounters or {}
+    if encounterData and encounterData.GetEncounterList then
+        db = encounterData.GetEncounterList({
+            includeInterrupted = false,
+            includeExcluded = false,
+            completedOnly = true,
+            allowMissingIdentity = true,
+        })
+        usedSharedList = true
+    end
+
     local summary = {
         completed = 0,
         highestCompleted = 0,
@@ -705,7 +717,7 @@ function Capture.GetRunHistory()
     }
 
     for _, encounter in pairs(db or {}) do
-        if EncounterMatchesCurrentCharacter(encounter) and IsCompletedEncounter(encounter) then
+        if usedSharedList or (EncounterMatchesCurrentCharacter(encounter) and IsCompletedEncounter(encounter)) then
             local keyLevel = GetEncounterKeyLevel(encounter)
             if keyLevel > 0 then
                 summary.completed = summary.completed + 1

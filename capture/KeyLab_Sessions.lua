@@ -130,8 +130,8 @@ function Sessions.GetChallengeContext()
     return context
 end
 
-function Sessions.GetCompletionContext()
-    local context = Sessions.GetChallengeContext()
+function Sessions.GetCompletionContext(baseContext)
+    local context = type(baseContext) == "table" and baseContext or Sessions.GetChallengeContext()
 
     if KeyLab.Capture and KeyLab.Capture.ChallengeTimer and KeyLab.Capture.ChallengeTimer.Complete then
         return KeyLab.Capture.ChallengeTimer.Complete(context)

@@ -138,7 +138,10 @@ local function BuildEncounterRecord()
     local durationSeconds = context.durationSeconds
 
     local timed = context.timed
-    local resultText = context.result or (timed ~= nil and (timed and "Timed" or "Untimed")) or "Completed"
+    local captureInterrupted = captureDB.interrupted == true and captureDB.completedSeen ~= true
+    local resultText = context.result
+        or (timed ~= nil and (timed and "Timed" or "Untimed"))
+        or (captureDB.completedSeen == true and "Completed" or "Interrupted")
     local deathAudit = BuildDeathAudit(
         officialGroupDeaths,
         aggregateMeterDeaths,
@@ -200,8 +203,8 @@ local function BuildEncounterRecord()
         },
 
         flags = {
-            interrupted = captureDB.interrupted == true,
-            excludedFromComparisons = captureDB.interrupted == true,
+            interrupted = captureInterrupted,
+            excludedFromComparisons = captureInterrupted,
         },
     }
 
@@ -259,10 +262,12 @@ function Capture.MarkCompleted()
     local captureDB = EnsureCaptureDB()
 
     captureDB.completedSeen = true
+    captureDB.interrupted = false
+    captureDB.interruptedReason = nil
     captureDB.completedAt = time()
     captureDB.completedAtText = date("%Y-%m-%d %H:%M:%S", captureDB.completedAt)
 
-    local completionContext = Sessions.GetCompletionContext and Sessions.GetCompletionContext() or Sessions.GetChallengeContext()
+    local completionContext = Sessions.GetCompletionContext and Sessions.GetCompletionContext(captureDB.challenge) or Sessions.GetChallengeContext()
     if type(completionContext) == "table" then
         captureDB.challenge = captureDB.challenge or {}
         for key, value in pairs(completionContext) do
