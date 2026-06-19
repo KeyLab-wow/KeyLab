@@ -228,6 +228,15 @@ local function IsCompletedEncounter(encounter)
 end
 
 local function CountEncounters()
+    if EncounterData.GetEncounterList then
+        return #EncounterData.GetEncounterList({
+            includeInterrupted = false,
+            includeExcluded = false,
+            completedOnly = true,
+            allowMissingIdentity = true,
+        })
+    end
+
     local list = nil
 
     if KeyLab.DB and KeyLab.DB.Encounters and KeyLab.DB.Encounters.GetFiltered then

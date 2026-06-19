@@ -226,6 +226,24 @@ local function FormatMetric(metricKey, value)
     return FormatNumber(value)
 end
 
+local function FormatTrendAverage(metricKey, value)
+    value = SafeNumber(value)
+    if value == nil then return "-" end
+
+    if metricKey == "deaths"
+        or metricKey == "groupDeaths"
+        or metricKey == "interrupts"
+        or metricKey == "dispels"
+    then
+        local rounded = math.floor(value + 0.5)
+        if math.abs(value - rounded) >= 0.05 then
+            return string.format("%.1f", value)
+        end
+    end
+
+    return FormatMetric(metricKey, value)
+end
+
 local function FormatDateTime(value)
     if Fmt().DateTime then return Fmt().DateTime(value) end
     value = SafeNumber(value)
@@ -369,6 +387,14 @@ local function EncounterMatchesCurrentCharacter(encounter)
 end
 
 local function GetEncounterList()
+    if EncounterData.GetEncounterList then
+        return EncounterData.GetEncounterList({
+            includeInterrupted = false,
+            includeExcluded = false,
+            allowMissingIdentity = false,
+        })
+    end
+
     local raw = {}
 
     if KeyLab.DB and KeyLab.DB.Encounters and KeyLab.DB.Encounters.GetFiltered then
@@ -751,7 +777,7 @@ end
 
 local function MetricColor(metricKey)
     if metricKey == "damageDone" or metricKey == "dps" then return CFG.colors.orange end
-    if metricKey == "healingDone" or metricKey == "hps" then return CFG.colors.green end
+    if metricKey == "healingDone" or metricKey == "healingDoneWithAbsorbs" or metricKey == "hps" or metricKey == "hpsWithAbsorbs" then return CFG.colors.green end
     if metricKey == "absorbs" then return CFG.colors.blue end
     if metricKey == "interrupts" or metricKey == "dispels" then return CFG.colors.purple end
     if metricKey == "damageTaken" or metricKey == "avoidableDamageTaken" or metricKey == "deaths" or metricKey == "groupDeaths" then return CFG.colors.red end
@@ -1015,7 +1041,7 @@ local function BuildTrendTile(parent, x, y, trend)
     AddLine(panel, trend.trendText or "Stable", 12, -34, 150, color, "GameFontNormalLarge")
 
     if trend.recentAverage then
-        AddLine(panel, "Recent avg: " .. FormatMetric(trend.metricKey, trend.recentAverage), 12, -58, 185, CFG.colors.muted, "GameFontDisableSmall")
+        AddLine(panel, "Recent avg: " .. FormatTrendAverage(trend.metricKey, trend.recentAverage), 12, -58, 185, CFG.colors.muted, "GameFontDisableSmall")
     else
         AddLine(panel, "Need more runs", 12, -58, 185, CFG.colors.muted, "GameFontDisableSmall")
     end
@@ -1284,7 +1310,7 @@ end
 
 local TREND_METRICS = {
     "dps",
-    "hps",
+    "hpsWithAbsorbs",
     "damageTaken",
     "avoidableDamageTaken",
     "interrupts",
@@ -1305,7 +1331,7 @@ local function BuildTrendTile(parent, x, y, trend, averageLabel)
     AddLine(panel, trend.trendText or "Stable", 12, -35, 192, color, "GameFontNormalLarge")
 
     if trend.recentAverage then
-        AddLine(panel, (averageLabel or "Recent avg") .. ": " .. FormatMetric(trend.metricKey, trend.recentAverage), 12, -58, 240, CFG.colors.muted, "GameFontDisableSmall")
+        AddLine(panel, (averageLabel or "Recent avg") .. ": " .. FormatTrendAverage(trend.metricKey, trend.recentAverage), 12, -58, 240, CFG.colors.muted, "GameFontDisableSmall")
     else
         AddLine(panel, "Need more runs", 12, -58, 240, CFG.colors.muted, "GameFontDisableSmall")
     end

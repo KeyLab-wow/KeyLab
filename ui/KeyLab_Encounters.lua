@@ -431,6 +431,14 @@ end
 
 
 local function GetEncounterList()
+    if EncounterData.GetEncounterList then
+        return EncounterData.GetEncounterList({
+            includeInterrupted = true,
+            includeExcluded = true,
+            allowMissingIdentity = false,
+        })
+    end
+
     if KeyLab.DB and KeyLab.DB.Encounters and KeyLab.DB.Encounters.GetFiltered then
         local list = KeyLab.DB.Encounters.GetFiltered({
             includeInterrupted = true,

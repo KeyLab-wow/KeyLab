@@ -484,6 +484,14 @@ local function FilterCurrentCharacterEncounters(encounters)
 end
 
 local function GetEncounterList()
+    if EncounterData.GetEncounterList then
+        return EncounterData.GetEncounterList({
+            includeInterrupted = false,
+            includeExcluded = false,
+            allowMissingIdentity = false,
+        })
+    end
+
     if KeyLab.DB and KeyLab.DB.Encounters and KeyLab.DB.Encounters.GetFiltered then
         local list = KeyLab.DB.Encounters.GetFiltered({
             includeInterrupted = false,

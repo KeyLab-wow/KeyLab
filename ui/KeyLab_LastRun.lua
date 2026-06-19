@@ -159,7 +159,7 @@ end
 
 local function MetricColor(metricKey)
     if metricKey == "dps" or metricKey == "damageDone" then return COLORS.orange end
-    if metricKey == "hps" or metricKey == "healingDone" then return COLORS.green end
+    if metricKey == "hps" or metricKey == "hpsWithAbsorbs" or metricKey == "healingDone" or metricKey == "healingDoneWithAbsorbs" then return COLORS.green end
     if metricKey == "interrupts" or metricKey == "dispels" then return COLORS.purple end
     if metricKey == "avoidableDamageTaken" then return GRAPH_COLORS.avoidable end
     if metricKey == "deaths" or metricKey == "groupDeaths" then return GRAPH_COLORS.death end
@@ -178,13 +178,20 @@ local function RankGroupSize(ranks)
 end
 
 local function RankText(rank, metricKey, state)
+    local groupSize = RankGroupSize(state and state.ranks)
+
     if type(rank) ~= "table" or not rank.rank then
         local metrics = state and state.metrics or {}
         if metricKey == "dispels" and (tonumber(metrics.dispels) or 0) <= 0 then
-            return "0 / " .. tostring(RankGroupSize(state and state.ranks))
+            return "0 / " .. tostring(groupSize)
         end
         return "No rank"
     end
+
+    if metricKey == "dispels" then
+        return tostring(rank.rank) .. " / " .. tostring(groupSize)
+    end
+
     return tostring(rank.rank) .. " / " .. tostring(rank.total or "?")
 end
 
@@ -280,9 +287,9 @@ local function BuildTotals(parent, state)
     AddVerticalDivider(card, 288, -40, 118)
     local items = {
         { label = "DPS", key = "dps" },
-        { label = "HPS", key = "hps" },
+        { label = "HPS", key = "hpsWithAbsorbs" },
         { label = "Damage", key = "damageDone" },
-        { label = "Healing", key = "healingDone" },
+        { label = "Healing", key = "healingDoneWithAbsorbs" },
         { label = "Avoidable Damage", key = "avoidableDamageTaken" },
         { label = "Deaths", key = "deaths" },
     }
@@ -299,8 +306,10 @@ end
 local GRAPH_METRICS = {
     dps = { label = "DPS", color = COLORS.orange },
     hps = { label = "HPS", color = COLORS.green },
+    hpsWithAbsorbs = { label = "HPS", color = COLORS.green },
     damageDone = { label = "Damage", color = COLORS.orange },
     healingDone = { label = "Healing", color = COLORS.green },
+    healingDoneWithAbsorbs = { label = "Healing Done", color = COLORS.green },
     damageTaken = { label = "Damage Taken", color = COLORS.orange },
     avoidableDamageTaken = { label = "Avoidable Damage", color = GRAPH_COLORS.avoidable },
     interrupts = { label = "Interrupts", color = COLORS.purple },
@@ -311,9 +320,9 @@ local GRAPH_METRICS = {
 
 local TOOLTIP_METRICS = {
     "dps",
-    "hps",
+    "hpsWithAbsorbs",
     "damageDone",
-    "healingDone",
+    "healingDoneWithAbsorbs",
     "damageTaken",
     "avoidableDamageTaken",
     "interrupts",
@@ -348,7 +357,7 @@ local function GetGraphProfile(state)
             role = "Healer",
             title = "HPS by Pull",
             subtitle = "Healing performance for each captured combat session in this run.",
-            metrics = { "hps" },
+            metrics = { "hpsWithAbsorbs" },
         }
     end
     if role == "Tank" or role == "TANK" then
@@ -382,7 +391,7 @@ local function GetRoleFocusProfile(state)
             role = "Healer",
             title = "Group Survival by Pull",
             subtitle = "Healing done and group deaths for each captured combat session.",
-            metrics = { "healingDone", "groupDeaths" },
+            metrics = { "healingDoneWithAbsorbs", "groupDeaths" },
             scale = "perMetric",
         }
     end
@@ -400,7 +409,7 @@ local function GetRoleFocusProfile(state)
         role = "Damage",
         title = "Survival Pressure by Pull",
         subtitle = "Avoidable damage, player deaths, and healing done for each captured combat session.",
-        metrics = { "avoidableDamageTaken", "deaths", "healingDone" },
+        metrics = { "avoidableDamageTaken", "deaths", "healingDoneWithAbsorbs" },
         scale = "perMetric",
     }
 end
@@ -497,8 +506,7 @@ local function GetCombatSessions(encounter)
 end
 
 local function SessionMetric(session, metricKey)
-    local metrics = session and session.metrics or {}
-    return tonumber(metrics[metricKey])
+    return EncounterData.GetSessionMetric(session, metricKey)
 end
 
 local function SessionHasGraphMetric(session, metricKeys)
