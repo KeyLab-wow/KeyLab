@@ -2,7 +2,7 @@
 ## Title: KeyLab
 ## Notes: Personal Mythic+ experimentation journal for talent/stat builds and completed encounter outcomes.
 ## Author: Brione
-## Version: 1.4.0
+## Version: 1.5.2
 ## SavedVariables: KeyLabDB, KeyLabCaptureDB, KeyLabGearStatsProbeDB
 
 utils/KeyLab_Utils.lua
@@ -19,6 +19,7 @@ mapping/KeyLab_Formatters.lua
 database/KeyLab_DB.lua
 database/KeyLab_JournalData.lua
 database/KeyLab_EncountersDB.lua
+database/KeyLab_PracticeDB.lua
 database/KeyLab_BuildDB.lua
 database/KeyLab_GearingDatabase.lua
 database/KeyLab_GearLootDatabase.lua
@@ -35,6 +36,7 @@ analysis/KeyLab_EncounterData.lua
 analysis/KeyLab_RunHighlights.lua
 analysis/KeyLab_LastRunAnalysis.lua
 analysis/KeyLab_GearingAnalysis.lua
+analysis/KeyLab_PracticeAnalysis.lua
 
 capture/KeyLab_Sessions.lua
 capture/KeyLab_ChallengeTimer.lua
@@ -42,7 +44,9 @@ capture/KeyLab_PlayerCapture.lua
 capture/KeyLab_StatCapture.lua
 capture/KeyLab_TalentCapture.lua
 capture/KeyLab_DamageMeter.lua
+capture/KeyLab_PracticeDamageMeter.lua
 capture/KeyLab_Capture.lua
+capture/KeyLab_PracticeCapture.lua
 
 ui/KeyLab_UITheme.lua
 KeyLab_UI.lua
@@ -53,6 +57,7 @@ ui/KeyLab_LastRun.lua
 ui/KeyLab_TalentBuilds.lua
 ui/KeyLab_StatProfiles.lua
 ui/KeyLab_Trends.lua
+ui/KeyLab_Practice.lua
 ui/KeyLab_GearDashboard.lua
 ui/KeyLab_GearTargets.lua
 ui/KeyLab_GearTargetsWindow.lua
