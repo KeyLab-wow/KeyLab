@@ -101,6 +101,11 @@ local function BuildEncounterRecord()
     local captureDB = EnsureCaptureDB()
     local context = captureDB.challenge or Sessions.GetChallengeContext()
 
+    if captureDB.completedSeen == true and ChallengeTimer and ChallengeTimer.Complete then
+        context = ChallengeTimer.Complete(context)
+        captureDB.challenge = context
+    end
+
     local okContext, contextReason = Sessions.IsAllowedChallengeContext(context)
     if not okContext then
         return nil, contextReason
