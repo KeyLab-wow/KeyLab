@@ -168,13 +168,13 @@ end
 
 local function RankGroupSize(ranks)
     ranks = ranks or {}
-    for _, key in ipairs({ "damageDone", "dps", "hps", "healingDone", "interrupts", "dispels" }) do
-        local rank = ranks[key]
+    local groupSize = 0
+    for _, rank in pairs(ranks) do
         if type(rank) == "table" and tonumber(rank.total) then
-            return tonumber(rank.total)
+            groupSize = math.max(groupSize, tonumber(rank.total))
         end
     end
-    return 5
+    return groupSize > 0 and groupSize or 5
 end
 
 local function RankText(rank, metricKey, state)
@@ -182,17 +182,15 @@ local function RankText(rank, metricKey, state)
 
     if type(rank) ~= "table" or not rank.rank then
         local metrics = state and state.metrics or {}
-        if metricKey == "dispels" and (tonumber(metrics.dispels) or 0) <= 0 then
+        if (metricKey == "interrupts" or metricKey == "dispels")
+            and (tonumber(metrics[metricKey]) or 0) <= 0
+        then
             return "0 / " .. tostring(groupSize)
         end
         return "No rank"
     end
 
-    if metricKey == "dispels" then
-        return tostring(rank.rank) .. " / " .. tostring(groupSize)
-    end
-
-    return tostring(rank.rank) .. " / " .. tostring(rank.total or "?")
+    return tostring(rank.rank) .. " / " .. tostring(groupSize)
 end
 
 local function AddValue(parent, label, value, x, y, width, color)
