@@ -178,6 +178,14 @@ local function HasOfficialTiming(challenge)
     return false
 end
 
+local function HasStoredCompletedResultSignal(encounter)
+    if type(encounter) ~= "table" then return false end
+    if encounter.completed == true or encounter.isComplete == true then return true end
+    if encounter.result == "Completed" or encounter.result == "Complete" then return true end
+    if encounter.result == "Timed" or encounter.result == "Untimed" or encounter.result == "Depleted" then return true end
+    return false
+end
+
 local function GetChallengeFrom(value)
     if type(value) == "table" and type(value.challenge) == "table" then
         return value.challenge
@@ -191,12 +199,19 @@ local function TableHasAnyValue(tbl)
 end
 
 local function HasCompletedResultSignal(encounter)
-    if type(encounter) ~= "table" then return false end
-    if encounter.completed == true or encounter.isComplete == true then return true end
-    if encounter.result == "Completed" or encounter.result == "Complete" then return true end
-    if encounter.result == "Timed" or encounter.result == "Untimed" or encounter.result == "Depleted" then return true end
+    if HasStoredCompletedResultSignal(encounter) then return true end
     if EncounterData.GetTimed(encounter) ~= nil then return true end
     return false
+end
+
+local function HasCompletedTimerMath(encounter)
+    if not HasStoredCompletedResultSignal(encounter) then return false end
+
+    local duration = GetSavedDurationSeconds(encounter)
+    if not duration or duration <= 0 then return false end
+
+    local limit = EncounterData.GetTimeLimitSeconds and EncounterData.GetTimeLimitSeconds(encounter)
+    return limit and limit > 0
 end
 
 function EncounterData.HasSavedPerformanceData(encounter)
@@ -236,6 +251,13 @@ function EncounterData.GetTimingDurationSeconds(value)
         return duration
     end
 
+    if type(value) == "table" and type(value.challenge) == "table" then
+        duration = GetSavedDurationSeconds(value)
+        if duration and duration > 0 then
+            return duration
+        end
+    end
+
     return nil
 end
 
@@ -264,7 +286,7 @@ function EncounterData.GetTimed(encounter)
         return challenge.timed
     end
 
-    if not HasOfficialTiming(challenge) then
+    if not HasOfficialTiming(challenge) and not HasCompletedTimerMath(encounter) then
         return nil
     end
 
@@ -318,7 +340,9 @@ function EncounterData.GetUpgradeLevels(value)
         return math.max(0, math.floor(levels))
     end
 
-    if KeyLab.Mapping and KeyLab.Mapping.GetTimerUpgradeLevels and HasOfficialTiming(challenge) then
+    if KeyLab.Mapping and KeyLab.Mapping.GetTimerUpgradeLevels
+        and (HasOfficialTiming(challenge) or HasCompletedTimerMath(value))
+    then
         local timed = nil
         if type(value) == "table" and type(value.challenge) == "table" then
             timed = EncounterData.GetTimed(value)
@@ -360,7 +384,7 @@ function EncounterData.GetTimeDelta(value)
     local storedDelta = tonumber(challenge and (challenge.timeDeltaSeconds or challenge.remainingSeconds))
     if storedDelta then return storedDelta end
 
-    if not HasOfficialTiming(challenge) then
+    if not HasOfficialTiming(challenge) and not HasCompletedTimerMath(value) then
         return nil
     end
 
