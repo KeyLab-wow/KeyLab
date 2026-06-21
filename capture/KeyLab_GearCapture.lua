@@ -616,6 +616,88 @@ function Capture.GetCurrencySnapshot()
     return snapshot
 end
 
+local function GreatVaultRequirements()
+    local requirements = {}
+    for _, entry in ipairs((DB().GreatVaultSlots and DB().GreatVaultSlots.mythicPlus) or {}) do
+        local required = tonumber(entry.required)
+        if required then table.insert(requirements, required) end
+    end
+    table.sort(requirements)
+    return requirements
+end
+
+local function WeeklyRewardActivityTypes()
+    local types = {}
+    local seen = {}
+
+    local function add(value)
+        if value == nil or seen[value] then return end
+        seen[value] = true
+        table.insert(types, value)
+    end
+
+    local enum = Enum and Enum.WeeklyRewardChestThresholdType
+    if type(enum) == "table" then
+        add(enum.MythicPlus)
+        add(enum.Activities)
+        add(enum.Dungeons)
+        add(enum.Dungeon)
+    end
+
+    return types
+end
+
+function Capture.GetGreatVaultMythicPlusProgress()
+    local requirements = GreatVaultRequirements()
+    if #requirements == 0 then return nil end
+
+    local maxRequired = requirements[#requirements]
+    local requirementSet = {}
+    for _, required in ipairs(requirements) do
+        requirementSet[required] = true
+    end
+
+    if not (C_WeeklyRewards and C_WeeklyRewards.GetActivities) then
+        return nil
+    end
+
+    for _, activityType in ipairs(WeeklyRewardActivityTypes()) do
+        local ok, activities = pcall(C_WeeklyRewards.GetActivities, activityType)
+        if ok and type(activities) == "table" and #activities > 0 then
+            local matchedThresholds = 0
+            local progress = 0
+            local unlockedSlots = 0
+
+            for _, activity in ipairs(activities) do
+                local threshold = tonumber(activity.threshold or activity.required or activity.requiredCount)
+                local activityProgress = tonumber(activity.progress or activity.currentProgress)
+
+                if threshold and requirementSet[threshold] then
+                    matchedThresholds = matchedThresholds + 1
+                end
+                if activityProgress and activityProgress > progress then
+                    progress = activityProgress
+                end
+                if threshold and activityProgress and activityProgress >= threshold then
+                    unlockedSlots = unlockedSlots + 1
+                end
+            end
+
+            if matchedThresholds > 0 then
+                return {
+                    progress = math.max(0, math.min(progress, maxRequired)),
+                    required = maxRequired,
+                    unlockedSlots = unlockedSlots,
+                    totalSlots = #requirements,
+                    source = "weeklyRewards",
+                }
+            end
+        end
+    end
+
+    return nil
+end
+
 local function GetCurrentCharacterIdentity()
     local name, realm
     if UnitFullName then name, realm = UnitFullName("player") end
