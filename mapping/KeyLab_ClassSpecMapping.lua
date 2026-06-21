@@ -126,9 +126,16 @@ function ClassSpecs.GetGraphProfile(specID, className, specName)
     if IsTank(role) then
         return {
             role = role,
-            title = "Damage Taken by Pull",
-            subtitle = "Tank pressure for each captured combat session in this run.",
-            metrics = { "damageTaken", "avoidableDamageTaken" },
+            title = "Tank Pressure by Pull",
+            subtitle = "Damage taken, healing done, and absorbs for each captured combat session in this run.",
+            metrics = { "healingDone", "absorbs", "damageTaken" },
+            optionalMetrics = { absorbs = true },
+            metricLabels = {
+                healingDone = "Healing Done",
+                absorbs = "Absorbs",
+                damageTaken = "Damage Taken",
+            },
+            scale = "perMetric",
         }
     end
 
@@ -148,11 +155,13 @@ function ClassSpecs.GetRoleFocusProfile(specID, className, specName)
             role = role,
             title = "Group Survival by Pull",
             trendTitle = "Role Focus: Group Survival",
-            subtitle = "Healing done and group deaths for each captured combat session.",
+            subtitle = "Healing done, absorbs, and group deaths for each captured combat session.",
             trendSubtitle = "Recent healer-focused run signals compared against earlier saved runs.",
-            metrics = { "healingDoneWithAbsorbs", "groupDeaths" },
+            metrics = { "healingDone", "absorbs", "groupDeaths" },
+            optionalMetrics = { absorbs = true },
             metricLabels = {
-                healingDoneWithAbsorbs = "Healing Done",
+                healingDone = "Healing Done",
+                absorbs = "Absorbs",
                 groupDeaths = "Group Deaths",
             },
             scale = "perMetric",
@@ -164,9 +173,10 @@ function ClassSpecs.GetRoleFocusProfile(specID, className, specName)
             role = role,
             title = "Pull Stability by Pull",
             trendTitle = "Role Focus: Pull Stability",
-            subtitle = "Damage taken, avoidable damage, and group deaths for each captured combat session.",
+            subtitle = "Damage taken, avoidable damage, and group deaths by pull.",
             trendSubtitle = "Recent tank-focused run signals compared against earlier saved runs.",
             metrics = { "damageTaken", "avoidableDamageTaken", "groupDeaths" },
+            trendMetrics = { "damageTaken", "avoidableDamageTaken", "groupDeaths" },
             metricLabels = {
                 damageTaken = "Damage Taken",
                 avoidableDamageTaken = "Avoidable Damage",
