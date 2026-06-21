@@ -41,6 +41,7 @@ local FONT_SUBTITLE = 12
 local FONT_BLOCK_TITLE = 13
 local FONT_BODY = 12
 local FONT_BODY_SPACING = 2
+local SECTION_GAP = 22
 
 -- =========================================================
 -- BASIC HELPERS
@@ -155,6 +156,13 @@ local function AddSectionHeader(parent, y, title, subtitle, panelHeight)
     return nextY - 18
 end
 
+local function AddSection(parent, y, title, subtitle, panelHeight)
+    local contentY = AddSectionHeader(parent, y, title, subtitle, panelHeight)
+    local fullHeight = panelHeight or ((subtitle and subtitle ~= "") and 58 or 42)
+    local nextSectionY = y - fullHeight - SECTION_GAP
+    return contentY, nextSectionY
+end
+
 local function AddTextBlock(parent, x, y, width, title, body)
     if title and title ~= "" then
         local h = MakeText(parent, title, "GameFontNormal", FONT_BLOCK_TITLE, COLORS.title, "LEFT")
@@ -209,10 +217,11 @@ end
 -- =========================================================
 
 local function BuildInsights(content)
-    local y = -4
+    local sectionY = -4
+    local y, nextSectionY
 
     -- Encounter Variables
-    y = AddSectionHeader(content, y, "Encounter Variables", "Gameplay factors that can change real Mythic+ outcomes from run to run.", 210)
+    y, nextSectionY = AddSection(content, sectionY, "Encounter Variables", "Gameplay factors that can change real Mythic+ outcomes from run to run.", 210)
 
     local colW = 270
     AddTextBlock(content, PAGE_PADDING + 12, y, colW, "Core Variables", BulletList({
@@ -239,10 +248,10 @@ local function BuildInsights(content)
 
     AddTextBlock(content, 640, y, 245, "Pressure Points", "Different encounters may reward different strengths. A build or stat setup that feels strong in one dungeon may feel weaker when movement, interrupts, or survivability pressure changes.")
 
-    y = y - 150
+    sectionY = nextSectionY
 
     -- Encounter Pressures
-    y = AddSectionHeader(content, y, "Encounter Pressures", "", 210)
+    y, nextSectionY = AddSection(content, sectionY, "Encounter Pressures", "", 210)
 
     AddTextBlock(content, PAGE_PADDING + 12, y, 410, "Ranged Encounter Pressures", BulletList({
         "Cast interruption",
@@ -265,10 +274,10 @@ local function BuildInsights(content)
         "Reaction timing under pressure",
     }))
 
-    y = y - 158
+    sectionY = nextSectionY
 
     -- Character Stats Reference
-    y = AddSectionHeader(content, y, "Character Stats Reference", "Stats can affect pacing, burst, survivability, and specialization-specific mechanics.", 520)
+    y, nextSectionY = AddSection(content, sectionY, "Character Stats Reference", "Stats can affect pacing, burst, survivability, and specialization-specific mechanics.", 560)
 
     AddSoftBox(content, PAGE_PADDING + 12, y, 280, 112, "Primary Stats", "Strength\nAgility\nIntellect\nStamina")
     AddSoftBox(content, 318, y, 280, 112, "Secondary Stats", "Haste\nCritical Strike\nMastery\nVersatility")
@@ -310,20 +319,20 @@ local function BuildInsights(content)
         "ability interactions",
     }) .. "\n\nEach specialization has a unique Mastery effect. Different encounters and builds may benefit differently from Mastery.")
 
-    y = y - 170
+    sectionY = nextSectionY
 
     -- Spell Queue Window
-    y = AddSectionHeader(content, y, "Spell Queue Window", "A game setting that changes how early the client accepts your next ability input.", 220)
+    y, nextSectionY = AddSection(content, sectionY, "Spell Queue Window", "A game setting that changes how early the client accepts your next ability input.", 220)
 
     AddTextBlock(content, PAGE_PADDING + 12, y, 520, "", "Spell Queue Window affects how early the game accepts your next ability input before your current cast or global cooldown ends.\n\nDifferent values may change how responsive combat feels depending on latency and playstyle.")
 
     AddSoftBox(content, 575, y, 310, 116, "Commands",
         "Check Current:\n/dump GetCVar(\"SpellQueueWindow\")\n\nChange:\n/console SpellQueueWindow NUMBER\n\n400 ms = Blizzard default")
 
-    y = y - 150
+    sectionY = nextSectionY
 
     -- Macros
-    y = AddSectionHeader(content, y, "Macros", "Macros can reduce targeting friction, support different playstyles, and improve comfort.", 255)
+    y, nextSectionY = AddSection(content, sectionY, "Macros", "Macros can reduce targeting friction, support different playstyles, and improve comfort.", 320)
 
     AddTextBlock(content, PAGE_PADDING + 12, y, 270, "Macros can help:", DashList({
         "Simplify repetitive actions",
@@ -333,18 +342,18 @@ local function BuildInsights(content)
         "Improve reaction speed",
     }))
 
-    AddColumnDivider(content, 310, y + 4, 160)
+    AddColumnDivider(content, 310, y + 4, 190)
 
     AddTextBlock(content, 330, y, 250, "Common Macro Targets", "@focus\n@target\n@targettarget\n@focustarget\n@party1-4\n@raid1-40\n@player\n@mouseover\n@cursor\n@playername\n@buttonX")
 
-    AddColumnDivider(content, 610, y + 4, 160)
+    AddColumnDivider(content, 610, y + 4, 190)
 
     AddTextBlock(content, 630, y, 250, "Location-Targeted Examples", "/cast [@player] Angelic Feather\n\n/cast [@player] Healing Rain\n\n/cast [@player] Cataclysm")
 
-    y = y - 190
+    sectionY = nextSectionY
 
     -- Conditional Macro Examples
-    y = AddSectionHeader(content, y, "Conditional Macro Examples", "", 300)
+    y, nextSectionY = AddSection(content, sectionY, "Conditional Macro Examples", "", 340)
 
     AddTextBlock(content, PAGE_PADDING + 12, y, 870, "", "Macros can combine different targeting conditions to support utility, off-healing, dispels, and combat resurrection abilities from a single keybind.\n\nThese types of macros can help reduce targeting friction and improve reaction speed during fast-paced encounters.")
 
@@ -359,16 +368,16 @@ local function BuildInsights(content)
     AddSoftBox(content, 618, y, 266, 125, "Party 2 Example",
         "/use [@party2, dead] Emergency Soul Link\n/cast [@party2, nochanneling] Healing Surge")
 
-    y = y - 158
+    sectionY = nextSectionY
 
     -- Sims
-    y = AddSectionHeader(content, y, "Sims", "", 150)
+    y, nextSectionY = AddSection(content, sectionY, "Sims", "", 150)
 
     AddTextBlock(content, PAGE_PADDING + 12, y, 870, "", "Simulation tools are often used to test builds, stats, and gear combinations in controlled environments.\n\nReal encounter results may still vary depending on mechanics, group composition, movement, and playstyle.")
 
-    y = y - 90
+    sectionY = nextSectionY
 
-    content:SetHeight(math.abs(y) + 30)
+    content:SetHeight(math.abs(sectionY) + 30)
 end
 
 -- =========================================================

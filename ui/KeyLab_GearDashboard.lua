@@ -44,6 +44,8 @@ local STATUS_BADGE_SIZE = 26
 local BADGE_HEIGHT = 16
 local SLOT_BADGE_FONT_SIZE = 8
 local REFRESH_DEBOUNCE_SECONDS = 0.35
+local ACTIVITY_ROW_HEIGHT = 13
+local ACTIVITY_ROW_GAP = 13
 
 local TRACK_COLORS = {
     Unranked = COLORS.gray,
@@ -168,6 +170,11 @@ local function BadgeText(badge)
 end
 
 local function RankColor(plan)
+    if plan and plan.priorityNumber then return COLORS.orange end
+    if plan and (plan.stateKey == "priority" or plan.stateKey == "upgrade") then
+        return StateColor(plan.stateKey)
+    end
+
     local rank = tonumber(plan and plan.upgradeRank)
     local maxRank = tonumber(plan and plan.upgradeMaxRank)
     if rank and maxRank and rank >= maxRank then return COLORS.green end
@@ -299,11 +306,11 @@ local function MakeSlotCard(parent, x, y, slotName)
     return row
 end
 
-local function MakeActivityRow(parent, y, width)
+local function MakeActivityRow(parent, x, y, width)
     width = width or 250
     local row = CreateFrame("Frame", nil, parent)
-    row:SetPoint("TOPLEFT", parent, "TOPLEFT", 20, y)
-    row:SetSize(width, 18)
+    row:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 20, y)
+    row:SetSize(width, ACTIVITY_ROW_HEIGHT)
     row.blocks = {}
 
     for i = 1, 5 do
@@ -313,9 +320,10 @@ local function MakeActivityRow(parent, y, width)
         row.blocks[i] = block
     end
 
-    row.label = MakeText(row, "", "GameFontNormal", nil, COLORS.text)
+    row.label = MakeText(row, "", "GameFontDisableSmall", nil, COLORS.text)
     row.label:SetPoint("LEFT", row, "LEFT", 0, 0)
-    row.label:SetSize(width, 18)
+    row.label:SetSize(width, ACTIVITY_ROW_HEIGHT)
+    row.label:SetWordWrap(false)
     return row
 end
 
@@ -393,13 +401,16 @@ function GearDashboard:Build()
     self.progressHint:SetPoint("BOTTOM", self.progressCard, "BOTTOM", 0, 8)
     self.progressHint:SetSize(CENTER_WIDTH - 24, 14)
 
-    self.activityCard = MakeCenterCard(self.frame, 176, -728, 608, 104, "Next Steps You Can Do")
+    self.activityCard = MakeCenterCard(self.frame, 8, -728, 940, 78, "Next Steps You Can Do")
+    self.activityCard.title:SetPoint("TOP", self.activityCard, "TOP", 0, -8)
     self.activityRows = {}
     for i = 1, 4 do
-        self.activityRows[i] = MakeActivityRow(self.activityCard, -32 - ((i - 1) * 17), 560)
+        local col = ((i - 1) % 2)
+        local row = math.floor((i - 1) / 2)
+        self.activityRows[i] = MakeActivityRow(self.activityCard, 24 + (col * 456), -30 - (row * 18), 416)
     end
     self.activityNote = MakeText(self.activityCard, "", "GameFontDisableSmall", nil, COLORS.muted, "CENTER")
-    self.activityNote:SetPoint("BOTTOM", self.activityCard, "BOTTOM", 0, 6)
+    self.activityNote:SetPoint("BOTTOM", self.activityCard, "BOTTOM", 0, 4)
     self.activityNote:SetSize(560, 12)
     self.activityNote:Hide()
 end
@@ -450,7 +461,8 @@ function GearDashboard:RefreshSlotRow(row, plan)
     local rankColor = RankColor(plan)
     SetOutlineBadge(row.trackBadge, plan.trackLabel or plan.trackName or "Unranked", rankColor, COLORS.text)
     SetOutlineBadge(row.rankBadge, plan.rankText or "", rankColor, COLORS.text)
-    SetOutlineBadge(row.statusBadge, StatusBadgeText(plan), stateColor, COLORS.text)
+    local statusColor = plan.priorityNumber and StatusBadgeText(plan) ~= "" and COLORS.orange or stateColor
+    SetOutlineBadge(row.statusBadge, StatusBadgeText(plan), statusColor, COLORS.text)
     SetOutlineBadge(row.sourceBadge, showSource and plan.sourceText or "", COLORS.white, COLORS.text)
 
     local analyzedBadges = plan.badges or {}
@@ -470,7 +482,7 @@ function GearDashboard:RefreshPrioritySlots(state)
         local plan = state.priorityPlans and state.priorityPlans[index]
         if plan then
             row:Show()
-            local color = StateColor(plan.stateKey)
+            local color = plan.priorityNumber and COLORS.orange or StateColor(plan.stateKey)
             row:SetBackdropBorderColor(unpack(color))
             row.slot:SetText(plan.displayName or plan.slot or "-")
             row.slot:SetTextColor(unpack(COLORS.text))

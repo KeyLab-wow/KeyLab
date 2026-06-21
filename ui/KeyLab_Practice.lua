@@ -107,6 +107,26 @@ local function MakePanel(parent, x, y, width, height, title)
     return panel
 end
 
+local function MakeMovableWindow(frame, dragHeight)
+    if not frame then return end
+
+    frame:SetMovable(true)
+    frame:SetClampedToScreen(true)
+
+    local drag = CreateFrame("Frame", nil, frame)
+    drag:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    drag:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+    drag:SetHeight(dragHeight or 44)
+    drag:EnableMouse(true)
+    drag:RegisterForDrag("LeftButton")
+    drag:SetScript("OnDragStart", function()
+        frame:StartMoving()
+    end)
+    drag:SetScript("OnDragStop", function()
+        frame:StopMovingOrSizing()
+    end)
+end
+
 local function MakeButton(parent, text, width, height)
     local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     button:SetSize(width or 110, height or 24)
@@ -440,6 +460,7 @@ local function EnsureMonitor()
     frame:SetFrameLevel(950)
     frame:EnableMouse(true)
     SetBackdrop(frame, COLORS.cardBg, COLORS.cardBorder)
+    MakeMovableWindow(frame, 46)
     frame:Hide()
 
     frame.title = MakeText(frame, "Practice Session Started", "GameFontNormalLarge", 18, COLORS.gold)

@@ -1453,7 +1453,7 @@ local function BuildRoleFocusPanel(parent, x, y, encounters)
     if not profile then return nil end
 
     local metricKeys = {}
-    for _, metric in ipairs(profile.metrics or {}) do
+    for _, metric in ipairs(profile.trendMetrics or profile.metrics or {}) do
         local key = RoleMetricKey(metric)
         if key then
             table.insert(metricKeys, key)
