@@ -45,6 +45,30 @@ local function CurrentIdentity()
     return UnitName and UnitName("player") or nil, GetRealmName and GetRealmName() or nil
 end
 
+local function CurrentPlayer()
+    local capture = KeyLab.Capture and KeyLab.Capture.Player
+    if capture and capture.GetSnapshot then
+        local ok, player = pcall(capture.GetSnapshot)
+        if ok and type(player) == "table" then
+            return player
+        end
+    end
+
+    local player = {}
+    if UnitClass then
+        player.class, player.classFile, player.classID = UnitClass("player")
+    end
+
+    if GetSpecialization and GetSpecializationInfo then
+        local specIndex = GetSpecialization()
+        if specIndex then
+            player.specID, player.spec = GetSpecializationInfo(specIndex)
+        end
+    end
+
+    return player
+end
+
 local function Normalize(value)
     value = tostring(value or "")
     value = value:gsub("%s+", "")
@@ -72,6 +96,40 @@ local function MatchesCurrentCharacter(session)
 
     if currentRealm ~= "" and sessionRealm ~= "" then
         return sessionRealm == currentRealm
+    end
+
+    return true
+end
+
+local function MatchesCurrentSpec(session)
+    local current = CurrentPlayer()
+    local player = session and session.player or {}
+
+    local currentSpecID = tonumber(current.specID)
+    local sessionSpecID = tonumber(player.specID)
+    if currentSpecID and sessionSpecID then
+        return currentSpecID == sessionSpecID
+    end
+
+    local currentSpec = Normalize(current.spec or current.specName)
+    local sessionSpec = Normalize(player.spec or player.specName)
+    if currentSpec == "" then
+        return true
+    end
+    if sessionSpec == "" or sessionSpec ~= currentSpec then
+        return false
+    end
+
+    local currentClassFile = Normalize(current.classFile)
+    local sessionClassFile = Normalize(player.classFile)
+    if currentClassFile ~= "" and sessionClassFile ~= "" then
+        return currentClassFile == sessionClassFile
+    end
+
+    local currentClass = Normalize(current.class or current.className)
+    local sessionClass = Normalize(player.class or player.className)
+    if currentClass ~= "" and sessionClass ~= "" then
+        return currentClass == sessionClass
     end
 
     return true
@@ -129,13 +187,9 @@ function PracticeAnalysis.GetSessions()
     local raw = PracticeAnalysis.GetAllSessions()
 
     for _, session in ipairs(raw or {}) do
-        if type(session) == "table" and MatchesCurrentCharacter(session) then
+        if type(session) == "table" and MatchesCurrentCharacter(session) and MatchesCurrentSpec(session) then
             table.insert(sessions, session)
         end
-    end
-
-    if #sessions == 0 and #raw > 0 then
-        sessions = raw
     end
 
     table.sort(sessions, function(a, b)

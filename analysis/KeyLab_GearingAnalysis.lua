@@ -78,22 +78,22 @@ local function ShortTrackName(trackName)
     return trackName or "Unranked"
 end
 
-local function TrackLabel(slot)
+local function TrackLabel(slot, trackOverride)
     if not slot or not slot.itemLink then return "-" end
     local itemLevel = tonumber(slot.itemLevel)
     if slot.craftedIndicatorVisible or slot.craftedDetected or slot.isCrafted then
         return itemLevel and (tostring(itemLevel) .. " Crafted") or "Crafted"
     end
-    local track = ShortTrackName(slot.upgradeTrack or slot.trackName or "Unranked")
+    local track = ShortTrackName(trackOverride or slot.upgradeTrack or slot.trackName or "Unranked")
     if itemLevel then
         return tostring(itemLevel) .. " " .. track
     end
     return track
 end
 
-local function RankText(slot)
-    local rank = tonumber(slot and slot.upgradeRank)
-    local maxRank = tonumber(slot and (slot.upgradeMaxRank or slot.upgradeMax))
+local function RankText(slot, rankOverride, maxRankOverride)
+    local rank = tonumber(rankOverride or (slot and slot.upgradeRank))
+    local maxRank = tonumber(maxRankOverride or (slot and (slot.upgradeMaxRank or slot.upgradeMax)))
     if rank and maxRank then return tostring(rank) .. "/" .. tostring(maxRank) end
     return nil
 end
@@ -214,6 +214,13 @@ local function GetCurrencyState()
         end
     end
     return state
+end
+
+local function GetGreatVaultProgress()
+    if Capture().GetGreatVaultMythicPlusProgress then
+        return Capture().GetGreatVaultMythicPlusProgress()
+    end
+    return nil
 end
 
 local function GetStatPriorityText(specID)
@@ -511,6 +518,35 @@ local function UpgradeStatusForTrack(trackName)
     return nil
 end
 
+local function ResolveUpgradeTrack(capturedSlot)
+    local trackName = capturedSlot and (capturedSlot.upgradeTrack or capturedSlot.trackName)
+    local rank = capturedSlot and capturedSlot.upgradeRank
+    local maxRank = capturedSlot and (capturedSlot.upgradeMaxRank or capturedSlot.upgradeMax)
+
+    if trackName and trackName ~= "" then
+        return trackName, rank, maxRank
+    end
+
+    local itemLevel = tonumber(capturedSlot and capturedSlot.itemLevel)
+    local baseName = capturedSlot and (capturedSlot.baseName or BaseSlotName(capturedSlot.slotName or capturedSlot.name))
+    if itemLevel and baseName == "Trinket" and (capturedSlot.ascendantVoidforgedDetected or capturedSlot.voidforgedDetected) then
+        local mythTrack = DB().GetTrackByName and DB().GetTrackByName("Myth") or nil
+        if not mythTrack or itemLevel < (tonumber(mythTrack.maxItemLevel) or math.huge) then
+            local voidforgeRules = DB().Voidforge or {}
+            return "Hero", voidforgeRules.requiredRank or 6, voidforgeRules.requiredMaxRank or 6
+        end
+    end
+
+    if itemLevel and DB().GetTrackByItemLevel then
+        local inferredTrack = DB().GetTrackByItemLevel(itemLevel)
+        if inferredTrack and inferredTrack.name and TrackRank(inferredTrack.name) > TrackRank("Unranked") then
+            return inferredTrack.name, rank, maxRank
+        end
+    end
+
+    return "Unranked", rank, maxRank
+end
+
 local function CrestNeedForStatus(statusText)
     if statusText == "Upgrade to Champion" then
         return "championCrests", "Need Champion Crests: Run M+ 2-3"
@@ -526,6 +562,7 @@ end
 
 local function BuildSlotState(slotName, capturedSlot, targetSummary, context)
     capturedSlot = capturedSlot or EmptyCapturedSlot(slotName)
+    local resolvedTrackName, resolvedRank, resolvedMaxRank = ResolveUpgradeTrack(capturedSlot)
     local slotState = {
         slotID = capturedSlot.slotID,
         slotName = slotName,
@@ -538,10 +575,10 @@ local function BuildSlotState(slotName, capturedSlot, targetSummary, context)
         icon = capturedSlot.icon or capturedSlot.texture,
         texture = capturedSlot.icon or capturedSlot.texture,
         itemLevel = capturedSlot.itemLevel,
-        upgradeTrack = capturedSlot.upgradeTrack or capturedSlot.trackName or "Unranked",
-        trackName = capturedSlot.upgradeTrack or capturedSlot.trackName or "Unranked",
-        upgradeRank = capturedSlot.upgradeRank,
-        upgradeMaxRank = capturedSlot.upgradeMaxRank or capturedSlot.upgradeMax,
+        upgradeTrack = resolvedTrackName,
+        trackName = resolvedTrackName,
+        upgradeRank = resolvedRank,
+        upgradeMaxRank = resolvedMaxRank,
         badges = {},
         targetSources = targetSummary.sources or {},
         targetStatus = targetSummary.status,
@@ -555,8 +592,8 @@ local function BuildSlotState(slotName, capturedSlot, targetSummary, context)
         polishIssues = {},
         sourceText = ShortSourceText(targetSummary.sources, 3),
         centerSourceText = ShortSourceText(targetSummary.sources, 3),
-        trackLabel = TrackLabel(capturedSlot),
-        rankText = RankText(capturedSlot),
+        trackLabel = TrackLabel(capturedSlot, resolvedTrackName),
+        rankText = RankText(capturedSlot, resolvedRank, resolvedMaxRank),
         itemLevelText = capturedSlot.itemLevel and ("ilvl " .. tostring(capturedSlot.itemLevel)) or "",
         debug = {},
     }
@@ -650,12 +687,14 @@ local function BuildSlotState(slotName, capturedSlot, targetSummary, context)
 
     -- Myth gear can show target/polish/tier context, but target/BIS alone must
     -- not make it an Upgrade Priority Slot.
-    if isMyth and targetMissing and #slotState.polishIssues == 0 and not tierNeeded and not voidforgeMissing then
+    local targetOnlyInformational = isMyth and targetMissing and #slotState.polishIssues == 0 and not tierNeeded and not voidforgeMissing
+    if targetOnlyInformational then
         score = 0
     end
 
-    local stateKey = StateKeyForScore(score, isMissing)
-    slotState.isComplete = (score <= 0 and not isMissing)
+    local stateKey = targetOnlyInformational and "na" or StateKeyForScore(score, isMissing)
+    slotState.isNA = targetOnlyInformational
+    slotState.isComplete = (score <= 0 and not isMissing and not targetOnlyInformational)
     slotState.statusText = statusText
     slotState.reasonText = statusText
     slotState.stateKey = stateKey
@@ -669,6 +708,7 @@ local function BuildSlotState(slotName, capturedSlot, targetSummary, context)
     slotState.embellishmentMissing = embellishmentMissing
     slotState.debug = {
         trackRank = slotState.upgradeTrack,
+        capturedTrack = capturedSlot.upgradeTrack or capturedSlot.trackName,
         rank = slotState.upgradeRank,
         maxRank = slotState.upgradeMaxRank,
         enchantDetected = capturedSlot.enchantDetected == true,
@@ -716,6 +756,19 @@ local function BuildActivities(capability, currencyState, context)
 
     if context.blockedMessage then
         return activities
+    end
+
+    local vault = context.greatVaultProgress
+    if vault and vault.required then
+        local progress = tonumber(vault.progress) or 0
+        local required = tonumber(vault.required) or 0
+        if required > 0 then
+            if progress < required then
+                AddActivity(activities, "Great Vault: " .. tostring(progress) .. " / " .. tostring(required) .. " M+ dungeons complete", 5, "blue")
+            else
+                AddActivity(activities, "Great Vault: " .. tostring(required) .. " / " .. tostring(required) .. " M+ dungeons complete", 5, "green")
+            end
+        end
     end
 
     for _, need in ipairs(context.crestNeeds or {}) do
@@ -803,6 +856,7 @@ local function BuildDashboardState()
     local classID = GetCurrentClassID()
     local playerLevel = GetPlayerLevel()
     local currencyState = GetCurrencyState()
+    local greatVaultProgress = GetGreatVaultProgress()
     local craftWatch = GetCraftWatch(currencyState)
     local progress = GetTargetProgress(specID)
     local blockedMessage = nil
@@ -857,6 +911,7 @@ local function BuildDashboardState()
         craftedCount = 0,
         craftCrestText = craftWatch.readyText,
         craftReady = craftWatch.ready == true,
+        greatVaultProgress = greatVaultProgress,
         crestNeeds = {},
         crestNeedSeen = {},
         tierSlots = {},
@@ -899,6 +954,7 @@ local function BuildDashboardState()
         statPriorityMismatch = currentStatPriority.mismatch,
         currencyState = currencyState,
         craftWatch = craftWatch,
+        greatVaultProgress = greatVaultProgress,
         progress = progress,
         craftedCount = activityContext.craftedCount,
         slotStates = plansBySlot,
@@ -942,7 +998,7 @@ function Analysis.GetLogicSummary()
         "Tier adds 30 only before 4-piece and only for eligible Hero/Myth pieces.",
         "Only missing Enchant, Gem, and crafted-item Embellishment are shown as small red item-card badges.",
         "Myth items are never priority slots only because target/BIS is missing.",
-        "Next steps only show crest needs, catalyst opportunities, Ascendant Voidcore upgrades, and craft crest readiness.",
+        "Next steps show Great Vault progress, crest needs, catalyst opportunities, Ascendant Voidcore upgrades, and craft crest readiness.",
     }
 end
 
@@ -988,6 +1044,7 @@ function Analysis.PrintGearDebug()
         highestTimedKey = state and state.history and state.history.highestTimed or nil,
         craftedCount = state and state.craftedCount or 0,
         craftWatch = state and state.craftWatch or nil,
+        greatVaultProgress = state and state.greatVaultProgress or nil,
         currencyState = state and state.currencyState or nil,
         rows = {},
     }
