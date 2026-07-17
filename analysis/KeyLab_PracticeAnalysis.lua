@@ -17,10 +17,10 @@ Purpose:
 ]]
 
 local METRIC_OPTIONS = {
-    { key = "dps", label = "DPS" },
     { key = "damageDone", label = "Damage Done" },
-    { key = "hpsWithAbsorbs", label = "HPS" },
+    { key = "dps", label = "DPS" },
     { key = "healingDoneWithAbsorbs", label = "Healing Done" },
+    { key = "hpsWithAbsorbs", label = "HPS" },
 }
 
 local TEST_TYPE_OPTIONS = {
@@ -229,6 +229,12 @@ function PracticeAnalysis.FilterSessions(sessions, filters)
 
         if filters.testType and session.testType ~= filters.testType then
             keep = false
+        end
+
+        if filters.duration == "manual" then
+            if tonumber(session.targetDurationSeconds) then keep = false end
+        elseif tonumber(filters.duration) then
+            if tonumber(session.targetDurationSeconds) ~= tonumber(filters.duration) then keep = false end
         end
 
         if filters.status == "unmarked" then

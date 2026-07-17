@@ -499,6 +499,29 @@ function EncounterData.GetMetricLabel(metricKey)
     return info and info.label or metricKey or "Metric"
 end
 
+function EncounterData.GetCurrentClassIdentity()
+    if not UnitClass then return nil, nil, nil end
+    return UnitClass("player")
+end
+
+function EncounterData.EncounterMatchesCurrentClass(encounter, options)
+    if type(encounter) ~= "table" then return false end
+    local currentName, currentFile, currentID = EncounterData.GetCurrentClassIdentity()
+    local player = EncounterData.GetPlayer and EncounterData.GetPlayer(encounter) or encounter.player or {}
+    local savedName = player.class or player.className
+    local savedFile = player.classFile or player.classFilename
+    local savedID = tonumber(player.classID)
+
+    if currentID and savedID then return tonumber(currentID) == savedID end
+    if currentFile and savedFile and savedFile ~= "" then
+        return tostring(currentFile):upper() == tostring(savedFile):upper()
+    end
+    if currentName and savedName and savedName ~= "" then
+        return tostring(currentName):lower() == tostring(savedName):lower()
+    end
+    return options and options.allowMissingClass == true
+end
+
 function EncounterData.GetEncounterList(options)
     options = type(options) == "table" and options or {}
 
@@ -535,6 +558,12 @@ function EncounterData.GetEncounterList(options)
         if keep and options.currentCharacterOnly ~= false then
             keep = EncounterData.EncounterMatchesCurrentCharacter(encounter, {
                 allowMissingIdentity = options.allowMissingIdentity == true,
+            })
+        end
+
+        if keep and options.currentClassOnly ~= false then
+            keep = EncounterData.EncounterMatchesCurrentClass(encounter, {
+                allowMissingClass = options.allowMissingClass ~= false,
             })
         end
 
