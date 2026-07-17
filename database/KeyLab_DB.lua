@@ -20,10 +20,11 @@ SavedVariables:
 - KeyLabDB
 ]]
 
-local DB_VERSION = "0.1.5"
+local DB_VERSION = "0.1.6"
 
 local DEFAULT_SETTINGS = {
     completedMythicPlusOnly = true,
+    contentMode = "mplus",
 }
 
 local function EnsureTable(parent, key)
@@ -44,10 +45,15 @@ function DB.Initialize()
 
     EnsureTable(KeyLabDB, "settings")
     EnsureTable(KeyLabDB, "encounters")
+    EnsureTable(KeyLabDB, "raidEncounters")
+    EnsureTable(KeyLabDB, "raidNights")
     EnsureTable(KeyLabDB, "builds")
     EnsureTable(KeyLabDB, "lootTargets")
     EnsureTable(KeyLabDB, "lootTargetStatuses")
+    EnsureTable(KeyLabDB, "gearTargets")
+    EnsureTable(KeyLabDB, "tierSets")
     EnsureTable(KeyLabDB, "statGoals")
+    EnsureTable(KeyLabDB, "statGoalMatcherResults")
     EnsureTable(KeyLabDB, "practiceSessions")
 
     for key, value in pairs(DEFAULT_SETTINGS) do
@@ -110,10 +116,15 @@ function DB.ResetAll()
         trackingSince = date("%B %Y"),
         settings = {},
         encounters = {},
+        raidEncounters = {},
+        raidNights = {},
         builds = {},
         lootTargets = {},
         lootTargetStatuses = {},
+        gearTargets = {},
+        tierSets = {},
         statGoals = {},
+        statGoalMatcherResults = {},
         practiceSessions = {},
     }
 

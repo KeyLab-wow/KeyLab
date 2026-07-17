@@ -1,5 +1,5 @@
 -- KeyLab_GearingDatabase.lua
--- Behind-the-scenes gearing rules used by the Gear Dashboard tab.
+-- Shared slot, track, source-code, and capture metadata for gearing features.
 
 local ADDON_NAME, KeyLab = ...
 KeyLab = KeyLab or {}
@@ -10,19 +10,18 @@ local GearingDB = KeyLab.GearingDatabase
 
 GearingDB.Season = {
     name = "Midnight Season 1",
-    note = "Used for Mythic+ dashboard visuals, reward references, and gearing recommendations.",
+    note = "Used for Gear Dashboard display and current-season source guidance.",
 }
 
+-- Track IDs are display ordering only. The dashboard does not calculate a score.
 GearingDB.Tracks = {
-    { id = 0, name = "Unranked", minItemLevel = 207, maxItemLevel = 220, source = "Not M+ focused" },
-    { id = 1, name = "Adventurer", minItemLevel = 220, maxItemLevel = 230, source = "Not M+ focused" },
-    { id = 2, name = "Veteran", minItemLevel = 233, maxItemLevel = 246, source = "Early M+ transition" },
-    { id = 3, name = "Champion", minItemLevel = 246, maxItemLevel = 259, crestName = "Champion Dawncrest", currencyID = 3343, source = "M+1-5" },
-    { id = 4, name = "Hero", minItemLevel = 259, maxItemLevel = 272, crestName = "Hero Dawncrest", currencyID = 3345, source = "M+6-9" },
-    { id = 5, name = "Myth", minItemLevel = 272, maxItemLevel = 289, crestName = "Myth Dawncrest", currencyID = 3347, source = "M+10+" },
+    { id = 0, name = "Unranked" },
+    { id = 1, name = "Adventurer" },
+    { id = 2, name = "Veteran" },
+    { id = 3, name = "Champion" },
+    { id = 4, name = "Hero" },
+    { id = 5, name = "Myth" },
 }
-
-GearingDB.TrackOrder = { "Adventurer", "Veteran", "Champion", "Hero", "Myth" }
 
 GearingDB.DashboardSlots = {
     left = { "Head", "Neck", "Shoulders", "Back", "Chest", "Wrist", "Main Hand", "Off Hand" },
@@ -30,17 +29,8 @@ GearingDB.DashboardSlots = {
 }
 
 GearingDB.DisplaySlotLabels = {
-    ["Main Hand"] = "Weapon",
-    ["Off Hand"] = "Off-Hand",
-}
-
-GearingDB.TrackBaseScores = {
-    Unranked = 80,
-    Adventurer = 80,
-    Veteran = 60,
-    Champion = 40,
-    Hero = 20,
-    Myth = 0,
+    ["Main Hand"] = "Main Hand",
+    ["Off Hand"] = "Off Hand",
 }
 
 GearingDB.DungeonCodes = {
@@ -54,31 +44,13 @@ GearingDB.DungeonCodes = {
     ["Seat of the Triumvirate"] = "SEAT",
 }
 
-GearingDB.EnchantableSlots = {
-    Head = true,
-    Shoulder = true,
-    Shoulders = true,
-    Chest = true,
-    Legs = true,
-    Feet = true,
-    Finger = true,
-    ["Main Hand"] = true,
-}
-
-GearingDB.EmbellishmentSlots = {
-    Head = true,
-    Shoulders = true,
-    Chest = true,
-    Waist = true,
-    Legs = true,
-    Feet = true,
-    Wrist = true,
-    Hands = true,
-    Neck = true,
-    Back = true,
-    Finger = true,
-    ["Main Hand"] = true,
-    ["Off Hand"] = true,
+GearingDB.RaidCodes = {
+    ["Sporefall"] = "SF",
+    ["The Voidspire"] = "VS",
+    ["Voidspire"] = "VS",
+    ["March on Quel'Danas"] = "MQD",
+    ["Dreamrift"] = "DR",
+    ["The Dreamrift"] = "DR",
 }
 
 GearingDB.TwoHandOrRangedEquipLocs = {
@@ -115,94 +87,13 @@ GearingDB.InventorySlots = {
     { name = "Off Hand", slotID = 17 },
 }
 
-GearingDB.MythicPlusActivityLanes = {
-    Entry = {
-        label = "M+ entry lane",
-        keyText = "M+2-3",
-        crestKey = "championCrests",
-        crestName = "Champion Crests",
-    },
-    Champion = {
-        label = "Champion M+ lane",
-        keyText = "M+2-5",
-        crestKey = "championCrests",
-        crestName = "Champion Crests",
-    },
-    Hero = {
-        label = "Hero M+ lane",
-        keyText = "M+6-8",
-        crestKey = "heroCrests",
-        crestName = "Hero Crests",
-    },
-    Myth = {
-        label = "Myth M+ lane",
-        keyText = "M+9+",
-        crestKey = "mythCrests",
-        crestName = "Myth Crests",
-    },
-}
-
-GearingDB.MythicPlusEndOfRun = {
-    [2] = { label = "+2", track = "Champion", rank = "1/6", itemLevel = 246 },
-    [3] = { label = "+3", track = "Champion", rank = "2/6", itemLevel = 250 },
-    [4] = { label = "+4", track = "Champion", rank = "3/6", itemLevel = 253 },
-    [5] = { label = "+5", track = "Champion", rank = "4/6", itemLevel = 256 },
-    [6] = { label = "+6", track = "Hero", rank = "1/6", itemLevel = 259 },
-    [7] = { label = "+7", track = "Hero", rank = "2/6", itemLevel = 263 },
-    [8] = { label = "+8", track = "Hero", rank = "2/6", itemLevel = 263 },
-    [9] = { label = "+9", track = "Hero", rank = "3/6", itemLevel = 266 },
-    [10] = { label = "+10", track = "Hero", rank = "3/6", itemLevel = 266 },
-}
-
-GearingDB.MythicPlusVault = {
-    [2] = { label = "+2", track = "Hero", rank = "1/6", itemLevel = 259 },
-    [3] = { label = "+3", track = "Hero", rank = "1/6", itemLevel = 259 },
-    [4] = { label = "+4", track = "Hero", rank = "2/6", itemLevel = 263 },
-    [5] = { label = "+5", track = "Hero", rank = "2/6", itemLevel = 263 },
-    [6] = { label = "+6", track = "Hero", rank = "3/6", itemLevel = 266 },
-    [7] = { label = "+7", track = "Hero", rank = "4/6", itemLevel = 269 },
-    [8] = { label = "+8", track = "Hero", rank = "4/6", itemLevel = 269 },
-    [9] = { label = "+9", track = "Hero", rank = "4/6", itemLevel = 269 },
-    [10] = { label = "+10+", track = "Myth", rank = "1/6", itemLevel = 272 },
-}
-
-GearingDB.MythicPlusCrests = {
-    [2] = { crestType = "Champion", count = 10 },
-    [3] = { crestType = "Champion", count = 12 },
-    [4] = { crestType = "Hero", count = 10 },
-    [5] = { crestType = "Hero", count = 12 },
-    [6] = { crestType = "Hero", count = 14 },
-    [7] = { crestType = "Hero", count = 16 },
-    [8] = { crestType = "Hero", count = 18 },
-    [9] = { crestType = "Myth", count = 10 },
-    [10] = { crestType = "Myth", count = 12 },
-    [11] = { crestType = "Myth", count = 14 },
-    [12] = { crestType = "Myth", count = 16 },
-}
-
-GearingDB.MythicPlusCrestCurrencies = {
-    championCrests = { name = "Champion Dawncrest", currencyID = 3343, source = "M+2-3", track = "Champion" },
-    heroCrests = { name = "Hero Dawncrest", currencyID = 3345, source = "M+4-8", track = "Hero" },
-    mythCrests = { name = "Myth Dawncrest", currencyID = 3347, source = "M+9+", track = "Myth" },
-}
-
+-- Gear capture still exposes these raw values for diagnostics and future cards.
 GearingDB.GreatVaultSlots = {
     mythicPlus = {
         { slot = 1, required = 1, label = "Complete 1 M+ Dungeon" },
         { slot = 2, required = 4, label = "Complete 4 M+ Dungeons" },
         { slot = 3, required = 8, label = "Complete 8 M+ Dungeons" },
     },
-}
-
-GearingDB.Currencies = {
-    { name = "Dawnlight Manuflux", currencyID = 3378, use = "Catalyst charges for converting eligible slots into tier pieces." },
-    { name = "Nebulous Voidcore", currencyID = 3418, use = "Seasonal source/reroll tracking." },
-    { name = "Ascendant Voidcore", itemID = 268552, use = "Raises fully upgraded Hero/Myth track items and max-quality crafted items." },
-    { name = "Radiant Spark Dust", currencyID = 3212, use = "Tracks sparks used for crafted gear." },
-    { name = "Radiant Jewelbinder", itemID = 263897, use = "Socket/jewel-related upgrade item if available." },
-    { name = "Champion Dawncrest", currencyID = 3343, use = "Champion-track upgrades from M+2-3." },
-    { name = "Hero Dawncrest", currencyID = 3345, use = "Hero-track upgrades from M+4-8." },
-    { name = "Myth Dawncrest", currencyID = 3347, use = "Myth-track upgrades from M+9+." },
 }
 
 GearingDB.CurrencyKeys = {
@@ -218,73 +109,25 @@ GearingDB.CurrencyKeys = {
     radiantJewelbinder = { type = "item", id = 263897, label = "Radiant Jewelbinder" },
 }
 
-GearingDB.CraftedGear = {
-    crestCost = 80,
-    crestNote = "Hero or Myth Dawncrests are required per crafted item.",
-    sparksRequired = {
-        weapon = 4,
-        armor = 2,
-        jewelry = 2,
-    },
-}
-
-GearingDB.Catalyst = {
-    tierSlots = { "Head", "Shoulders", "Chest", "Hands", "Legs" },
-    note = "Catalyst can convert eligible gear into tier pieces when charges are available.",
-}
-
 GearingDB.Voidforge = {
     ascendantVoidcoreItemID = 268552,
     craftedWeaponSlotID = 16,
-    trinketSlotIDs = {
-        [13] = true,
-        [14] = true,
-    },
-    eligibleTracks = {
-        Hero = true,
-        Myth = true,
-    },
+    trinketSlotIDs = { [13] = true, [14] = true },
+    eligibleTracks = { Hero = true, Myth = true },
     requiredRank = 6,
     requiredMaxRank = 6,
 }
 
-GearingDB.PriorityFactors = {
-    "Current equipped item level",
-    "Current equipped track per slot",
-    "Upgrade priority slots",
-    "Gear Target status",
-    "BIS / Crafted / Acquired status",
-    "Recent M+ history from encounters",
-    "Highest completed key",
-    "Highest timed key",
-    "Number of recent M+ runs",
-    "Great Vault progress",
-    "Crest needs",
-    "Crafted, catalyst, polish, and voidforge signals",
-}
-
 local function CopyEntry(entry)
-    if type(entry) ~= "table" then return nil end
+    if type(entry) ~= "table" then return entry end
     local out = {}
-    for key, value in pairs(entry) do
-        if type(value) == "table" then
-            local nested = {}
-            for nestedKey, nestedValue in pairs(value) do
-                nested[nestedKey] = nestedValue
-            end
-            out[key] = nested
-        else
-            out[key] = value
-        end
-    end
+    for key, value in pairs(entry) do out[key] = value end
     return out
 end
 
 local function CopyList(list)
     local out = {}
-    for _, entry in ipairs(list or {}) do
-        table.insert(out, CopyEntry(entry) or entry)
-    end
+    for _, entry in ipairs(list or {}) do table.insert(out, CopyEntry(entry)) end
     return out
 end
 
@@ -296,41 +139,6 @@ function GearingDB.GetDisplaySlotLabel(slotName)
     return (GearingDB.DisplaySlotLabels and GearingDB.DisplaySlotLabels[slotName]) or slotName or "-"
 end
 
-function GearingDB.GetTrackRank(trackName)
-    local track = GearingDB.GetTrackByName(trackName)
-    return track and tonumber(track.id) or 0
-end
-
-function GearingDB.GetTrackBaseScore(trackName)
-    return (GearingDB.TrackBaseScores and GearingDB.TrackBaseScores[trackName]) or 0
-end
-
-function GearingDB.GetTrackSource(trackName)
-    local track = GearingDB.GetTrackByName(trackName)
-    return track and track.source or nil
-end
-
-function GearingDB.GetDungeonCode(dungeonName)
-    return (GearingDB.DungeonCodes and GearingDB.DungeonCodes[dungeonName]) or dungeonName
-end
-
-function GearingDB.IsEnchantableSlot(slotName)
-    return GearingDB.EnchantableSlots and GearingDB.EnchantableSlots[slotName] == true
-end
-
-function GearingDB.IsEmbellishmentSlot(slotName)
-    return GearingDB.EmbellishmentSlots and GearingDB.EmbellishmentSlots[slotName] == true
-end
-
-function GearingDB.IsTwoHandOrRangedEquipLoc(equipLoc)
-    return GearingDB.TwoHandOrRangedEquipLocs and GearingDB.TwoHandOrRangedEquipLocs[equipLoc or ""] == true
-end
-
-function GearingDB.GetMythicPlusLane(trackName)
-    local lanes = GearingDB.MythicPlusActivityLanes or {}
-    return CopyEntry(lanes[trackName] or lanes.Entry)
-end
-
 function GearingDB.GetTrackByName(trackName)
     for _, track in ipairs(GearingDB.Tracks or {}) do
         if track.name == trackName then return track end
@@ -338,55 +146,24 @@ function GearingDB.GetTrackByName(trackName)
     return nil
 end
 
-function GearingDB.GetTrackByItemLevel(itemLevel)
-    itemLevel = tonumber(itemLevel)
-    if not itemLevel then return nil end
+function GearingDB.GetTrackRank(trackName)
+    local track = GearingDB.GetTrackByName(trackName)
+    return track and tonumber(track.id) or 0
+end
 
-    local previous
-    for _, track in ipairs(GearingDB.Tracks or {}) do
-        if itemLevel >= track.minItemLevel and itemLevel <= track.maxItemLevel then
-            return track
-        end
-        if itemLevel < track.minItemLevel then
-            return previous or track
-        end
-        previous = track
+function GearingDB.GetDungeonCode(dungeonName)
+    return (GearingDB.DungeonCodes and GearingDB.DungeonCodes[dungeonName]) or dungeonName
+end
+
+function GearingDB.GetSourceCode(sourceName, sourceType)
+    if sourceType == "Raid" then
+        return (GearingDB.RaidCodes and GearingDB.RaidCodes[sourceName]) or sourceName
     end
-
-    return previous
+    return GearingDB.GetDungeonCode(sourceName)
 end
 
-function GearingDB.GetNextTrack(trackName)
-    local found = false
-    for _, track in ipairs(GearingDB.Tracks or {}) do
-        if found then return track end
-        if track.name == trackName then found = true end
-    end
-    return nil
-end
-
-local function GetClosestKeyReward(tableRef, keyLevel)
-    keyLevel = tonumber(keyLevel)
-    if not keyLevel then return nil end
-    local bestKey
-    for level in pairs(tableRef or {}) do
-        if level <= keyLevel and (not bestKey or level > bestKey) then
-            bestKey = level
-        end
-    end
-    return bestKey and CopyEntry(tableRef[bestKey]) or nil
-end
-
-function GearingDB.GetMythicPlusEndReward(keyLevel)
-    return GetClosestKeyReward(GearingDB.MythicPlusEndOfRun, keyLevel)
-end
-
-function GearingDB.GetMythicPlusVaultReward(keyLevel)
-    return GetClosestKeyReward(GearingDB.MythicPlusVault, keyLevel)
-end
-
-function GearingDB.GetMythicPlusCrestReward(keyLevel)
-    return GetClosestKeyReward(GearingDB.MythicPlusCrests, keyLevel)
+function GearingDB.IsTwoHandOrRangedEquipLoc(equipLoc)
+    return GearingDB.TwoHandOrRangedEquipLocs and GearingDB.TwoHandOrRangedEquipLocs[equipLoc or ""] == true
 end
 
 return GearingDB

@@ -122,12 +122,16 @@ local function EnsureJournalDefaults(db)
     if db.settings.completedMythicPlusOnly == nil then
         db.settings.completedMythicPlusOnly = true
     end
+    if db.settings.contentMode ~= "raid" then db.settings.contentMode = "mplus" end
 
     if type(db.encounters) ~= "table" then db.encounters = {} end
     if type(db.builds) ~= "table" then db.builds = {} end
     if type(db.lootTargets) ~= "table" then db.lootTargets = {} end
     if type(db.lootTargetStatuses) ~= "table" then db.lootTargetStatuses = {} end
+    if type(db.gearTargets) ~= "table" then db.gearTargets = {} end
+    if type(db.tierSets) ~= "table" then db.tierSets = {} end
     if type(db.statGoals) ~= "table" then db.statGoals = {} end
+    if type(db.statGoalMatcherResults) ~= "table" then db.statGoalMatcherResults = {} end
     if type(db.practiceSessions) ~= "table" then db.practiceSessions = {} end
     db.activePracticeSession = nil
 
@@ -157,6 +161,18 @@ local function RefreshAllUI()
     if KeyLab.GearTargetsWindow and KeyLab.GearTargetsWindow.RefreshVisible then
         KeyLab.GearTargetsWindow.RefreshVisible()
     end
+end
+
+local function ResetGearingRuntimeState(preserveMatcherResults)
+    if KeyLab.ResetGearingRuntimeState then
+        KeyLab.ResetGearingRuntimeState(preserveMatcherResults)
+        return
+    end
+    if KeyLab.StatGoalMatcher then
+        if KeyLab.StatGoalMatcher.Cancel then KeyLab.StatGoalMatcher.Cancel() end
+        if not preserveMatcherResults and KeyLab.StatGoalMatcher.ClearAllResults then KeyLab.StatGoalMatcher.ClearAllResults() end
+    end
+    if KeyLab.GearCapture and KeyLab.GearCapture.MarkAllSlotsChanged then KeyLab.GearCapture.MarkAllSlotsChanged() end
 end
 
 local function RaisePopupFrame(frame)
@@ -245,6 +261,13 @@ local function RegisterImportConfirmPopup()
 
             KeyLabDB = EnsureJournalDefaults(DeepCopy(pendingImportDB))
             pendingImportDB = nil
+            if KeyLab.LootTargetsDB and KeyLab.LootTargetsDB.MigrateLegacy then
+                KeyLab.LootTargetsDB.MigrateLegacy()
+            end
+            if KeyLab.StatGoalsDB and KeyLab.StatGoalsDB.CleanupLegacy then
+                KeyLab.StatGoalsDB.CleanupLegacy()
+            end
+            ResetGearingRuntimeState(true)
             ResetCaptureDB()
             if popupFrame then
                 popupFrame:Hide()
@@ -266,7 +289,7 @@ local function RegisterResetConfirmPopup()
     if StaticPopupDialogs["KEYLAB_CONFIRM_RESET_JOURNAL_DATA"] then return end
 
     StaticPopupDialogs["KEYLAB_CONFIRM_RESET_JOURNAL_DATA"] = {
-        text = "Permanently delete saved KeyLab journal data for all characters?\n\nThis deletes encounters, stat profiles, talent/build data, practice sessions, gear targets, stat goals, and settings. This cannot be undone.",
+        text = "Permanently delete saved KeyLab journal data for all characters?\n\nThis deletes encounters, stat profiles, talent/build data, practice sessions, gear targets, Tier Set selections, stat goals, and settings. This cannot be undone.",
         button1 = YES,
         button2 = CANCEL,
         OnAccept = function()
@@ -411,6 +434,7 @@ function KeyLab:ResetJournalData()
         KeyLabDB = EnsureJournalDefaults({})
     end
 
+    ResetGearingRuntimeState()
     ResetCaptureDB()
     RefreshAllUI()
     Print("Journal data reset.")

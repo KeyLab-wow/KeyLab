@@ -5,7 +5,6 @@ _G.KeyLab = KeyLab
 KeyLab.StatGoalsDB = KeyLab.StatGoalsDB or {}
 local StatGoalsDB = KeyLab.StatGoalsDB
 
-local DEFAULT_PRIORITY = { "mastery", "haste", "crit", "versatility" }
 local DEFAULT_TARGETS = {
     mastery = 0,
     haste = 0,
@@ -19,6 +18,22 @@ local VALID_STATS = {
     mastery = true,
     versatility = true,
 }
+
+local DEFAULT_DISPLAY_ORDER = { "crit", "mastery", "haste", "versatility" }
+
+local function NormalizeDisplayOrder(order)
+    local normalized, seen = {}, {}
+    for _, statKey in ipairs(type(order) == "table" and order or {}) do
+        if VALID_STATS[statKey] and not seen[statKey] then
+            seen[statKey] = true
+            table.insert(normalized, statKey)
+        end
+    end
+    for _, statKey in ipairs(DEFAULT_DISPLAY_ORDER) do
+        if not seen[statKey] then table.insert(normalized, statKey) end
+    end
+    return normalized
+end
 
 local function EnsureRoot()
     if KeyLab.DB and KeyLab.DB.Get then
@@ -57,23 +72,6 @@ local function CurrentSpecID()
     return 0
 end
 
-local function CopyPriority(priority)
-    local out, used = {}, {}
-    for _, statKey in ipairs(priority or {}) do
-        if VALID_STATS[statKey] and not used[statKey] then
-            used[statKey] = true
-            table.insert(out, statKey)
-        end
-    end
-    for _, statKey in ipairs(DEFAULT_PRIORITY) do
-        if not used[statKey] then
-            used[statKey] = true
-            table.insert(out, statKey)
-        end
-    end
-    return out
-end
-
 local function EnsureGoals(specID)
     local db = EnsureRoot()
     local characterKey = CurrentCharacterKey()
@@ -83,8 +81,10 @@ local function EnsureGoals(specID)
     db.statGoals[characterKey][specID] = db.statGoals[characterKey][specID] or {}
 
     local goals = db.statGoals[characterKey][specID]
-    goals.priority = CopyPriority(goals.priority)
+    local legacyPriority = goals.priority
+    goals.priority = nil
     goals.targets = goals.targets or {}
+    goals.displayOrder = NormalizeDisplayOrder(goals.displayOrder or legacyPriority)
 
     for statKey, defaultValue in pairs(DEFAULT_TARGETS) do
         goals.targets[statKey] = tonumber(goals.targets[statKey]) or defaultValue
@@ -93,8 +93,44 @@ local function EnsureGoals(specID)
     return goals
 end
 
+function StatGoalsDB.CleanupLegacy()
+    local db = EnsureRoot()
+    for _, characterGoals in pairs(db.statGoals or {}) do
+        if type(characterGoals) == "table" then
+            for _, goals in pairs(characterGoals) do
+                if type(goals) == "table" then
+                    goals.displayOrder = NormalizeDisplayOrder(goals.displayOrder or goals.priority)
+                    goals.priority = nil
+                end
+            end
+        end
+    end
+end
+
 function StatGoalsDB.GetGoals(specID)
     return EnsureGoals(specID)
+end
+
+function StatGoalsDB.GetDisplayOrder(specID)
+    local goals = EnsureGoals(specID)
+    local copy = {}
+    for _, statKey in ipairs(goals.displayOrder or DEFAULT_DISPLAY_ORDER) do table.insert(copy, statKey) end
+    return copy
+end
+
+function StatGoalsDB.MoveDisplayStat(specID, statKey, direction)
+    if not VALID_STATS[statKey] then return false end
+    local goals = EnsureGoals(specID)
+    local order = goals.displayOrder
+    local currentIndex
+    for index, key in ipairs(order) do
+        if key == statKey then currentIndex = index; break end
+    end
+    if not currentIndex then return false end
+    local targetIndex = direction == "up" and currentIndex - 1 or direction == "down" and currentIndex + 1 or currentIndex
+    if targetIndex < 1 or targetIndex > #order or targetIndex == currentIndex then return false end
+    order[currentIndex], order[targetIndex] = order[targetIndex], order[currentIndex]
+    return true
 end
 
 function StatGoalsDB.SetTarget(specID, statKey, value)
@@ -102,42 +138,36 @@ function StatGoalsDB.SetTarget(specID, statKey, value)
 
     value = tonumber(value) or 0
     if value < 0 then value = 0 end
-    if value > 200 then value = 200 end
+    if value > 100 then value = 100 end
 
     local goals = EnsureGoals(specID)
+    local changed = tonumber(goals.targets[statKey]) ~= value
     goals.targets[statKey] = value
-    return true
-end
-
-function StatGoalsDB.MovePriority(specID, statKey, delta)
-    if not VALID_STATS[statKey] then return false end
-
-    local goals = EnsureGoals(specID)
-    local priority = CopyPriority(goals.priority)
-    local index
-
-    for i, key in ipairs(priority) do
-        if key == statKey then
-            index = i
-            break
-        end
+    if changed and KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.ClearResult then
+        KeyLab.StatGoalMatcher.ClearResult(specID, "goals_changed")
     end
-
-    if not index then return false end
-
-    local newIndex = index + (tonumber(delta) or 0)
-    if newIndex < 1 then newIndex = 1 end
-    if newIndex > #priority then newIndex = #priority end
-    if newIndex == index then return false end
-
-    table.remove(priority, index)
-    table.insert(priority, newIndex, statKey)
-    goals.priority = priority
     return true
 end
 
-function StatGoalsDB.GetDefaultPriority()
-    return CopyPriority(DEFAULT_PRIORITY)
+function StatGoalsDB.GetTotal(specID)
+    local goals = EnsureGoals(specID)
+    local total = 0
+    for statKey in pairs(VALID_STATS) do total = total + (tonumber(goals.targets[statKey]) or 0) end
+    return total
+end
+
+function StatGoalsDB.Validate(specID)
+    local goals = EnsureGoals(specID)
+    local total = 0
+    for statKey in pairs(VALID_STATS) do
+        local value = tonumber(goals.targets[statKey])
+        if value == nil or value < 0 or value > 100 then return false, "Each stat goal must be from 0% to 100%." end
+        total = total + value
+    end
+    if math.abs(total - 100) > 0.001 then
+        return false, "Crit, Haste, Mastery, and Versatility must total exactly 100%."
+    end
+    return true, nil, total
 end
 
 function StatGoalsDB.IsValidStat(statKey)
