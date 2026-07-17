@@ -3,7 +3,7 @@ KeyLab = KeyLab or {}
 _G.KeyLab = KeyLab
 
 KeyLab.addonName = ADDON_NAME
-KeyLab.version = KeyLab.version or "0.1.4"
+KeyLab.version = KeyLab.version or "1.6.0"
 
 KeyLab.UI = KeyLab.UI or {}
 KeyLab.Tabs = KeyLab.Tabs or {}
@@ -57,6 +57,19 @@ local function Print(msg)
     KeyLab.Print(msg)
 end
 
+function KeyLab.ResetGearingRuntimeState(preserveMatcherResults)
+    if KeyLab.StatGoalMatcher then
+        if KeyLab.StatGoalMatcher.Cancel then KeyLab.StatGoalMatcher.Cancel() end
+        if not preserveMatcherResults and KeyLab.StatGoalMatcher.ClearAllResults then KeyLab.StatGoalMatcher.ClearAllResults() end
+    end
+    if KeyLab.GearCapture and KeyLab.GearCapture.MarkAllSlotsChanged then
+        KeyLab.GearCapture.MarkAllSlotsChanged()
+    end
+    if KeyLab.GearingAnalysis and KeyLab.GearingAnalysis.InvalidateCache then
+        KeyLab.GearingAnalysis.InvalidateCache()
+    end
+end
+
 local function RunGearDebug()
     KeyLabDB = KeyLabDB or {}
 
@@ -89,10 +102,21 @@ local function Initialize()
         KeyLabDB.trackingSince = KeyLabDB.trackingSince or date("%B %Y")
         KeyLabDB.settings = KeyLabDB.settings or {}
         KeyLabDB.encounters = KeyLabDB.encounters or {}
+        KeyLabDB.raidEncounters = KeyLabDB.raidEncounters or {}
+        KeyLabDB.raidNights = KeyLabDB.raidNights or {}
         KeyLabDB.builds = KeyLabDB.builds or {}
         KeyLabDB.lootTargets = KeyLabDB.lootTargets or {}
         KeyLabDB.lootTargetStatuses = KeyLabDB.lootTargetStatuses or {}
+        KeyLabDB.gearTargets = KeyLabDB.gearTargets or {}
+        KeyLabDB.tierSets = KeyLabDB.tierSets or {}
         KeyLabDB.statGoals = KeyLabDB.statGoals or {}
+    end
+
+    if KeyLab.LootTargetsDB and KeyLab.LootTargetsDB.MigrateLegacy then
+        KeyLab.LootTargetsDB.MigrateLegacy()
+    end
+    if KeyLab.StatGoalsDB and KeyLab.StatGoalsDB.CleanupLegacy then
+        KeyLab.StatGoalsDB.CleanupLegacy()
     end
 
     if KeyLab.Capture and KeyLab.Capture.Sessions and KeyLab.Capture.Sessions.EnsureCaptureDB then
@@ -110,14 +134,21 @@ local function ResetAll()
         KeyLabDB = {
             version = KeyLab.version or "0.1.4",
             trackingSince = date("%B %Y"),
-            settings = { completedMythicPlusOnly = true },
+            settings = { completedMythicPlusOnly = true, contentMode = "mplus" },
             encounters = {},
+            raidEncounters = {},
+            raidNights = {},
             builds = {},
             lootTargets = {},
             lootTargetStatuses = {},
+            gearTargets = {},
+            tierSets = {},
             statGoals = {},
+            statGoalMatcherResults = {},
         }
     end
+
+    KeyLab.ResetGearingRuntimeState()
 
     if KeyLab.Capture and KeyLab.Capture.Sessions and KeyLab.Capture.Sessions.ResetCaptureDB then
         KeyLab.Capture.Sessions.ResetCaptureDB()
@@ -238,6 +269,34 @@ SlashCmdList["KEYLAB"] = function(msg)
         return
     end
 
+    if msg == "raidprobe" or msg == "raid probe" or msg == "raid-probe"
+        or msg == "raidprobe on" or msg == "raid probe on" or msg == "raid-probe on"
+    then
+        if KeyLab.Capture and KeyLab.Capture.Raid and KeyLab.Capture.Raid.SetProbeEnabled then
+            KeyLab.Capture.Raid.SetProbeEnabled(true)
+        else
+            Print("Raid Probe is not available. Try /reload; if this repeats, send me the Lua error.")
+        end
+        return
+    end
+
+
+    if msg == "raidprobe off" or msg == "raid probe off" or msg == "raid-probe off" then
+        if KeyLab.Capture and KeyLab.Capture.Raid and KeyLab.Capture.Raid.SetProbeEnabled then
+            KeyLab.Capture.Raid.SetProbeEnabled(false)
+        else
+            Print("Raid Probe is not available. Try /reload; if this repeats, send me the Lua error.")
+        end
+        return
+    end
+
+    if msg == "raidprobe status" or msg == "raid probe status" or msg == "raid-probe status" then
+        local enabled = KeyLab.Capture and KeyLab.Capture.Raid and KeyLab.Capture.Raid.IsProbeEnabled
+            and KeyLab.Capture.Raid.IsProbeEnabled()
+        Print("Raid Probe is " .. (enabled and "enabled." or "disabled."))
+        return
+    end
+
     if msg == "debug" then
         KeyLabDB = KeyLabDB or {}
         KeyLabDB.settings = KeyLabDB.settings or {}
@@ -247,7 +306,7 @@ SlashCmdList["KEYLAB"] = function(msg)
         return
     end
 
-    Print("Commands: /keylab, /keylab count, /keylab status, /keylab finalize, /keylab resetcapture, /keylab reset, /keylab geardebug, /keylab debug")
+    Print("Commands: /keylab, /keylab count, /keylab status, /keylab finalize, /keylab resetcapture, /keylab reset, /keylab geardebug, /keylab raidprobe, /keylab debug")
 end
 
 SLASH_KEYLABGEARDEBUG1 = "/keylabgeardebug"

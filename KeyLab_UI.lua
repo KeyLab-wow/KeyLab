@@ -1,5 +1,5 @@
 -- KeyLab_UI.lua
--- Main UI shell for KeyLab / M+ Journal
+-- Main UI shell for KeyLab's shared Mythic+ and Raid journal.
 --
 -- Purpose:
 --   Owns the main addon window, sidebar navigation, and tab switching.
@@ -55,6 +55,7 @@ local CFG = {
         width = 176,
         buttonHeight = 36,
         buttonGap = 8,
+        modeHeight = 30,
         paddingTop = 12,
         paddingBottom = 12,
     },
@@ -88,16 +89,31 @@ local CFG = {
     tabs = {
         "Home",
         "Encounters",
-        "Last Run",
+        "Summary",
         "Talent Builds",
         "Stat Profiles",
+        "Gear Profiles",
         "Trends",
         "Practice",
-        "Gear Dashboard",
+        "Gear Planning",
         "Gear Targets",
+        "Gear Dashboard",
         "Insights",
         "Settings",
     },
+}
+
+local ANALYSIS_ROUTES = {
+    ["Encounters"] = { mplus = "M+ Encounters", raid = "Raid Encounters" },
+    ["Summary"] = { mplus = "M+ Last Run", raid = "Raid Summary" },
+    ["Talent Builds"] = { mplus = "M+ Talent Builds", raid = "Raid Talent Builds" },
+    ["Stat Profiles"] = { mplus = "M+ Stat Profiles", raid = "Raid Stat Profiles" },
+    ["Gear Profiles"] = { mplus = "M+ Gear Profiles", raid = "Raid Gear Profiles" },
+    ["Trends"] = { mplus = "M+ Trends", raid = "Raid Trends" },
+}
+
+local OPTIONAL_TABS = {
+    ["Gear Planning"] = true,
 }
 
 -- =========================================================
@@ -123,21 +139,11 @@ local function StylePanel(frame, bg, border)
         return
     end
 
-    local edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border"
-    local edgeSize = 7
-    local insets = { left = 2, right = 2, top = 2, bottom = 2 }
-    if frame.GetHeight and (frame:GetHeight() or 0) <= 20 then
-        edgeFile = "Interface\\Buttons\\WHITE8x8"
-        edgeSize = 1
-        insets = nil
-    end
-
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = edgeFile,
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
         tile = false,
-        edgeSize = edgeSize,
-        insets = insets,
+        edgeSize = 1,
     })
 
     frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
@@ -164,7 +170,63 @@ local function FindRegisteredTab(name)
     return nil
 end
 
+local function NormalizeContentMode(mode)
+    return mode == "raid" and "raid" or "mplus"
+end
+
+local function GetSavedContentMode()
+    KeyLabDB = type(KeyLabDB) == "table" and KeyLabDB or {}
+    KeyLabDB.settings = type(KeyLabDB.settings) == "table" and KeyLabDB.settings or {}
+    KeyLabDB.settings.contentMode = NormalizeContentMode(KeyLabDB.settings.contentMode)
+    return KeyLabDB.settings.contentMode
+end
+
+local function SaveContentMode(mode)
+    mode = NormalizeContentMode(mode)
+    KeyLabDB = type(KeyLabDB) == "table" and KeyLabDB or {}
+    KeyLabDB.settings = type(KeyLabDB.settings) == "table" and KeyLabDB.settings or {}
+    KeyLabDB.settings.contentMode = mode
+    return mode
+end
+
+local function GetAnalysisRoute(tabName)
+    if ANALYSIS_ROUTES[tabName] then return tabName, nil end
+    for category, routes in pairs(ANALYSIS_ROUTES) do
+        if routes.mplus == tabName then return category, "mplus" end
+        if routes.raid == tabName then return category, "raid" end
+    end
+    return nil, nil
+end
+
+local function ResolveNavigationTab(tabName, mode)
+    local route = ANALYSIS_ROUTES[tabName]
+    return route and route[NormalizeContentMode(mode)] or tabName
+end
+
+local function GetNavigationKey(tabName)
+    local category = GetAnalysisRoute(tabName)
+    return category or tabName
+end
+
+local function GetVisibleNavigationTabs()
+    local tabs = {}
+    for _, tabName in ipairs(CFG.tabs or {}) do
+        if not OPTIONAL_TABS[tabName] or FindRegisteredTab(tabName) then table.insert(tabs, tabName) end
+    end
+    return tabs
+end
+
 local function GetTabObjectKey(tabName)
+    local aliases = {
+        ["M+ Encounters"] = "Encounters",
+        ["M+ Last Run"] = "LastRun",
+        ["Raid Summary"] = "RaidSummary",
+        ["M+ Talent Builds"] = "TalentBuilds",
+        ["M+ Stat Profiles"] = "StatProfiles",
+        ["M+ Gear Profiles"] = "GearProfiles",
+        ["M+ Trends"] = "Trends",
+    }
+    if aliases[tabName] then return aliases[tabName] end
     return tostring(tabName or ""):gsub("%s+", ""):gsub("%-", "")
 end
 
@@ -215,6 +277,8 @@ function KeyLab.UI:Create()
     StylePanel(frame, CFG.colors.windowBg, CFG.colors.windowBorder)
 
     self.frame = frame
+    self.contentMode = GetSavedContentMode()
+    self.navigationTabs = GetVisibleNavigationTabs()
 
     -- Header background with KeyLab title.
     local header = CreateFrame("Frame", nil, frame, "BackdropTemplate")
@@ -244,11 +308,13 @@ function KeyLab.UI:Create()
     local sidebar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     sidebar:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.sidebar.x - 8, CFG.sidebar.y + 12)
 
-    local tabCount = #(CFG.tabs or {})
+    local tabCount = #(self.navigationTabs or {})
     local sidebarHeight =
         (CFG.sidebar.paddingTop or 12)
         + (tabCount * CFG.sidebar.buttonHeight)
         + (math.max(0, tabCount - 1) * CFG.sidebar.buttonGap)
+        + (CFG.sidebar.modeHeight or 30)
+        + CFG.sidebar.buttonGap
         + (CFG.sidebar.paddingBottom or 12)
 
     sidebar:SetSize(CFG.sidebar.width + 16, sidebarHeight)
@@ -272,10 +338,59 @@ function KeyLab.UI:Create()
     return frame
 end
 
+function KeyLab.UI:RefreshContentModeSelector()
+    local selected = NormalizeContentMode(self.contentMode or GetSavedContentMode())
+    for mode, button in pairs(self.modeButtons or {}) do
+        local active = mode == selected
+        local bg = active and (CFG.colors.buttonSelectedBg or CFG.colors.buttonBg) or CFG.colors.buttonBg
+        local border = active and CFG.colors.buttonSelected or CFG.colors.buttonBorder
+        button:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
+        button:SetBackdropBorderColor(border[1], border[2], border[3], border[4] or 1)
+        ApplyColor(button.label, active and CFG.colors.gold or CFG.colors.text)
+    end
+end
+
+function KeyLab.UI:CreateContentModeSelector(y)
+    local row = CreateFrame("Frame", nil, self.frame)
+    row:SetPoint("TOPLEFT", self.frame, "TOPLEFT", CFG.sidebar.x, y)
+    row:SetSize(CFG.sidebar.width, CFG.sidebar.modeHeight or 30)
+    self.modeSelector = row
+    self.modeButtons = {}
+
+    local gap = 6
+    local width = (CFG.sidebar.width - gap) / 2
+    for index, definition in ipairs({
+        { mode = "mplus", label = "Mythic+" },
+        { mode = "raid", label = "Raid" },
+    }) do
+        local mode = definition.mode
+        local button = CreateFrame("Button", nil, row, "BackdropTemplate")
+        button:SetPoint("TOPLEFT", row, "TOPLEFT", (index - 1) * (width + gap), 0)
+        button:SetSize(width, CFG.sidebar.modeHeight or 30)
+        StylePanel(button, CFG.colors.buttonBg, CFG.colors.buttonBorder)
+
+        local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        label:SetPoint("CENTER")
+        label:SetText(definition.label)
+        ApplyColor(label, CFG.colors.text)
+        button.label = label
+
+        button:SetScript("OnClick", function() KeyLab.UI:SetContentMode(mode) end)
+        button:SetScript("OnEnter", function(self)
+            if NormalizeContentMode(KeyLab.UI.contentMode) ~= mode then
+                self:SetBackdropBorderColor(unpack(CFG.colors.buttonHover))
+            end
+        end)
+        button:SetScript("OnLeave", function() KeyLab.UI:RefreshContentModeSelector() end)
+        self.modeButtons[mode] = button
+    end
+    self:RefreshContentModeSelector()
+end
+
 function KeyLab.UI:CreateTabButtons()
     local y = CFG.sidebar.y
 
-    for _, tabName in ipairs(CFG.tabs) do
+    for _, tabName in ipairs(self.navigationTabs or GetVisibleNavigationTabs()) do
         local button = CreateFrame("Button", nil, self.frame, "BackdropTemplate")
         button:SetPoint("TOPLEFT", self.frame, "TOPLEFT", CFG.sidebar.x, y)
         button:SetSize(CFG.sidebar.width, CFG.sidebar.buttonHeight)
@@ -312,19 +427,23 @@ function KeyLab.UI:CreateTabButtons()
         end)
 
         button:SetScript("OnEnter", function(self)
-            if KeyLab.UI.selectedTab ~= tabName then
+            if GetNavigationKey(KeyLab.UI.selectedTab) ~= tabName then
                 self:SetBackdropBorderColor(CFG.colors.buttonHover[1], CFG.colors.buttonHover[2], CFG.colors.buttonHover[3], CFG.colors.buttonHover[4])
             end
         end)
 
         button:SetScript("OnLeave", function(self)
-            if KeyLab.UI.selectedTab ~= tabName then
+            if GetNavigationKey(KeyLab.UI.selectedTab) ~= tabName then
                 self:SetBackdropBorderColor(CFG.colors.buttonBorder[1], CFG.colors.buttonBorder[2], CFG.colors.buttonBorder[3], CFG.colors.buttonBorder[4])
             end
         end)
 
         self.tabButtons[tabName] = button
         y = y - CFG.sidebar.buttonHeight - CFG.sidebar.buttonGap
+        if tabName == "Home" then
+            self:CreateContentModeSelector(y)
+            y = y - (CFG.sidebar.modeHeight or 30) - CFG.sidebar.buttonGap
+        end
     end
 end
 
@@ -358,6 +477,17 @@ function KeyLab.UI:CreateTabFrame(tabName)
 end
 
 function KeyLab.UI:RefreshSelectedTab()
+    local savedMode = GetSavedContentMode()
+    if NormalizeContentMode(self.contentMode) ~= savedMode then
+        self.contentMode = savedMode
+        self:RefreshContentModeSelector()
+        local category = GetAnalysisRoute(self.selectedTab)
+        if category and ResolveNavigationTab(category, savedMode) ~= self.selectedTab then
+            self:SelectTab(category)
+            return
+        end
+    end
+
     local tabName = self.selectedTab
     if not tabName then return end
 
@@ -384,8 +514,32 @@ function KeyLab.UI:RefreshSelectedTab()
     end
 end
 
+function KeyLab.UI:SetContentMode(mode)
+    self:Create()
+    mode = NormalizeContentMode(mode)
+    local previousMode = NormalizeContentMode(self.contentMode or GetSavedContentMode())
+    self.contentMode = SaveContentMode(mode)
+    self:RefreshContentModeSelector()
+    if previousMode == mode then return end
+
+    local category = GetAnalysisRoute(self.selectedTab)
+    if category then
+        self:SelectTab(category)
+    else
+        self:RefreshSelectedTab()
+    end
+end
+
 function KeyLab.UI:SelectTab(tabName)
     self:Create()
+
+    local category, explicitMode = GetAnalysisRoute(tabName)
+    if explicitMode then
+        self.contentMode = SaveContentMode(explicitMode)
+        self:RefreshContentModeSelector()
+    elseif category then
+        tabName = ResolveNavigationTab(category, self.contentMode or GetSavedContentMode())
+    end
 
     local selectedFrame = self:CreateTabFrame(tabName)
     if not selectedFrame then return end
@@ -401,8 +555,9 @@ function KeyLab.UI:SelectTab(tabName)
         selectedFrame:Show()
     end
 
+    local selectedNavigation = GetNavigationKey(tabName)
     for name, button in pairs(self.tabButtons or {}) do
-        if name == tabName then
+        if name == selectedNavigation then
             local selectedBg = CFG.colors.buttonSelectedBg or {0.055, 0.085, 0.160, 0.90}
             button:SetBackdropColor(selectedBg[1], selectedBg[2], selectedBg[3], selectedBg[4] or 1)
             button:SetBackdropBorderColor(CFG.colors.buttonSelected[1], CFG.colors.buttonSelected[2], CFG.colors.buttonSelected[3], CFG.colors.buttonSelected[4])
@@ -415,6 +570,8 @@ function KeyLab.UI:SelectTab(tabName)
             if button.accent then button.accent:Hide() end
         end
     end
+
+    self:RefreshSelectedTab()
 
 end
 
