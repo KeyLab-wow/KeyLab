@@ -30,6 +30,8 @@ KeyLab.Tabs.Trends = Trends
 
 local Theme = KeyLab.UI.Theme or {}
 local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
+local SPACING = Theme.spacing or { card = 14 }
+local HEADER = Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16, analysisControlsY = -86 }
 
 -- =========================================================
 -- EASY EDIT SETTINGS
@@ -64,14 +66,14 @@ local CFG = {
     },
 
     header = {
-        x = 18,
-        y = -18,
+        x = HEADER.x,
+        y = HEADER.titleY,
         subtitleWidth = 900,
     },
 
     controls = {
         x = 12,
-        y = -86,
+        y = HEADER.analysisControlsY,
         width = 928,
         height = 62,
 
@@ -86,7 +88,7 @@ local CFG = {
         x = 12,
         y = -160,
         width = 928,
-        gap = 12,
+        gap = SPACING.card,
     },
 
     card = {
@@ -129,10 +131,9 @@ local function StylePanel(frame, bg, border)
 
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
         tile = false,
-        edgeSize = 7,
-        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+        edgeSize = 1,
     })
     frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
     frame:SetBackdropBorderColor(border[1], border[2], border[3], border[4] or 1)
@@ -881,7 +882,7 @@ local function BuildMostUsedTalentCard(parent, x, y, group, totalRuns)
 
     AddLine(card, tostring(group.runCount or 0) .. " run(s)", 14, -68, 110, CFG.colors.text, "GameFontNormal")
     AddLine(card, string.format("%.0f%% of selected runs", pct * 100), 120, -69, 180, CFG.colors.muted, "GameFontDisableSmall")
-    AddLine(card, "Open Talent Builds to view/copy the full string.", 250, -69, 180, CFG.colors.muted, "GameFontDisableSmall")
+    AddLine(card, "Open M+ Talent Builds to view/copy the full string.", 250, -69, 200, CFG.colors.muted, "GameFontDisableSmall")
 
     return card
 end
@@ -1415,64 +1416,6 @@ local function BuildRunPatternPanel(parent, x, y, encounters)
     return panel
 end
 
-local function GetRoleFocusProfile(encounters)
-    local mapper = KeyLab.Mapping and KeyLab.Mapping.ClassSpecs
-    if not (mapper and mapper.GetRoleFocusProfile) then return nil end
-
-    for i = #(encounters or {}), 1, -1 do
-        local player = GetPlayer(encounters[i]) or {}
-        local profile = mapper.GetRoleFocusProfile(player.specID, player.class or player.className, player.spec or player.specName)
-        if profile then
-            return profile
-        end
-    end
-
-    return nil
-end
-
-local function RoleMetricKey(metric)
-    if type(metric) == "table" then
-        return metric.key
-    end
-    return metric
-end
-
-local function ApplyRoleMetricLabel(profile, metricKey, trend)
-    if not trend then return trend end
-
-    local labels = profile and profile.metricLabels
-    if type(labels) == "table" and labels[metricKey] then
-        trend.label = labels[metricKey]
-    end
-
-    return trend
-end
-
-local function BuildRoleFocusPanel(parent, x, y, encounters)
-    local profile = GetRoleFocusProfile(encounters)
-    if not profile then return nil end
-
-    local metricKeys = {}
-    for _, metric in ipairs(profile.trendMetrics or profile.metrics or {}) do
-        local key = RoleMetricKey(metric)
-        if key then
-            table.insert(metricKeys, key)
-        end
-    end
-    if #metricKeys == 0 then return nil end
-
-    local panel = MakePanel(parent, x, y, 908, 124, profile.trendTitle or "Role Focus", CFG.colors.cardBorder, CFG.colors.purple)
-    AddLine(panel, profile.trendSubtitle or "Role-specific signals from the selected saved runs.", 14, -32, 760, CFG.colors.muted, "GameFontDisableSmall")
-
-    for i, key in ipairs(metricKeys) do
-        local tx = 14 + ((i - 1) * 296)
-        local trend = ApplyRoleMetricLabel(profile, key, BuildMetricDirectionFromList(encounters, key))
-        BuildTrendTile(panel, tx, -44, trend, "Recent avg")
-    end
-
-    return panel
-end
-
 local function FindHighestKey(encounters)
     local highest = nil
 
@@ -1596,9 +1539,9 @@ function Trends:RefreshContent()
 
     if self.selectedDungeon and usableCount < 2 then
         BuildMessagePanel(self.content, 0, 0, "Performance Direction", "Run this dungeon more to unlock trends.", CFG.colors.warning)
-        BuildRunPatternPanel(self.content, 0, -112, filtered)
-        BuildRoleFocusPanel(self.content, 0, -250, filtered)
-        self.content:SetHeight(402)
+        local patternY = -(96 + SPACING.card)
+        BuildRunPatternPanel(self.content, 0, patternY, filtered)
+        self.content:SetHeight(math.abs(patternY) + 124 + SPACING.card)
         return
     end
 
@@ -1612,9 +1555,9 @@ function Trends:RefreshContent()
             "This dungeon's recent runs compared against earlier saved runs.",
             "Recent avg"
         )
-        BuildRunPatternPanel(self.content, 0, -224, filtered)
-        BuildRoleFocusPanel(self.content, 0, -362, filtered)
-        self.content:SetHeight(510)
+        local patternY = -(210 + SPACING.card)
+        BuildRunPatternPanel(self.content, 0, patternY, filtered)
+        self.content:SetHeight(math.abs(patternY) + 124 + SPACING.card)
         return
     end
 
@@ -1628,10 +1571,10 @@ function Trends:RefreshContent()
         "Recent avg"
     )
 
-    BuildRunPatternPanel(self.content, 0, -224, filtered)
-    BuildRoleFocusPanel(self.content, 0, -362, filtered)
+    local patternY = -(210 + SPACING.card)
+    BuildRunPatternPanel(self.content, 0, patternY, filtered)
 
-    self.content:SetHeight(510)
+    self.content:SetHeight(math.abs(patternY) + 124 + SPACING.card)
 end
 
 function Trends:Refresh()
@@ -1653,7 +1596,8 @@ function Trends:Create(parent)
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.header.x, CFG.header.y)
-    title:SetText("Trends")
+    title:SetFont(STANDARD_TEXT_FONT, HEADER.titleSize, "")
+    title:SetText("M+ Trends")
     ApplyColor(title, CFG.colors.gold)
 
     local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -1725,7 +1669,7 @@ function KeyLab_CreateTrendsTab(parent)
 end
 
 if KeyLab.RegisterTab then
-    KeyLab.RegisterTab("Trends", function(parent)
+    KeyLab.RegisterTab("M+ Trends", function(parent)
         return Trends:Create(parent)
     end)
 end

@@ -10,6 +10,19 @@ KeyLab.Tabs.LastRun = LastRun
 
 local Theme = KeyLab.UI.Theme or {}
 local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
+local SPACING = Theme.spacing or { card = 14, column = 12 }
+local HEADER = Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16 }
+local CONTENT_WIDTH = 908
+local SECONDARY_WIDTH = 444
+local SUMMARY_HEIGHT = 122
+local SECONDARY_HEIGHT = 178
+local GRAPH_HEIGHT = 306
+local SECONDARY_Y = -(SUMMARY_HEIGHT + SPACING.card)
+local FIRST_GRAPH_Y = SECONDARY_Y - SECONDARY_HEIGHT - SPACING.card
+local SECOND_GRAPH_Y = FIRST_GRAPH_Y - GRAPH_HEIGHT - SPACING.card
+local SECONDARY_ROW_WIDTH = (SECONDARY_WIDTH * 2) + SPACING.column
+local SECONDARY_START_X = (CONTENT_WIDTH - SECONDARY_ROW_WIDTH) / 2
+local SECONDARY_SECOND_X = SECONDARY_START_X + SECONDARY_WIDTH + SPACING.column
 
 local COLORS = Theme.colors or {
     bg = {0.018, 0.026, 0.056, 0.96},
@@ -51,10 +64,9 @@ local function SetBackdrop(frame, bg, border)
 
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
         tile = false,
-        edgeSize = 7,
-        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+        edgeSize = 1,
     })
     frame:SetBackdropColor(unpack(bg or COLORS.card))
     frame:SetBackdropBorderColor(unpack(border or COLORS.border))
@@ -228,7 +240,7 @@ local function AddVerticalDivider(parent, x, y, height)
 end
 
 local function BuildSummary(parent, state)
-    local card = MakeCard(parent, 0, 0, 908, 122, "Run Summary", COLORS.gold)
+    local card = MakeCard(parent, 0, 0, CONTENT_WIDTH, SUMMARY_HEIGHT, "Run Summary", COLORS.gold)
     local resultColor = state.timed == true and COLORS.green or (state.timed == false and COLORS.orange or COLORS.gold)
     local chestColor = COLORS.gold
     if tonumber(state.keystoneUpgradeLevels) == 3 then
@@ -265,7 +277,7 @@ local function BuildSummary(parent, state)
 end
 
 local function BuildRanks(parent, state)
-    local card = MakeCard(parent, 0, -136, 444, 178, "Group Lineup", COLORS.purple)
+    local card = MakeCard(parent, SECONDARY_START_X, SECONDARY_Y, SECONDARY_WIDTH, SECONDARY_HEIGHT, "Group Lineup", COLORS.purple)
     local ranks = state.ranks or {}
     AddVerticalDivider(card, 150, -40, 118)
     AddVerticalDivider(card, 288, -40, 118)
@@ -287,7 +299,7 @@ local function BuildRanks(parent, state)
 end
 
 local function BuildTotals(parent, state)
-    local card = MakeCard(parent, 464, -136, 444, 178, "Player Totals", COLORS.blue)
+    local card = MakeCard(parent, SECONDARY_SECOND_X, SECONDARY_Y, SECONDARY_WIDTH, SECONDARY_HEIGHT, "Player Totals", COLORS.blue)
     local metrics = state.metrics or {}
     AddVerticalDivider(card, 150, -40, 118)
     AddVerticalDivider(card, 288, -40, 118)
@@ -769,7 +781,7 @@ end
 
 local function BuildPullGraph(parent, state, profile, yOffset)
     profile = profile or GetGraphProfile(state)
-    local card = MakeCard(parent, 0, yOffset or -330, 908, 306, profile.title or "Pull Timeline", COLORS.blue)
+    local card = MakeCard(parent, 0, yOffset or FIRST_GRAPH_Y, CONTENT_WIDTH, GRAPH_HEIGHT, profile.title or "Pull Timeline", COLORS.blue)
     local metricKeys, markerMetricKeys, allMetricKeys = GetGraphMetricLists(profile)
     local sessions = GetGraphSessions(state and state.encounter, allMetricKeys)
     local perMetricScale = profile.scale == "perMetric"
@@ -934,7 +946,7 @@ function LastRun:Refresh()
 
     local state = Analysis().BuildState and Analysis().BuildState() or { hasRun = false }
     if not state.hasRun then
-        local card = MakeCard(self.content, 0, 0, 908, 120, "Last Run", COLORS.gold)
+        local card = MakeCard(self.content, 0, 0, CONTENT_WIDTH, 120, "M+ Last Run", COLORS.gold)
         AddLine(card, "Complete a Mythic+ run and KeyLab will keep the newest recap here.", 18, -48, 820, COLORS.muted, "GameFontNormal")
         self.content:SetHeight(150)
         return
@@ -943,9 +955,9 @@ function LastRun:Refresh()
     BuildSummary(self.content, state)
     BuildRanks(self.content, state)
     BuildTotals(self.content, state)
-    BuildPullGraph(self.content, state, GetGraphProfile(state), -330)
-    BuildPullGraph(self.content, state, GetRoleFocusProfile(state), -660)
-    self.content:SetHeight(1010)
+    BuildPullGraph(self.content, state, GetGraphProfile(state), FIRST_GRAPH_Y)
+    BuildPullGraph(self.content, state, GetRoleFocusProfile(state), SECOND_GRAPH_Y)
+    self.content:SetHeight(math.abs(SECOND_GRAPH_Y) + GRAPH_HEIGHT + SPACING.card)
 end
 
 function LastRun:Create(parent)
@@ -954,8 +966,8 @@ function LastRun:Create(parent)
     SetBackdrop(frame, COLORS.bg, {0, 0, 0, 0})
     self.frame = frame
 
-    local title = MakeText(frame, "Last Run", "GameFontNormalLarge", 18, COLORS.gold)
-    title:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -18)
+    local title = MakeText(frame, "M+ Last Run", "GameFontNormalLarge", HEADER.titleSize, COLORS.gold)
+    title:SetPoint("TOPLEFT", frame, "TOPLEFT", HEADER.x, HEADER.titleY)
     title:SetSize(900, 24)
 
     local subtitle = MakeText(frame, "Your newest Mythic+ recap: timer result, group lineup, run totals, pull timeline, and role focus.", "GameFontHighlightSmall", nil, COLORS.muted)
@@ -967,7 +979,7 @@ function LastRun:Create(parent)
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
 
     local content = CreateFrame("Frame", nil, scrollFrame)
-    content:SetSize(908, 1010)
+    content:SetSize(CONTENT_WIDTH, 1010)
     scrollFrame:SetScrollChild(content)
 
     self.scrollFrame = scrollFrame
@@ -988,7 +1000,7 @@ function KeyLab_CreateLastRunTab(parent)
 end
 
 if KeyLab.RegisterTab then
-    KeyLab.RegisterTab("Last Run", function(parent)
+    KeyLab.RegisterTab("M+ Last Run", function(parent)
         return LastRun:Create(parent)
     end)
 end

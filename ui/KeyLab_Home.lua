@@ -11,6 +11,8 @@ KeyLab.Tabs = KeyLab.Tabs or {}
 local HOME = {}
 KeyLab.Tabs.Home = HOME
 local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
+local SPACING = KeyLab.UI.Theme and KeyLab.UI.Theme.spacing or { card = 14, column = 12 }
+local HEADER = KeyLab.UI.Theme and KeyLab.UI.Theme.tabHeader or { titleSize = 16 }
 
 local COLORS = {
     bg         = {0.018, 0.026, 0.056, 0.96},
@@ -30,25 +32,15 @@ local CFG = {
     x = 24,
     y = -24,
     width = 880,
-    gap = 14,
+    gap = SPACING.card,
 }
 
 local function SetBackdrop(frame, color, borderColor)
-    local edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border"
-    local edgeSize = 7
-    local insets = { left = 2, right = 2, top = 2, bottom = 2 }
-    if frame.GetHeight and (frame:GetHeight() or 0) <= 20 then
-        edgeFile = "Interface\\Buttons\\WHITE8x8"
-        edgeSize = 1
-        insets = nil
-    end
-
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = edgeFile,
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
         tile = false,
-        edgeSize = edgeSize,
-        insets = insets,
+        edgeSize = 1,
     })
 
     frame:SetBackdropColor(unpack(color or COLORS.bg))
@@ -299,16 +291,18 @@ function HOME:Create(parent)
     local width = CFG.width
     local gap = CFG.gap
     local halfW = (width - gap) / 2
+    local pairWidth = (halfW * 2) + SPACING.column
+    local pairX = CFG.x + ((width - pairWidth) / 2)
 
     local hero = MakePanel(frame, CFG.x, y, width, 150, false)
 
-    local title = MakeText(hero, "KeyLab Journal", 20, COLORS.title, "LEFT")
+    local title = MakeText(hero, "KeyLab Journal", HEADER.titleSize, COLORS.title, "LEFT")
     title:SetPoint("TOPLEFT", hero, "TOPLEFT", 16, -14)
     title:SetSize(360, 26)
 
     local subtitle = MakeText(
         hero,
-        "A personal Mythic+ journal for real run outcomes, stat experiments, target gear, and the patterns that work for your characters.",
+        "A personal Mythic+ and Raid performance lab for encounter results, stat, talent and gear experiments, gearing plans, and the patterns that work for your characters.",
         12,
         COLORS.text,
         "LEFT"
@@ -328,7 +322,7 @@ function HOME:Create(parent)
     trackingValue:SetPoint("TOPLEFT", sinceLabel, "BOTTOMLEFT", 0, -4)
     trackingValue:SetSize(180, 22)
 
-    local runsLabel = MakeText(hero, "Completed Runs", 11, COLORS.muted, "LEFT")
+    local runsLabel = MakeText(hero, "Completed M+ Runs", 11, COLORS.muted, "LEFT")
     runsLabel:SetPoint("TOPLEFT", hero, "TOPLEFT", 620, -78)
     runsLabel:SetSize(120, 16)
 
@@ -340,7 +334,7 @@ function HOME:Create(parent)
 
     local latest = MakePanel(frame, CFG.x, y, width, 106, false)
 
-    local latestTitle = MakeText(latest, "Latest Run", 14, COLORS.title, "LEFT")
+    local latestTitle = MakeText(latest, "Latest M+ Run", 14, COLORS.title, "LEFT")
     latestTitle:SetPoint("TOPLEFT", latest, "TOPLEFT", 14, -12)
     latestTitle:SetSize(150, 18)
 
@@ -376,31 +370,33 @@ function HOME:Create(parent)
     latestSaved:SetPoint("TOPRIGHT", latest, "TOPRIGHT", -16, -56)
     latestSaved:SetSize(190, 22)
 
-    local latestHint = MakeText(latest, "Open Last Run to review the full summary, group lineup, totals, and pull graph.", 11, COLORS.muted, "LEFT")
+    local latestHint = MakeText(latest, "Choose Mythic+ and open Summary to review the full run, group lineup, totals, and pull graph.", 11, COLORS.muted, "LEFT")
     latestHint:SetPoint("TOPLEFT", latest, "TOPLEFT", 14, -84)
     latestHint:SetSize(width - 28, 18)
 
     y = y - 106 - gap
 
-    local releaseNote = MakePanel(frame, CFG.x, y, width, 76, false)
+    local releaseNoteHeight = 132
+    local releaseNote = MakePanel(frame, CFG.x, y, width, releaseNoteHeight, false)
 
-    local releaseTitle = MakeText(releaseNote, "Release Note", 14, COLORS.title, "LEFT")
+    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.6.0", 14, COLORS.title, "LEFT")
     releaseTitle:SetPoint("TOPLEFT", releaseNote, "TOPLEFT", 14, -12)
-    releaseTitle:SetSize(160, 18)
+    releaseTitle:SetSize(280, 18)
 
     local releaseBody = MakeText(
         releaseNote,
-        "KeyLab now captures more official Mythic+ timing and role-focused pull data. Older saved runs still remain in your journal, but some new fields may show after you complete fresh runs with this version.",
-        12,
+        "Complete Raid support adds Encounters, Summary, Talent Builds, Stat Profiles, Gear Profiles, and Trends alongside shared Mythic+ | Raid navigation. This update also adds Gear Planning, the Master Item Database, Stat Goal Matcher, redesigned Gear Targets and Gear Dashboard, and timed Practice Sessions.\n\n" ..
+        "Previously saved encounters remain in your journal. New Raid, profile, ranking, and gear fields appear only on encounters captured with this version.",
+        11,
         COLORS.muted,
         "LEFT"
     )
     releaseBody:SetPoint("TOPLEFT", releaseTitle, "BOTTOMLEFT", 0, -8)
-    releaseBody:SetSize(width - 28, 38)
+    releaseBody:SetSize(width - 28, 92)
 
-    y = y - 76 - gap
+    y = y - releaseNoteHeight - gap
 
-    local required = MakePanel(frame, CFG.x, y, halfW, 170, true)
+    local required = MakePanel(frame, pairX, y, halfW, 170, true)
 
     local reqTitle = MakeText(required, "Required Blizzard Setting", 14, COLORS.warning, "LEFT")
     reqTitle:SetPoint("TOPLEFT", required, "TOPLEFT", 14, -12)
@@ -408,8 +404,8 @@ function HOME:Create(parent)
 
     local reqBody = MakeText(
         required,
-        "KeyLab uses Blizzard's built-in Damage Meter data to capture completed Mythic+ outcomes.\n\n" ..
-        "Before running keys:\n" ..
+        "KeyLab uses Blizzard's built-in Damage Meter data to capture Mythic+ runs, raid boss pulls, and Practice outcomes.\n\n" ..
+        "Before running content:\n" ..
         "- Game Menu > Gameplay Enhancements\n" ..
         "- Under Damage Meter, enable Damage Meter\n" ..
         "- Enable Auto Reset Damage Meter",
@@ -420,7 +416,7 @@ function HOME:Create(parent)
     reqBody:SetPoint("TOPLEFT", reqTitle, "BOTTOMLEFT", 0, -8)
     reqBody:SetSize(halfW - 28, 126)
 
-    local macro = MakePanel(frame, CFG.x + halfW + gap, y, halfW, 170, false)
+    local macro = MakePanel(frame, pairX + halfW + SPACING.column, y, halfW, 170, false)
 
     local macroTitle = MakeText(macro, "Open KeyLab Quickly", 14, COLORS.title, "LEFT")
     macroTitle:SetPoint("TOPLEFT", macro, "TOPLEFT", 14, -12)

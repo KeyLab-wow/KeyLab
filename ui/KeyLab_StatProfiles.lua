@@ -28,6 +28,8 @@ KeyLab.Tabs = KeyLab.Tabs or {}
 local StatProfiles = {}
 KeyLab.Tabs.StatProfiles = StatProfiles
 local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
+local SPACING = KeyLab.UI.Theme and KeyLab.UI.Theme.spacing or { compactCard = 8, section = 18 }
+local HEADER = KeyLab.UI.Theme and KeyLab.UI.Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16, analysisControlsY = -86, analysisContentY = -172 }
 
 -- =========================================================
 -- EASY EDIT SETTINGS
@@ -73,14 +75,14 @@ local CFG = {
     },
 
     header = {
-        x = 18,
-        y = -18,
+        x = HEADER.x,
+        y = HEADER.titleY,
         subtitleWidth = 900,
     },
 
     controls = {
         x = 12,
-        y = -86,
+        y = HEADER.analysisControlsY,
         width = 928,
         height = 74,
 
@@ -94,7 +96,7 @@ local CFG = {
 
     list = {
         x = 12,
-        y = -172,
+        y = HEADER.analysisContentY,
         width = 928,
     },
 
@@ -102,7 +104,7 @@ local CFG = {
         x = 0,
         width = 928,
         height = 44,
-        gap = 8,
+        gap = SPACING.compactCard,
         padding = 12,
 
         rankX = 12,
@@ -122,7 +124,7 @@ local CFG = {
         width = 928,
         minHeight = 300,
         maxHeight = 300,
-        gapAfterCards = 18,
+        gapAfterCards = SPACING.section,
         padding = 14,
         rowHeight = 15,
 
@@ -149,21 +151,11 @@ local function ApplyColor(fs, color)
 end
 
 local function StylePanel(frame, bg, border)
-    local edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border"
-    local edgeSize = 7
-    local insets = { left = 2, right = 2, top = 2, bottom = 2 }
-    if frame.GetHeight and (frame:GetHeight() or 0) <= 20 then
-        edgeFile = "Interface\\Buttons\\WHITE8x8"
-        edgeSize = 1
-        insets = nil
-    end
-
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = edgeFile,
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
         tile = false,
-        edgeSize = edgeSize,
-        insets = insets,
+        edgeSize = 1,
     })
     frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
     frame:SetBackdropBorderColor(border[1], border[2], border[3], border[4] or 1)
@@ -1300,7 +1292,8 @@ function StatProfiles:Create(parent)
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.header.x, CFG.header.y)
-    title:SetText("Stat Profiles")
+    title:SetFont(STANDARD_TEXT_FONT, HEADER.titleSize, "")
+    title:SetText("M+ Stat Profiles")
     ApplyColor(title, CFG.colors.gold)
 
     local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -1377,7 +1370,7 @@ function KeyLab_CreateStatProfilesTab(parent)
 end
 
 if KeyLab.RegisterTab then
-    KeyLab.RegisterTab("Stat Profiles", function(parent)
+    KeyLab.RegisterTab("M+ Stat Profiles", function(parent)
         return StatProfiles:Create(parent)
     end)
 end

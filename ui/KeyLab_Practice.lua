@@ -10,6 +10,8 @@ KeyLab.Tabs.Practice = Practice
 
 local Theme = KeyLab.UI.Theme or {}
 local Analysis = KeyLab.Analysis and KeyLab.Analysis.Practice or {}
+local SPACING = Theme.spacing or { card = 14 }
+local HEADER = Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16 }
 
 local COLORS = (Theme and Theme.colors) or {
     bg = {0.018, 0.026, 0.056, 0.96},
@@ -38,12 +40,10 @@ local TABLE_COLUMNS = {
 
 local PAGE_SIZE = 9
 
-local LAYOUT = {
-    newSessionY = -66,
-    filtersY = -166,
-    tableY = -258,
-    detailsY = -656,
-}
+local LAYOUT = { newSessionY = -66 }
+LAYOUT.filtersY = LAYOUT.newSessionY - 86 - SPACING.card
+LAYOUT.tableY = LAYOUT.filtersY - 78 - SPACING.card
+LAYOUT.detailsY = LAYOUT.tableY - 380 - SPACING.card
 
 local METRIC_COLORS = {
     damageDone = COLORS.orange,
@@ -65,10 +65,9 @@ end
 local function SetBackdrop(frame, color, borderColor)
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
         tile = false,
-        edgeSize = 7,
-        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+        edgeSize = 1,
     })
     frame:SetBackdropColor(unpack(color or COLORS.cardBg))
     frame:SetBackdropBorderColor(unpack(borderColor or COLORS.cardBorder))
@@ -250,10 +249,10 @@ end
 
 local function MetricOptions()
     return Analysis.GetMetricOptions and Analysis.GetMetricOptions() or {
-        { key = "dps", label = "DPS" },
         { key = "damageDone", label = "Damage Done" },
-        { key = "hpsWithAbsorbs", label = "HPS" },
+        { key = "dps", label = "DPS" },
         { key = "healingDoneWithAbsorbs", label = "Healing Done" },
+        { key = "hpsWithAbsorbs", label = "HPS" },
     }
 end
 
@@ -264,6 +263,16 @@ local function TestTypeOptions()
         { key = "Party Healing", label = "Party Heal" },
         { key = "Group Healing", label = "Group Heal" },
     }
+end
+
+local function DurationOptions(includeAll)
+    local options = {}
+    if includeAll then table.insert(options, { value = nil, label = "All Lengths" }) end
+    table.insert(options, { value = 30, label = "30 Seconds" })
+    table.insert(options, { value = 60, label = "60 Seconds" })
+    table.insert(options, { value = 120, label = "2 Minutes" })
+    table.insert(options, { value = "manual", label = "Manual" })
+    return options
 end
 
 local function MetricLabel(metricKey)
@@ -479,7 +488,7 @@ local function EnsureMonitor()
     frame.timer:SetPoint("TOP", frame, "TOP", 0, -54)
     frame.timer:SetSize(320, 32)
 
-    frame.note = MakeText(frame, "Use the same test length when comparing builds, stats, or talents.", "GameFontHighlightSmall", nil, COLORS.muted, "CENTER")
+    frame.note = MakeText(frame, "Let pets and lingering damage finish, then press Stop. KeyLab freezes the test time.", "GameFontHighlightSmall", nil, COLORS.muted, "CENTER")
     frame.note:SetPoint("TOP", frame.timer, "BOTTOM", 0, -10)
     frame.note:SetSize(310, 34)
 
@@ -501,6 +510,7 @@ local function EnsureMonitor()
             Practice.selectedSessionID = resultOrError.id
             Practice.selectedSpec = nil
             Practice.selectedTypeFilter = nil
+            Practice.selectedDurationFilter = resultOrError.targetDurationSeconds or "manual"
             Practice.selectedStatusFilter = "all"
             if KeyLab.UI and KeyLab.UI.Show then
                 KeyLab.UI:Show()
@@ -543,7 +553,21 @@ local function EnsureMonitor()
             return
         end
         local endTime = tonumber(active.stoppedAt) or time()
-        self.timer:SetText(FormatDuration(endTime - (tonumber(active.startedAt) or endTime)))
+        local elapsedSeconds = math.max(0, endTime - (tonumber(active.startedAt) or endTime))
+        local targetDuration = tonumber(active.targetDurationSeconds)
+        if targetDuration then
+            self.timer:SetText(FormatDuration(math.min(elapsedSeconds, targetDuration)) .. " / " .. FormatDuration(targetDuration))
+            if elapsedSeconds >= targetDuration and not self.pendingStop then
+                self.pendingStop = true
+                self.stopRetryElapsed = 0
+                self.note:SetText("Test complete. Snapshotting Damage Done from Blizzard's active meter session.")
+                ApplyColor(self.note, COLORS.orange)
+                if self.stop then self.stop:SetText("Snapshotting...") end
+                FinishStop(true)
+            end
+        else
+            self.timer:SetText(FormatDuration(elapsedSeconds))
+        end
 
         if self.pendingStop then
             self.stopRetryElapsed = (self.stopRetryElapsed or 0) + (elapsed or 0)
@@ -562,7 +586,15 @@ function Practice:ShowMonitor()
     local monitor = EnsureMonitor()
     monitor.pendingStop = false
     monitor.stopRetryElapsed = 0
-    monitor.note:SetText("Use the same test length when comparing builds, stats, or talents.")
+    local active = Capture().GetActiveSession and Capture().GetActiveSession()
+    local targetDuration = active and tonumber(active.targetDurationSeconds)
+    if targetDuration then
+        monitor.title:SetText("Practice Session - " .. FormatDuration(targetDuration))
+        monitor.note:SetText("Damage Done will snapshot automatically when the timer reaches the selected test length.")
+    else
+        monitor.title:SetText("Practice Session - Manual")
+        monitor.note:SetText("Press Stop when your test ends. KeyLab will snapshot the active Damage Meter totals.")
+    end
     ApplyColor(monitor.note, COLORS.muted)
     if monitor.stop then
         monitor.stop:SetText("Stop Session")
@@ -595,13 +627,15 @@ end
 
 function Practice:RefreshDropdowns(baseSessions)
     SetDropdownText(self.startTypeDropdown, FindOptionLabel(TestTypeOptions(), self.selectedStartType or "ST", "ST"))
+    SetDropdownText(self.startDurationDropdown, FindOptionLabel(DurationOptions(false), self.selectedStartDuration or 60, "60 Seconds"))
 
     local specText = "All Specs"
     if self.selectedSpec then specText = self.selectedSpec end
     SetDropdownText(self.specDropdown, specText)
 
     SetDropdownText(self.typeFilterDropdown, self.selectedTypeFilter and FindOptionLabel(TestTypeOptions(), self.selectedTypeFilter, "All Types") or "All Types")
-    SetDropdownText(self.outcomeDropdown, MetricLabel(self.selectedMetricKey or "dps"))
+    SetDropdownText(self.durationFilterDropdown, self.selectedDurationFilter and FindOptionLabel(DurationOptions(true), self.selectedDurationFilter, "All Lengths") or "All Lengths")
+    SetDropdownText(self.outcomeDropdown, MetricLabel(self.selectedMetricKey or "damageDone"))
 
     local statusText = "All Status"
     for _, option in ipairs(StatusFilterOptions()) do
@@ -616,18 +650,22 @@ end
 function Practice:BuildNewSession(parent)
     local panel = MakePanel(parent, 0, LAYOUT.newSessionY, 908, 86, "New Session")
     local active = Capture().GetActiveSession and Capture().GetActiveSession()
+    local actionX = 756
+    local instructionX = 310
+    local instructionWidth = actionX - instructionX - 16
 
     if active then
-        AddLine(panel, "Session running: " .. tostring(active.testType or "Practice"), 16, -42, 270, COLORS.green, "GameFontNormal")
+        local lengthText = active.targetDurationSeconds and FormatDuration(active.targetDurationSeconds) or "Manual"
+        AddLine(panel, "Session running: " .. tostring(active.testType or "Practice") .. "  |  " .. lengthText, 16, -42, 350, COLORS.green, "GameFontNormal")
         local showTimer = MakeButton(panel, "Show Timer", 120, 24)
-        showTimer:SetPoint("TOPLEFT", panel, "TOPLEFT", 716, -34)
+        showTimer:SetPoint("TOPLEFT", panel, "TOPLEFT", actionX, -34)
         showTimer:SetScript("OnClick", function()
             Practice:ShowMonitor()
         end)
         return panel
     end
 
-    self.startTypeDropdown = MakeDropdown(panel, 145, 16, -36, "Session Type", function(_, level)
+    self.startTypeDropdown = MakeDropdown(panel, 115, 16, -36, "Session Type", function(_, level)
         for _, option in ipairs(TestTypeOptions()) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.label
@@ -639,15 +677,31 @@ function Practice:BuildNewSession(parent)
         end
     end)
 
-    AddLine(panel, "Reset your damage meter, then choose a session type. ST is the default.", 230, -34, 560, COLORS.muted, "GameFontDisableSmall")
-    AddLine(panel, "For pet classes, recall pets and stop extra damage before pressing Stop Session.", 230, -54, 560, COLORS.orange, "GameFontDisableSmall")
+
+    self.startDurationDropdown = MakeDropdown(panel, 105, 166, -36, "Test Length", function(_, level)
+        for _, option in ipairs(DurationOptions(false)) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = option.label
+            info.func = function()
+                Practice.selectedStartDuration = option.value
+                Practice:Refresh()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+
+    AddLine(panel, "Timed tests are recommended and snapshot automatically.", instructionX, -34, instructionWidth, COLORS.muted, "GameFontDisableSmall")
+    local warning = AddLine(panel, "Blizzard training dummies may keep you in combat. Timed tests give the clearest stopping point; compare Damage Done if DPS keeps changing.", instructionX, -54, instructionWidth, COLORS.orange, "GameFontDisableSmall")
+    warning:SetHeight(28)
 
     local start = MakeButton(panel, "Start Session", 126, 26)
-    start:SetPoint("TOPLEFT", panel, "TOPLEFT", 716, -38)
+    start:SetPoint("TOPLEFT", panel, "TOPLEFT", actionX, -38)
     start:SetScript("OnClick", function()
         local ok, resultOrError
         if Capture().StartSession then
-            ok, resultOrError = Capture().StartSession(Practice.selectedStartType or "ST")
+            local duration = Practice.selectedStartDuration
+            if duration == "manual" then duration = nil end
+            ok, resultOrError = Capture().StartSession(Practice.selectedStartType or "ST", duration)
         end
         if ok then
             if KeyLab.UI and KeyLab.UI.Hide then
@@ -665,7 +719,7 @@ end
 function Practice:BuildFilters(parent, baseSessions)
     local panel = MakePanel(parent, 0, LAYOUT.filtersY, 908, 78, "Filters")
 
-    self.specDropdown = MakeDropdown(panel, 150, 16, -34, "Spec", function(_, level)
+    self.specDropdown = MakeDropdown(panel, 120, 16, -34, "Spec", function(_, level)
         local options = Analysis.GetSpecOptions and Analysis.GetSpecOptions(baseSessions) or { { value = nil, text = "All Specs" } }
         for _, option in ipairs(options) do
             local info = UIDropDownMenu_CreateInfo()
@@ -680,7 +734,7 @@ function Practice:BuildFilters(parent, baseSessions)
         end
     end)
 
-    self.typeFilterDropdown = MakeDropdown(panel, 140, 194, -34, "Session Type", function(_, level)
+    self.typeFilterDropdown = MakeDropdown(panel, 115, 174, -34, "Session Type", function(_, level)
         local all = UIDropDownMenu_CreateInfo()
         all.text = "All Types"
         all.func = function()
@@ -704,7 +758,22 @@ function Practice:BuildFilters(parent, baseSessions)
         end
     end)
 
-    self.outcomeDropdown = MakeDropdown(panel, 150, 366, -34, "Outcome", function(_, level)
+
+    self.durationFilterDropdown = MakeDropdown(panel, 105, 324, -34, "Test Length", function(_, level)
+        for _, option in ipairs(DurationOptions(true)) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = option.label
+            info.func = function()
+                Practice.selectedDurationFilter = option.value
+                Practice.selectedSessionID = nil
+                Practice.currentPage = 1
+                Practice:Refresh()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+
+    self.outcomeDropdown = MakeDropdown(panel, 120, 462, -34, "Outcome", function(_, level)
         for _, option in ipairs(MetricOptions()) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.label
@@ -718,7 +787,7 @@ function Practice:BuildFilters(parent, baseSessions)
         end
     end)
 
-    self.statusFilterDropdown = MakeDropdown(panel, 150, 550, -34, "Status", function(_, level)
+    self.statusFilterDropdown = MakeDropdown(panel, 120, 620, -34, "Status", function(_, level)
         for _, option in ipairs(StatusFilterOptions()) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.label
@@ -845,14 +914,14 @@ function Practice:BuildDetails(parent, session)
     local hasNotice = false
     if session.capturePending then
         hasNotice = true
-        AddLine(panel, "Waiting for damage meter totals. KeyLab will refresh this session automatically.", 14, -58, 760, COLORS.orange, "GameFontDisableSmall")
+        AddLine(panel, "Session stopped. KeyLab will add Blizzard's totals automatically when they become available.", 14, -58, 760, COLORS.orange, "GameFontDisableSmall")
     elseif session.captureError then
         hasNotice = true
         AddLine(panel, "Saved setup only: no damage meter totals were available for this session.", 14, -58, 760, COLORS.orange, "GameFontDisableSmall")
     end
 
     local metrics = {
-        { key = "damageDone", label = "Damage" },
+        { key = "damageDone", label = "Damage Done" },
         { key = "dps", label = "DPS" },
         { key = "healingDoneWithAbsorbs", label = "Healing" },
         { key = "hpsWithAbsorbs", label = "HPS" },
@@ -894,12 +963,13 @@ function Practice:Refresh()
         region:Hide()
     end
 
-    self.selectedMetricKey = self.selectedMetricKey or "dps"
+    self.selectedMetricKey = self.selectedMetricKey or "damageDone"
     self.selectedStartType = self.selectedStartType or "ST"
+    self.selectedStartDuration = self.selectedStartDuration or 60
     self.selectedStatusFilter = self.selectedStatusFilter or "all"
 
-    local title = MakeText(self.content, "Practice", "GameFontNormalLarge", 18, COLORS.gold)
-    title:SetPoint("TOPLEFT", self.content, "TOPLEFT", 18, -18)
+    local title = MakeText(self.content, "Practice", "GameFontNormalLarge", HEADER.titleSize, COLORS.gold)
+    title:SetPoint("TOPLEFT", self.content, "TOPLEFT", HEADER.x, HEADER.titleY)
     title:SetSize(880, 24)
 
     local subtitle = MakeText(self.content, "Compare controlled training dummy sessions by setup, stats, talents, and captured outcomes.", "GameFontHighlightSmall", nil, COLORS.muted)
@@ -913,6 +983,7 @@ function Practice:Refresh()
     local filtered = Analysis.FilterSessions and Analysis.FilterSessions(baseSessions, {
         spec = self.selectedSpec,
         testType = self.selectedTypeFilter,
+        duration = self.selectedDurationFilter,
         status = self.selectedStatusFilter,
     }) or baseSessions
 

@@ -11,6 +11,7 @@ KeyLab.Tabs = KeyLab.Tabs or {}
 
 local Settings = {}
 KeyLab.Tabs.Settings = Settings
+local HEADER = KeyLab.UI.Theme and KeyLab.UI.Theme.tabHeader or { titleSize = 16 }
 
 -- =========================================================
 -- EASY EDIT SETTINGS
@@ -32,7 +33,7 @@ local COLORS = {
 local CONTENT_PAD = 24
 local SECTION_GAP = 34
 local ROW_GAP = 86
-local FONT_PAGE_TITLE = 18
+local FONT_PAGE_TITLE = HEADER.titleSize
 local FONT_SECTION_TITLE = 17
 local FONT_ACTION_TITLE = 13
 local FONT_BODY = 12
@@ -43,21 +44,11 @@ local FONT_BODY_SPACING = 2
 -- =========================================================
 
 local function SetBackdrop(frame, color, borderColor)
-    local edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border"
-    local edgeSize = 7
-    local insets = { left = 2, right = 2, top = 2, bottom = 2 }
-    if frame.GetHeight and (frame:GetHeight() or 0) <= 20 then
-        edgeFile = "Interface\\Buttons\\WHITE8x8"
-        edgeSize = 1
-        insets = nil
-    end
-
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = edgeFile,
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
         tile = false,
-        edgeSize = edgeSize,
-        insets = insets,
+        edgeSize = 1,
     })
     frame:SetBackdropColor(unpack(color or COLORS.panel))
     frame:SetBackdropBorderColor(unpack(borderColor or COLORS.border))
@@ -214,7 +205,7 @@ local function BuildSettings(content)
 
     local purpose = MakeText(
         content,
-        "KeyLab is a personal Mythic+ journal focused on real encounter outcomes, talent experimentation, stat priorities, and gameplay consistency.",
+        "KeyLab is a personal Mythic+ and Raid performance lab focused on real encounters, talent experimentation, stat and gear profiles, gearing plans, and gameplay trends.",
         "GameFontHighlightSmall",
         FONT_BODY,
         COLORS.muted,
@@ -270,10 +261,14 @@ function Settings:Create(parent)
     title:SetPoint("TOPLEFT", CONTENT_PAD, -22)
     title:SetSize(420, 30)
 
-    local content = CreateFrame("Frame", nil, frame)
-    content:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -76)
-    content:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
+    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -68)
+    scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 14)
+
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetWidth(910)
     content:SetHeight(660)
+    scroll:SetScrollChild(content)
 
     BuildSettings(content)
 

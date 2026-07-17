@@ -11,7 +11,7 @@ KeyLab_GearTargetsWindow.lua
 Purpose:
 - Standalone KeyLab-styled Gear Targets window.
 - Opens manually from Home or automatically while browsing Premade Group dungeons.
-- Reads selected itemIDs from KeyLabDB.lootTargets and item details from the static loot database.
+-- Reads slot-based Targets through LootTargetsDB and item details from the master item database.
 - Does not depend on Blizzard's Adventure Guide.
 ]]
 
@@ -36,21 +36,11 @@ local CFG = {
 local frame
 
 local function SetBackdrop(f, color, borderColor)
-    local edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border"
-    local edgeSize = 7
-    local insets = { left = 2, right = 2, top = 2, bottom = 2 }
-    if f.GetHeight and (f:GetHeight() or 0) <= 20 then
-        edgeFile = "Interface\\Buttons\\WHITE8x8"
-        edgeSize = 1
-        insets = nil
-    end
-
     f:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = edgeFile,
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
         tile = false,
-        edgeSize = edgeSize,
-        insets = insets,
+        edgeSize = 1,
     })
     f:SetBackdropColor(unpack(color or CFG.colors.panel))
     f:SetBackdropBorderColor(unpack(borderColor or CFG.colors.border))
@@ -289,7 +279,7 @@ function GearWindow.Refresh(resultNames)
         SortItems(targets)
         if #targets == 0 then
             AddLine(f, "No Gear Targets saved yet.", CFG.colors.muted)
-            AddLine(f, "Open the Gear Targets tab and check items you want to track.", CFG.colors.text, 16)
+            AddLine(f, "Open the Gear Targets tab and choose items as Targets.", CFG.colors.text, 16)
         else
             local byDungeon, names = {}, {}
             for _, item in ipairs(targets) do

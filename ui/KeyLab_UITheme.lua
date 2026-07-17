@@ -95,10 +95,10 @@ Theme.fonts = {
 
 Theme.backdrop = {
     bgFile = "Interface\\Buttons\\WHITE8x8",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    edgeFile = "Interface\\Buttons\\WHITE8x8",
     tile = false,
-    edgeSize = 7,
-    insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    edgeSize = 1,
+    insets = nil,
 }
 
 Theme.card = {
@@ -106,6 +106,37 @@ Theme.card = {
     showAccent = false,
     titleX = 14,
     titleY = -10,
+}
+
+-- Shared spacing rhythm. Normal cards use one consistent gap throughout the
+-- addon; compact lists and the fixed Gear Dashboard slot grid stay tighter so
+-- their established card counts still fit without resizing.
+Theme.spacing = {
+    card = 14,
+    column = 12,
+    compactCard = 8,
+    slotCard = 10,
+    section = 18,
+}
+
+-- Shared top-of-tab geometry. Analysis tabs reserve a third line for their
+-- live summary before filters; standard tabs move directly from description
+-- to content.
+Theme.tabHeader = {
+    x = 18,
+    titleY = -18,
+    titleSize = 16,
+    titleWidth = 900,
+    titleHeight = 20,
+    descriptionY = -43,
+    descriptionWidth = 890,
+    descriptionHeight = 16,
+    summaryY = -66,
+    summaryWidth = 890,
+    summaryHeight = 14,
+    standardContentY = -74,
+    analysisControlsY = -86,
+    analysisContentY = -172,
 }
 
 Theme.badge = {

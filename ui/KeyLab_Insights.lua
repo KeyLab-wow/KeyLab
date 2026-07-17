@@ -1,7 +1,4 @@
--- KeyLab_Insights.lua
--- Insights tab for KeyLab / M+ Journal
--- Purpose: concise reference information for encounter variables, character stats, spell queue window, macros, and sims.
--- No assets/images.
+-- Insights: compact reference notes presented as expandable sections.
 
 local ADDON_NAME, KeyLab = ...
 KeyLab = KeyLab or {}
@@ -12,377 +9,180 @@ KeyLab.Tabs = KeyLab.Tabs or {}
 
 local Insights = {}
 KeyLab.Tabs.Insights = Insights
-
--- =========================================================
--- EASY EDIT SETTINGS
--- =========================================================
+local HEADER = KeyLab.UI.Theme and KeyLab.UI.Theme.tabHeader or { titleSize = 16 }
 
 local COLORS = {
-    bg       = {0.018, 0.026, 0.056, 0.96},
-    panel    = {0.026, 0.046, 0.086, 0.84},
-    border   = {0.240, 0.380, 0.620, 0.62},
-    gold     = {0.820, 0.760, 0.580, 1.0},
-    title    = {0.780, 0.830, 0.900, 1.0},
-    text     = {0.940, 0.960, 0.990, 1.0},
-    muted    = {0.680, 0.730, 0.820, 1.0},
-    accent   = {0.500, 0.680, 0.940, 1.0},
-    divider  = {0.440, 0.580, 0.780, 0.32},
-    softBg   = {0.030, 0.052, 0.098, 0.84},
-    headerBg = {0.024, 0.042, 0.082, 0.92},
-    cardBg   = {0.026, 0.046, 0.086, 0.82},
-    cardLine = {0.240, 0.380, 0.620, 0.62},
+    bg = {0.018, 0.026, 0.056, 0.96},
+    panel = {0.026, 0.046, 0.086, 0.92},
+    body = {0.022, 0.038, 0.076, 0.86},
+    border = {0.240, 0.380, 0.620, 0.62},
+    hover = {0.300, 0.420, 0.600, 0.78},
+    gold = {0.820, 0.760, 0.580, 1.0},
+    text = {0.940, 0.960, 0.990, 1.0},
+    muted = {0.680, 0.730, 0.820, 1.0},
 }
 
-local CONTENT_WIDTH = 900
-local PAGE_PADDING = 8
-local FONT_SECTION_TITLE = 17
-local FONT_HEADER_TITLE = 18
-local FONT_SUBTITLE = 12
-local FONT_BLOCK_TITLE = 13
-local FONT_BODY = 12
-local FONT_BODY_SPACING = 2
-local SECTION_GAP = 22
-
--- =========================================================
--- BASIC HELPERS
--- =========================================================
-
-local function SetBackdrop(frame, color, borderColor)
-    local edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border"
-    local edgeSize = 7
-    local insets = { left = 2, right = 2, top = 2, bottom = 2 }
-    if frame.GetHeight and (frame:GetHeight() or 0) <= 20 then
-        edgeFile = "Interface\\Buttons\\WHITE8x8"
-        edgeSize = 1
-        insets = nil
-    end
-
+local function SetBackdrop(frame, background, border)
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = edgeFile,
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
         tile = false,
-        edgeSize = edgeSize,
-        insets = insets,
+        edgeSize = 1,
     })
-    frame:SetBackdropColor(unpack(color or COLORS.panel))
-    frame:SetBackdropBorderColor(unpack(borderColor or COLORS.border))
+    frame:SetBackdropColor(unpack(background))
+    frame:SetBackdropBorderColor(unpack(border))
 end
 
-local function MakeText(parent, text, template, size, color, justify)
-    local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontNormal")
-
-    if size then
-        fs:SetFont(STANDARD_TEXT_FONT, size, "")
-    end
-
-    if fs.SetSpacing then
-        fs:SetSpacing(FONT_BODY_SPACING)
-    end
-
-    fs:SetTextColor(unpack(color or COLORS.text))
-    fs:SetJustifyH(justify or "LEFT")
-    fs:SetJustifyV("TOP")
-    fs:SetWordWrap(true)
-    fs:SetText(text or "")
-    return fs
+local function Text(parent, value, template, size, color)
+    local fontString = parent:CreateFontString(nil, "OVERLAY", template or "GameFontNormal")
+    if size then fontString:SetFont(STANDARD_TEXT_FONT, size, "") end
+    fontString:SetTextColor(unpack(color or COLORS.text))
+    fontString:SetJustifyH("LEFT")
+    fontString:SetJustifyV("TOP")
+    fontString:SetWordWrap(true)
+    fontString:SetText(value or "")
+    return fontString
 end
 
-local function BulletList(items)
-    return "• " .. table.concat(items, "\n• ")
+local function Heading(value)
+    return "|cFFD1C29A" .. tostring(value) .. "|r"
 end
 
-local function DashList(items)
+local function List(items)
     return "- " .. table.concat(items, "\n- ")
 end
 
-local function AddDivider(parent, y, width)
-    local line = parent:CreateTexture(nil, "ARTWORK")
-    line:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, y)
-    line:SetSize(width or (CONTENT_WIDTH - (PAGE_PADDING * 2)), 1)
-    line:SetColorTexture(unpack(COLORS.divider))
-    return line
+local function Join(parts)
+    return table.concat(parts, "\n\n")
 end
 
-local function AddSectionHeader(parent, y, title, subtitle, panelHeight)
-    local hasSubtitle = subtitle and subtitle ~= ""
-    local headerHeight = hasSubtitle and 58 or 42
-    local panelWidth = CONTENT_WIDTH - (PAGE_PADDING * 2)
-    local panelTop = y + 8
-    local fullHeight = panelHeight or headerHeight
-
-    local panelBg = parent:CreateTexture(nil, "BACKGROUND")
-    panelBg:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, panelTop)
-    panelBg:SetSize(panelWidth, fullHeight)
-    panelBg:SetColorTexture(unpack(COLORS.cardBg))
-
-    local headerBg = parent:CreateTexture(nil, "BORDER")
-    headerBg:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, panelTop)
-    headerBg:SetSize(panelWidth, headerHeight)
-    headerBg:SetColorTexture(unpack(COLORS.headerBg))
-
-    local topLine = parent:CreateTexture(nil, "ARTWORK")
-    topLine:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, panelTop)
-    topLine:SetSize(panelWidth, 1)
-    topLine:SetColorTexture(unpack(COLORS.border))
-
-    local bottomLine = parent:CreateTexture(nil, "ARTWORK")
-    bottomLine:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, panelTop - fullHeight)
-    bottomLine:SetSize(panelWidth, 1)
-    bottomLine:SetColorTexture(unpack(COLORS.border))
-
-    local leftLine = parent:CreateTexture(nil, "ARTWORK")
-    leftLine:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING, panelTop)
-    leftLine:SetSize(1, fullHeight)
-    leftLine:SetColorTexture(unpack(COLORS.border))
-
-    local rightLine = parent:CreateTexture(nil, "ARTWORK")
-    rightLine:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING + panelWidth - 1, panelTop)
-    rightLine:SetSize(1, fullHeight)
-    rightLine:SetColorTexture(unpack(COLORS.border))
-
-    local h = MakeText(parent, title, "GameFontNormalLarge", FONT_SECTION_TITLE, COLORS.gold, "LEFT")
-    h:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING + 16, y - 1)
-    h:SetSize(CONTENT_WIDTH - 44, 24)
-
-    local nextY = y - 30
-
-    if hasSubtitle then
-        local s = MakeText(parent, subtitle, "GameFontHighlightSmall", FONT_SUBTITLE, COLORS.muted, "LEFT")
-        s:SetPoint("TOPLEFT", parent, "TOPLEFT", PAGE_PADDING + 16, y - 25)
-        s:SetSize(CONTENT_WIDTH - 44, 32)
-        nextY = y - 62
-    end
-
-    return nextY - 18
-end
-
-local function AddSection(parent, y, title, subtitle, panelHeight)
-    local contentY = AddSectionHeader(parent, y, title, subtitle, panelHeight)
-    local fullHeight = panelHeight or ((subtitle and subtitle ~= "") and 58 or 42)
-    local nextSectionY = y - fullHeight - SECTION_GAP
-    return contentY, nextSectionY
-end
-
-local function AddTextBlock(parent, x, y, width, title, body)
-    if title and title ~= "" then
-        local h = MakeText(parent, title, "GameFontNormal", FONT_BLOCK_TITLE, COLORS.title, "LEFT")
-        h:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-        h:SetSize(width, 18)
-
-        local b = MakeText(parent, body, "GameFontHighlightSmall", FONT_BODY, COLORS.text, "LEFT")
-        b:SetPoint("TOPLEFT", h, "BOTTOMLEFT", 0, -7)
-        b:SetSize(width, 500)
-        return b
-    end
-
-    local b = MakeText(parent, body, "GameFontHighlightSmall", FONT_BODY, COLORS.text, "LEFT")
-    b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    b:SetSize(width, 500)
-    return b
-end
-
-local function AddSoftBox(parent, x, y, width, height, title, body)
-    local box = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    box:SetSize(width, height)
-    SetBackdrop(box, COLORS.softBg, COLORS.border)
-
-    local strip = box:CreateTexture(nil, "ARTWORK")
-    strip:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0)
-    strip:SetPoint("TOPRIGHT", box, "TOPRIGHT", 0, 0)
-    strip:SetHeight(2)
-    strip:SetColorTexture(unpack(COLORS.border))
-
-    local h = MakeText(box, title, "GameFontNormal", FONT_BLOCK_TITLE, COLORS.gold, "LEFT")
-    h:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
-    h:SetSize(width - 24, 18)
-
-    local b = MakeText(box, body, "GameFontHighlightSmall", FONT_BODY, COLORS.text, "LEFT")
-    b:SetPoint("TOPLEFT", h, "BOTTOMLEFT", 0, -7)
-    b:SetSize(width - 24, height - 38)
-
-    return box
-end
-
-local function AddColumnDivider(parent, x, y, height)
-    local line = parent:CreateTexture(nil, "ARTWORK")
-    line:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    line:SetSize(1, height)
-    line:SetColorTexture(unpack(COLORS.divider))
-    return line
-end
-
--- =========================================================
--- CONTENT
--- =========================================================
-
-local function BuildInsights(content)
-    local sectionY = -4
-    local y, nextSectionY
-
-    -- Encounter Variables
-    y, nextSectionY = AddSection(content, sectionY, "Encounter Variables", "Gameplay factors that can change real Mythic+ outcomes from run to run.", 210)
-
-    local colW = 270
-    AddTextBlock(content, PAGE_PADDING + 12, y, colW, "Core Variables", BulletList({
-        "Movement",
-        "Positioning",
-        "Reaction timing",
-        "Target switching",
-        "Interrupt pressure",
-        "Survivability",
-    }))
-
-    AddColumnDivider(content, 310, y + 4, 122)
-
-    AddTextBlock(content, 330, y, colW, "Run Flow", BulletList({
-        "Uptime during mechanics",
-        "Cooldown timing",
-        "Encounter pacing",
-        "Consistency under pressure",
-        "Group movement",
-        "Recovery after mistakes",
-    }))
-
-    AddColumnDivider(content, 620, y + 4, 122)
-
-    AddTextBlock(content, 640, y, 245, "Pressure Points", "Different encounters may reward different strengths. A build or stat setup that feels strong in one dungeon may feel weaker when movement, interrupts, or survivability pressure changes.")
-
-    sectionY = nextSectionY
-
-    -- Encounter Pressures
-    y, nextSectionY = AddSection(content, sectionY, "Encounter Pressures", "", 210)
-
-    AddTextBlock(content, PAGE_PADDING + 12, y, 410, "Ranged Encounter Pressures", BulletList({
-        "Cast interruption",
-        "Movement disruption",
-        "Line-of-sight interruption",
-        "Target swapping",
-        "Maintaining uptime while moving",
-        "Camera repositioning",
-    }))
-
-    AddColumnDivider(content, 455, y + 4, 128)
-
-    AddTextBlock(content, 480, y, 390, "Melee Encounter Pressures", BulletList({
-        "Avoidable damage pressure",
-        "Ground effect exposure",
-        "Positional awareness",
-        "Frontal management",
-        "Boss movement",
-        "Survivability tradeoffs",
-        "Reaction timing under pressure",
-    }))
-
-    sectionY = nextSectionY
-
-    -- Character Stats Reference
-    y, nextSectionY = AddSection(content, sectionY, "Character Stats Reference", "Stats can affect pacing, burst, survivability, and specialization-specific mechanics.", 560)
-
-    AddSoftBox(content, PAGE_PADDING + 12, y, 280, 112, "Primary Stats", "Strength\nAgility\nIntellect\nStamina")
-    AddSoftBox(content, 318, y, 280, 112, "Secondary Stats", "Haste\nCritical Strike\nMastery\nVersatility")
-    AddSoftBox(content, 624, y, 260, 112, "Tertiary Stats", "Avoidance\nLeech\nSpeed\nParry, Block, Dodge, Miss")
-
-    y = y - 140
-
-    AddTextBlock(content, PAGE_PADDING + 12, y, 410, "Haste can affect:", DashList({
-        "casting speed",
-        "global cooldowns",
-        "resource generation",
-        "gameplay pacing",
-    }))
-
-    AddColumnDivider(content, 455, y + 4, 112)
-
-    AddTextBlock(content, 480, y, 390, "Versatility can affect:", DashList({
-        "damage done",
-        "healing done",
-        "damage reduction",
-        "overall survivability",
-    }))
-
-    y = y - 132
-
-    AddTextBlock(content, PAGE_PADDING + 12, y, 410, "Critical Strike can affect:", DashList({
-        "chance to deal increased damage or healing",
-        "burst potential",
-        "reactive healing strength",
-        "certain class and talent interactions",
-    }))
-
-    AddColumnDivider(content, 455, y + 4, 145)
-
-    AddTextBlock(content, 480, y, 390, "Mastery can affect:", DashList({
-        "specialization-specific mechanics",
-        "healing effectiveness",
-        "defensive strength",
-        "ability interactions",
-    }) .. "\n\nEach specialization has a unique Mastery effect. Different encounters and builds may benefit differently from Mastery.")
-
-    sectionY = nextSectionY
-
-    -- Spell Queue Window
-    y, nextSectionY = AddSection(content, sectionY, "Spell Queue Window", "A game setting that changes how early the client accepts your next ability input.", 220)
-
-    AddTextBlock(content, PAGE_PADDING + 12, y, 520, "", "Spell Queue Window affects how early the game accepts your next ability input before your current cast or global cooldown ends.\n\nDifferent values may change how responsive combat feels depending on latency and playstyle.")
-
-    AddSoftBox(content, 575, y, 310, 116, "Commands",
-        "Check Current:\n/dump GetCVar(\"SpellQueueWindow\")\n\nChange:\n/console SpellQueueWindow NUMBER\n\n400 ms = Blizzard default")
-
-    sectionY = nextSectionY
-
-    -- Macros
-    y, nextSectionY = AddSection(content, sectionY, "Macros", "Macros can reduce targeting friction, support different playstyles, and improve comfort.", 320)
-
-    AddTextBlock(content, PAGE_PADDING + 12, y, 270, "Macros can help:", DashList({
-        "Simplify repetitive actions",
-        "Support different playstyles",
-        "Improve comfort or accessibility",
-        "Reduce targeting overhead",
-        "Improve reaction speed",
-    }))
-
-    AddColumnDivider(content, 310, y + 4, 190)
-
-    AddTextBlock(content, 330, y, 250, "Common Macro Targets", "@focus\n@target\n@targettarget\n@focustarget\n@party1-4\n@raid1-40\n@player\n@mouseover\n@cursor\n@playername\n@buttonX")
-
-    AddColumnDivider(content, 610, y + 4, 190)
-
-    AddTextBlock(content, 630, y, 250, "Location-Targeted Examples", "/cast [@player] Angelic Feather\n\n/cast [@player] Healing Rain\n\n/cast [@player] Cataclysm")
-
-    sectionY = nextSectionY
-
-    -- Conditional Macro Examples
-    y, nextSectionY = AddSection(content, sectionY, "Conditional Macro Examples", "", 340)
-
-    AddTextBlock(content, PAGE_PADDING + 12, y, 870, "", "Macros can combine different targeting conditions to support utility, off-healing, dispels, and combat resurrection abilities from a single keybind.\n\nThese types of macros can help reduce targeting friction and improve reaction speed during fast-paced encounters.")
-
-    y = y - 88
-
-    AddSoftBox(content, PAGE_PADDING + 12, y, 278, 125, "Party 3 Example",
-        "/cast [mod:ctrl, @party3] Cleanse; [@party3, dead] Intercession; [@party3, nochanneling] Flash Heal")
-
-    AddSoftBox(content, 315, y, 278, 125, "Party 4 Example",
-        "/use [@party4, dead] Emergency Soul Link\n/cast [mod:ctrl, @party4] Purify; [@party4, nochanneling] Penance")
-
-    AddSoftBox(content, 618, y, 266, 125, "Party 2 Example",
-        "/use [@party2, dead] Emergency Soul Link\n/cast [@party2, nochanneling] Healing Surge")
-
-    sectionY = nextSectionY
-
-    -- Sims
-    y, nextSectionY = AddSection(content, sectionY, "Sims", "", 150)
-
-    AddTextBlock(content, PAGE_PADDING + 12, y, 870, "", "Simulation tools are often used to test builds, stats, and gear combinations in controlled environments.\n\nReal encounter results may still vary depending on mechanics, group composition, movement, and playstyle.")
-
-    sectionY = nextSectionY
-
-    content:SetHeight(math.abs(sectionY) + 30)
-end
-
--- =========================================================
--- CREATE TAB
--- =========================================================
+local SECTIONS = {
+    {
+        title = "Encounter Variables",
+        body = Join({
+            "Gameplay factors can change real Mythic+ outcomes from run to run.",
+            Heading("Core Variables"),
+            List({
+                "Movement",
+                "Positioning",
+                "Reaction timing",
+                "Target switching",
+                "Interrupt pressure",
+                "Survivability",
+            }),
+            Heading("Run Flow"),
+            List({
+                "Uptime during mechanics",
+                "Cooldown timing",
+                "Encounter pacing",
+                "Consistency under pressure",
+                "Group movement",
+                "Recovery after mistakes",
+            }),
+            Heading("Pressure Points"),
+            "Different encounters may reward different strengths. A build or stat setup that feels strong in one dungeon may feel weaker when movement, interrupts, or survivability pressure changes.",
+        }),
+    },
+    {
+        title = "Encounter Pressures",
+        body = Join({
+            Heading("Ranged Encounter Pressures"),
+            List({
+                "Cast interruption",
+                "Movement disruption",
+                "Line-of-sight interruption",
+                "Target swapping",
+                "Maintaining uptime while moving",
+                "Camera repositioning",
+            }),
+            Heading("Melee Encounter Pressures"),
+            List({
+                "Avoidable damage pressure",
+                "Ground effect exposure",
+                "Positional awareness",
+                "Frontal management",
+                "Boss movement",
+                "Survivability tradeoffs",
+                "Reaction timing under pressure",
+            }),
+        }),
+    },
+    {
+        title = "Character Stats Reference",
+        body = Join({
+            "Stats can affect pacing, burst, survivability, and specialization-specific mechanics.",
+            Heading("Primary Stats"),
+            "Strength, Agility, Intellect, and Stamina",
+            Heading("Secondary Stats"),
+            "Haste, Critical Strike, Mastery, and Versatility",
+            Heading("Tertiary and Defensive Stats"),
+            "Avoidance, Leech, Speed, Parry, Block, Dodge, and Miss",
+            Heading("Haste can affect"),
+            List({ "Casting speed", "Global cooldowns", "Resource generation", "Gameplay pacing" }),
+            Heading("Versatility can affect"),
+            List({ "Damage done", "Healing done", "Damage reduction", "Overall survivability" }),
+            Heading("Critical Strike can affect"),
+            List({
+                "Chance to deal increased damage or healing",
+                "Burst potential",
+                "Reactive healing strength",
+                "Certain class and talent interactions",
+            }),
+            Heading("Mastery can affect"),
+            List({
+                "Specialization-specific mechanics",
+                "Healing effectiveness",
+                "Defensive strength",
+                "Ability interactions",
+            }) .. "\n\nEach specialization has a unique Mastery effect. Different encounters and builds may benefit differently from Mastery.",
+        }),
+    },
+    {
+        title = "Spell Queue Window",
+        body = Join({
+            "Spell Queue Window changes how early the game accepts your next ability input before the current cast or global cooldown ends. Different values may change how responsive combat feels depending on latency and playstyle.",
+            Heading("Check Current Value"),
+            "/dump GetCVar(\"SpellQueueWindow\")",
+            Heading("Change the Value"),
+            "/console SpellQueueWindow NUMBER",
+            "400 ms is Blizzard's default value.",
+        }),
+    },
+    {
+        title = "Macros",
+        body = Join({
+            "Macros can reduce targeting friction, support different playstyles, and improve comfort.",
+            Heading("Macros can help"),
+            List({
+                "Simplify repetitive actions",
+                "Support different playstyles",
+                "Improve comfort or accessibility",
+                "Reduce targeting overhead",
+                "Improve reaction speed",
+            }),
+            Heading("Common Macro Targets"),
+            "@focus, @target, @targettarget, @focustarget, @party1-4, @raid1-40, @player, @mouseover, @cursor, @playername, and @buttonX",
+            Heading("Location-Targeted Examples"),
+            "/cast [@player] Angelic Feather\n/cast [@player] Healing Rain\n/cast [@player] Cataclysm",
+        }),
+    },
+    {
+        title = "Conditional Macro Examples",
+        body = Join({
+            "Macros can combine targeting conditions to support utility, off-healing, dispels, and combat resurrection abilities from a single keybind. This can reduce targeting friction and improve reaction speed during fast-paced encounters.",
+            Heading("Party 3 Example"),
+            "/cast [mod:ctrl, @party3] Cleanse; [@party3, dead] Intercession; [@party3, nochanneling] Flash Heal",
+            Heading("Party 4 Example"),
+            "/use [@party4, dead] Emergency Soul Link\n/cast [mod:ctrl, @party4] Purify; [@party4, nochanneling] Penance",
+            Heading("Party 2 Example"),
+            "/use [@party2, dead] Emergency Soul Link\n/cast [@party2, nochanneling] Healing Surge",
+        }),
+    },
+    {
+        title = "Sims",
+        body = "Simulation tools are often used to test builds, stats, and gear combinations in controlled environments.\n\nReal encounter results may still vary depending on mechanics, group composition, movement, and playstyle.",
+    },
+}
 
 function Insights:Create(parent)
     local frame = CreateFrame("Frame", "KeyLabInsightsTab", parent, "BackdropTemplate")
@@ -395,27 +195,31 @@ function Insights:Create(parent)
     header:SetHeight(62)
     SetBackdrop(header, COLORS.panel, COLORS.border)
 
-    local title = MakeText(header, "Insights", "GameFontNormalLarge", FONT_HEADER_TITLE, COLORS.gold, "LEFT")
+    local title = Text(header, "Insights", "GameFontNormalLarge", HEADER.titleSize, COLORS.gold)
     title:SetPoint("TOPLEFT", header, "TOPLEFT", 16, -10)
     title:SetSize(420, 24)
 
-    local subtitle = MakeText(header, "Reference notes for encounter variables, character stats, spell queue window, macros, and sims.", "GameFontHighlightSmall", FONT_SUBTITLE, COLORS.muted, "LEFT")
+    local subtitle = Text(header, "Expandable reference notes for encounter variables, character stats, spell queue window, macros, and sims.", "GameFontHighlightSmall", 12, COLORS.muted)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-    subtitle:SetSize(820, 24)
+    subtitle:SetSize(850, 24)
 
-    local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -90)
-    scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
+    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -90)
+    scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
 
-    local content = CreateFrame("Frame", nil, scrollFrame)
-    content:SetSize(CONTENT_WIDTH, 1000)
-    scrollFrame:SetScrollChild(content)
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(900, 520)
+    scroll:SetScrollChild(content)
 
-    BuildInsights(content)
-
+    self.accordion = KeyLab.UI.Accordion.Create(content, {
+        sections = SECTIONS,
+        colors = COLORS,
+        width = 884,
+        left = 8,
+        minHeight = 520,
+    })
     self.frame = frame
     self.content = content
-
     return frame
 end
 
@@ -424,9 +228,7 @@ function KeyLab_CreateInsightsTab(parent)
 end
 
 if KeyLab.RegisterTab then
-    KeyLab.RegisterTab("Insights", function(parent)
-        return Insights:Create(parent)
-    end)
+    KeyLab.RegisterTab("Insights", function(parent) return Insights:Create(parent) end)
 end
 
 return Insights
