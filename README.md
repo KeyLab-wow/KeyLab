@@ -1,46 +1,53 @@
-# KeyLab
+# <span style="color:#d9b94e;">KeyLab</span>
 
-KeyLab helps you compare real saved runs, practice sessions, talent builds, stat profiles, and gear targets so you can make better choices based on your own gameplay.
+**KeyLab is a one-of-a-kind Mythic+ and Raid performance lab that brings encounter tracking, stat, talent, and gear profiles, trends, gear planning, and a built-in Stat Goal Matcher together in one addon.**
 
-**Try a build.**  
-**Adjust your stats.**  
-**Run content.**  
-**Review the results.**
+Compare your real saved results and make better decisions based on your own character, setups, and gameplay.
+
+<span style="color:#d9b94e;"><strong>Try a build.</strong></span>  
+<span style="color:#8cbcff;"><strong>Adjust your stats.</strong></span>  
+<span style="color:#6fd47b;"><strong>Run content.</strong></span>  
+<span style="color:#d9b94e;"><strong>Review the results.</strong></span>
 
 Use `/keylab` or the minimap button to open the journal.
 
-## NEW: Practice Sessions
+---
 
-KeyLab now includes a **Practice** tab for controlled training dummy tests.
+## <span style="color:#6fd47b;">NEW: Raid and Gear Planning Update</span>
 
-Use it to compare **damage, DPS, healing, and HPS** across different talent builds, stat setups, gear choices, and session types.
+KeyLab now captures individual raid boss pulls and organizes them into raid-night summaries.
 
-Start a practice session, run your test, stop the session, and KeyLab saves the result with your current stats and talent string so you can compare attempts side by side.
+Separate Mythic+ and Raid pages let you compare the talents, stats, gear profiles, and trends behind your saved results.
 
-Practice Sessions are great for:
+The redesigned Gear Planning system includes dungeon and raid loot, manual Targets and Alternatives, Tier progress tracking, and a built-in Stat Goal Matcher for your secondary-stat goals.
 
-- Testing single-target and multi-target setups
-- Comparing talent builds before running keys
-- Checking how stat changes affect your output
-- Saving controlled dummy tests without needing a spreadsheet
+---
 
-> **Tip:** Reset your damage meter before starting a practice session, choose the correct session type, and recall pets or stop extra damage before ending the test.
+## <span style="color:#d9b94e;">Feature Snapshot</span>
 
-## Feature Snapshot
+- <span style="color:#8cbcff;"><strong>Encounters</strong></span> — review Mythic+ runs and raid boss pulls
+- <span style="color:#8cbcff;"><strong>Summaries</strong></span> — explore your latest run or completed raid night
+- <span style="color:#d9b94e;"><strong>Talent Builds</strong></span> — compare builds you actually played
+- <span style="color:#d9b94e;"><strong>Stat Profiles</strong></span> — compare observed stat setups
+- <span style="color:#d9b94e;"><strong>Gear Profiles</strong></span> — compare complete equipped gear setups
+- <span style="color:#8cbcff;"><strong>Trends</strong></span> — track performance across saved results
+- <span style="color:#6fd47b;"><strong>Practice Sessions</strong></span> — run controlled training-dummy tests
+- <span style="color:#d9b94e;"><strong>Gear Planning</strong></span> — understand and organize your gearing plan
+- <span style="color:#d9b94e;"><strong>Gear Targets</strong></span> — save dungeon and raid Targets or Alternatives
+- <span style="color:#6fd47b;"><strong>Stat Goal Matcher</strong></span> — match open slots to secondary-stat percentage goals
+- <span style="color:#d9b94e;"><strong>Gear Dashboard</strong></span> — track Tier progress, targets, sources, and upgrades
+- <span style="color:#f0f0f0;"><strong>Settings</strong></span> — import, export, reset, and backup tools
 
-- **Mythic+ Journal** - saved encounters and run details
-- **Last Run** - group rankings, player totals, and pull-by-pull performance
-- **Practice Sessions** - controlled training dummy tests
-- **Talent Builds** - compare builds you actually played
-- **Stat Profiles** - compare observed stat results
-- **Trends** - track performance across saved runs
-- **Gear Dashboard** - upgrade priorities and next steps
-- **Gear Targets** - loot planning, wishlist items, and stat goals
-- **Insights** - gameplay and performance reference notes
-- **Settings** - import, export, backup, and addon tools
+---
 
-## Supported Content
+## <span style="color:#d9b94e;">Supported Content</span>
 
-KeyLab currently focuses on **Mythic+ dungeons** and **controlled practice sessions**.
+KeyLab supports <span style="color:#8cbcff;"><strong>Mythic+ dungeons</strong></span>, <span style="color:#8cbcff;"><strong>raid boss encounters</strong></span>, and <span style="color:#6fd47b;"><strong>controlled Practice Sessions</strong></span>.
+
+KeyLab is not a simulation tool or Best in Slot authority. It is a personal performance and gearing journal built around your own saved gameplay.
+
+---
+
+*“Key” icon by Stefano Vetere, from thenounproject.com, CC BY 3.0.*
 
 
