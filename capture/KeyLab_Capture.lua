@@ -11,6 +11,7 @@ local DamageMeter = KeyLab.Capture.DamageMeter
 local PlayerCapture = KeyLab.Capture.Player
 local StatCapture = KeyLab.Capture.Stats
 local TalentCapture = KeyLab.Capture.Talents
+local GearCapture = KeyLab.GearCapture
 
 --[[
 KeyLab_Capture.lua
@@ -32,7 +33,7 @@ local function EnsureCaptureDB()
 end
 
 local function ResetCaptureDB()
-    return Sessions.ResetCaptureDB()
+    return Sessions.ResetCaptureDB(true)
 end
 
 local function SumPullDeathMetrics(combatSessions)
@@ -188,6 +189,7 @@ local function BuildEncounterRecord()
         player = captureDB.playerSnapshot or PlayerCapture.GetSnapshot(),
         talents = captureDB.talentSnapshot or TalentCapture.GetSnapshot(),
         stats = captureDB.statSnapshot or StatCapture.GetSnapshot(),
+        gear = captureDB.gearSnapshot or (GearCapture and GearCapture.GetProfileSnapshot and GearCapture.GetProfileSnapshot()) or {},
         metrics = metrics,
         metricRanks = metricRanks,
         combatSessions = combatSessions,
@@ -246,6 +248,7 @@ function Capture.StartChallenge()
     captureDB.playerSnapshot = PlayerCapture.GetSnapshot()
     captureDB.talentSnapshot = TalentCapture.GetSnapshot()
     captureDB.statSnapshot = StatCapture.GetSnapshot()
+    captureDB.gearSnapshot = GearCapture and GearCapture.GetProfileSnapshot and GearCapture.GetProfileSnapshot() or {}
 
     if okContext then
         Print("Started tracking " .. tostring(context.dungeonName or context.mapID) .. " +" .. tostring(context.keyLevel))

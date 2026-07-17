@@ -553,6 +553,38 @@ function Capture.GetEquippedItemLevel()
     return nil
 end
 
+-- Lightweight equipment snapshot for encounter history. This intentionally
+-- avoids tooltip scans at pull start; the Gear Dashboard keeps the deeper scan.
+function Capture.GetProfileSnapshot()
+    local snapshot = {
+        capturedAt = time and time() or nil,
+        averageItemLevel = Capture.GetEquippedItemLevel(),
+        slots = {},
+    }
+    local signature = {}
+
+    for _, slotDef in ipairs(DB().InventorySlots or {}) do
+        local itemLink = GetInventoryItemLink and GetInventoryItemLink("player", slotDef.slotID) or nil
+        local itemID = GetItemIDFromLink(itemLink)
+        local itemName = nil
+        if itemLink and GetItemInfo then itemName = GetItemInfo(itemLink) end
+        local slot = {
+            slotName = slotDef.name,
+            slotID = slotDef.slotID,
+            itemID = itemID,
+            itemLink = itemLink,
+            itemName = itemName,
+            itemLevel = GetInventoryItemLevel(itemLink),
+            icon = GetItemTexture(slotDef.slotID, itemID),
+        }
+        snapshot.slots[slotDef.name] = slot
+        table.insert(signature, tostring(slotDef.slotID) .. ":" .. tostring(itemLink or "empty"))
+    end
+
+    snapshot.signature = table.concat(signature, "|")
+    return snapshot
+end
+
 function Capture.GetCurrentSpecID()
     if KeyLab.LootTargetsDB and KeyLab.LootTargetsDB.GetCurrentSpecID then
         return KeyLab.LootTargetsDB.GetCurrentSpecID()

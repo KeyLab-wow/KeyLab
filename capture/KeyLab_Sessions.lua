@@ -19,7 +19,7 @@ Purpose:
 - Does NOT format UI text.
 ]]
 
-local CAPTURE_VERSION = "0.1.5"
+local CAPTURE_VERSION = "0.1.6"
 
 local function SafeCall(func, ...)
     if type(func) ~= "function" then
@@ -83,12 +83,14 @@ function Sessions.EnsureCaptureDB()
     return KeyLabCaptureDB
 end
 
-function Sessions.ResetCaptureDB()
+function Sessions.ResetCaptureDB(preserveRaid)
+    local raidState = preserveRaid == true and type(KeyLabCaptureDB) == "table" and KeyLabCaptureDB.raid or nil
     KeyLabCaptureDB = {
         version = CAPTURE_VERSION,
         active = false,
         completedSeen = false,
         interrupted = false,
+        raid = raidState,
     }
 
     return KeyLabCaptureDB

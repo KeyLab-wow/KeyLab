@@ -309,6 +309,27 @@ local function HasPracticeMetric(metrics)
     return false
 end
 
+local function MetricDelta(currentMetrics, baselineMetrics)
+    local out = {}
+    currentMetrics = type(currentMetrics) == "table" and currentMetrics or {}
+    baselineMetrics = type(baselineMetrics) == "table" and baselineMetrics or {}
+
+    for key, value in pairs(currentMetrics) do
+        local current = SafeNumber(value)
+        if current ~= nil then
+            local baseline = SafeNumber(baselineMetrics[key]) or 0
+            local delta = current - baseline
+
+            -- A meter reset can make the current total lower than the baseline.
+            -- In that case the current value already represents the new test.
+            if delta < 0 then delta = current end
+            out[key] = delta
+        end
+    end
+
+    return out
+end
+
 local function SumPracticeMetrics(combatSessions)
     local metrics = {}
     local rates = {
@@ -370,6 +391,33 @@ function PracticeMeter.GetAvailableSessionIDMap()
     return ids, nil
 end
 
+function PracticeMeter.GetSessionBaseline()
+    local baseline = {}
+
+    if not C_DamageMeter or not C_DamageMeter.GetAvailableCombatSessions or not C_DamageMeter.GetCombatSessionFromID then
+        return baseline, "C_DamageMeter API unavailable"
+    end
+
+    local okSessions, sessions = SafeCall(C_DamageMeter.GetAvailableCombatSessions)
+    if not okSessions or type(sessions) ~= "table" then
+        return baseline, "GetAvailableCombatSessions did not return a table"
+    end
+
+    for _, sessionInfo in pairs(sessions) do
+        local sessionID = GetSessionID(sessionInfo)
+        local sessionKey = SafeKey(sessionID)
+        if sessionID ~= nil and sessionKey and sessionKey ~= "" then
+            baseline[sessionKey] = {
+                metrics = ReadMetricsForSession(sessionID),
+                durationSeconds = GetSessionDuration(sessionInfo),
+                sessionName = GetSessionName(sessionInfo),
+            }
+        end
+    end
+
+    return baseline, nil
+end
+
 function PracticeMeter.GetPracticeSnapshot(baselineSessionIDs, startedAt, stoppedAt)
     if not C_DamageMeter or not C_DamageMeter.GetAvailableCombatSessions or not C_DamageMeter.GetCombatSessionFromID then
         return nil, "C_DamageMeter API unavailable"
@@ -387,8 +435,18 @@ function PracticeMeter.GetPracticeSnapshot(baselineSessionIDs, startedAt, stoppe
         local normalized = NormalizeSessionInfo(sessionInfo)
         local sessionKey = SafeKey(normalized.sessionID)
 
-        if normalized.sessionID ~= nil and sessionKey and baselineSessionIDs[sessionKey] ~= true then
+        if normalized.sessionID ~= nil and sessionKey then
+            local baseline = baselineSessionIDs[sessionKey]
             normalized.metrics = ReadMetricsForSession(normalized.sessionID)
+
+            if type(baseline) == "table" then
+                normalized.metrics = MetricDelta(normalized.metrics, baseline.metrics or baseline)
+            elseif baseline == true then
+                -- Backward compatibility for sessions started before active
+                -- meter baselines were introduced.
+                normalized.metrics = nil
+            end
+
             if HasPracticeMetric(normalized.metrics) then
                 table.insert(outSessions, normalized)
             end

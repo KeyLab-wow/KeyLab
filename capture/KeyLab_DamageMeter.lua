@@ -154,6 +154,64 @@ local function FindAggregateSessionID(sessions, context)
     return nil, nil
 end
 
+local function NormalizeRaidSessionName(value)
+    local name = Trim(tostring(value or "")):lower()
+    name = name:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    name = name:gsub("%s*%(%!%)%s*", " ")
+    name = name:gsub("[%p%s]+", " ")
+    return Trim(name)
+end
+
+local function RaidNameMatchScore(sessionName, encounterName)
+    local sessionKey = NormalizeRaidSessionName(sessionName)
+    local encounterKey = NormalizeRaidSessionName(encounterName)
+    if sessionKey == "" or encounterKey == "" then return 0 end
+    if sessionKey == encounterKey then return 3 end
+    if string.find(sessionKey, encounterKey, 1, true) or string.find(encounterKey, sessionKey, 1, true) then
+        return 2
+    end
+    return 0
+end
+
+local function FindRaidSessionInfo(sessions, encounterName, previousSessionIDs)
+    if type(sessions) ~= "table" then return nil end
+
+    local best, bestScore, bestOrder = nil, -1, -1
+    local unseenBosses = {}
+    local order = 0
+
+    for _, sessionInfo in pairs(sessions) do
+        order = order + 1
+        local sessionID = GetSessionID(sessionInfo)
+        local sessionName = GetSessionName(sessionInfo) or ""
+        local isBoss = string.find(sessionName, "%(!%)") ~= nil
+        local isUnseen = sessionID ~= nil and not (type(previousSessionIDs) == "table" and previousSessionIDs[tostring(sessionID)])
+        local nameScore = RaidNameMatchScore(sessionName, encounterName)
+
+        if isBoss and isUnseen then
+            table.insert(unseenBosses, sessionInfo)
+        end
+
+        if sessionID ~= nil and nameScore > 0 then
+            local score = nameScore + (isBoss and 2 or 0) + (isUnseen and 10 or 0)
+            local numericOrder = SafeNumber(sessionID) or order
+            if score > bestScore or (score == bestScore and numericOrder > bestOrder) then
+                best = sessionInfo
+                bestScore = score
+                bestOrder = numericOrder
+            end
+        end
+    end
+
+    -- Session names can vary by client locale. A single new boss-marked session
+    -- is still an unambiguous match to the ENCOUNTER_END that just fired.
+    if not best and #unseenBosses == 1 then
+        best = unseenBosses[1]
+    end
+
+    return best
+end
+
 local function FindLocalSource(rawSession)
     if type(rawSession) ~= "table" or type(rawSession.combatSources) ~= "table" then
         return nil
@@ -339,6 +397,44 @@ local function ReadDeathEvents(rawSession)
     return out
 end
 
+local function AnonymousSourceID(source, fallbackIndex)
+    if type(source) ~= "table" then return nil end
+    if source.isLocalPlayer == true then return "player" end
+    local identity = tostring(ReadAnySourceField(source, "sourceGUID") or ReadAnySourceField(source, "name") or "")
+    if identity == "" then return "member-unknown-" .. tostring(fallbackIndex or 0) end
+    local hash = 5381
+    for index = 1, #identity do
+        hash = ((hash * 33) + string.byte(identity, index)) % 2147483647
+    end
+    return "member-" .. tostring(hash)
+end
+
+local function BuildGroupMetricSnapshot(rawSession, metricInfo)
+    local out = {}
+    if type(rawSession) ~= "table" or type(rawSession.combatSources) ~= "table" or type(metricInfo) ~= "table" then return out end
+    local sourceIndex = 0
+    for _, source in pairs(rawSession.combatSources) do
+        sourceIndex = sourceIndex + 1
+        if IsPlayerSource(source) then
+            local totalAmount
+            local amountPerSecond = ReadSourceField(source, "amountPerSecond")
+            if metricInfo.keylabKey == "deaths" then
+                totalAmount = GetDeathEventValue(source)
+            else
+                totalAmount = ReadSourceField(source, "totalAmount")
+            end
+            if totalAmount ~= nil or amountPerSecond ~= nil then
+                table.insert(out, {
+                    sourceID = AnonymousSourceID(source, sourceIndex),
+                    totalAmount = tonumber(totalAmount) or 0,
+                    amountPerSecond = tonumber(amountPerSecond),
+                })
+            end
+        end
+    end
+    return out
+end
+
 local function NormalizeEnemyDamage(rawSession)
     local out = {
         totalAmount = SafeNumber(ReadAnySourceField(rawSession, "totalAmount")) or 0,
@@ -409,11 +505,12 @@ local function ReadMetricsForSession(sessionID, options)
     local metrics = {}
     local sources = {}
     local ranks = {}
+    local groupMetrics = {}
     local enemyDamageTaken = nil
     options = type(options) == "table" and options or {}
 
     if sessionID == nil or not C_DamageMeter or not C_DamageMeter.GetCombatSessionFromID then
-        return metrics, sources, ranks, enemyDamageTaken
+        return metrics, sources, ranks, enemyDamageTaken, groupMetrics
     end
 
     local metricMap = KeyLab.Mapping and KeyLab.Mapping.Metrics or {}
@@ -448,11 +545,14 @@ local function ReadMetricsForSession(sessionID, options)
                         ranks[metricInfo.keylabKey] = rank
                     end
                 end
+                if options.captureGroupMetrics == true then
+                    groupMetrics[metricInfo.keylabKey] = BuildGroupMetricSnapshot(rawSession, metricInfo)
+                end
             end
         end
     end
 
-    return metrics, sources, ranks, enemyDamageTaken
+    return metrics, sources, ranks, enemyDamageTaken, groupMetrics
 end
 
 function DamageMeter.GetSnapshot(context)
@@ -541,6 +641,52 @@ function DamageMeter.GetCombatSessionsSnapshot(context)
     end)
 
     return out, nil
+end
+
+function DamageMeter.GetAvailableSessionIDs()
+    local ids = {}
+    if not C_DamageMeter or not C_DamageMeter.GetAvailableCombatSessions then return ids end
+
+    local ok, sessions = SafeCall(C_DamageMeter.GetAvailableCombatSessions)
+    if not ok or type(sessions) ~= "table" then return ids end
+
+    for _, sessionInfo in pairs(sessions) do
+        local sessionID = GetSessionID(sessionInfo)
+        if sessionID ~= nil then ids[tostring(sessionID)] = true end
+    end
+    return ids
+end
+
+function DamageMeter.GetRaidEncounterSnapshot(encounterName, previousSessionIDs)
+    if not C_DamageMeter or not C_DamageMeter.GetAvailableCombatSessions or not C_DamageMeter.GetCombatSessionFromID then
+        return {}, "C_DamageMeter API unavailable"
+    end
+
+    local ok, sessions = SafeCall(C_DamageMeter.GetAvailableCombatSessions)
+    if not ok or type(sessions) ~= "table" then
+        return {}, "GetAvailableCombatSessions did not return a table"
+    end
+
+    local sessionInfo = FindRaidSessionInfo(sessions, encounterName, previousSessionIDs)
+    if not sessionInfo then
+        return {}, "No boss combat session matched " .. tostring(encounterName or "the encounter")
+    end
+
+    local sessionID = GetSessionID(sessionInfo)
+    local metrics, sources, ranks, _, groupMetrics = ReadMetricsForSession(sessionID, {
+        skipEnemyDamage = true,
+        captureGroupMetrics = true,
+    })
+    if type(metrics) ~= "table" or next(metrics) == nil then
+        return {}, "Boss combat session did not contain local-player metrics"
+    end
+
+    return metrics, nil, ranks, {
+        sessionID = sessionID,
+        sessionName = GetSessionName(sessionInfo),
+        durationSeconds = GetSessionDuration(sessionInfo),
+        sources = sources,
+    }, groupMetrics
 end
 
 return DamageMeter
