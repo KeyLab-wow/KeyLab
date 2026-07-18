@@ -174,6 +174,14 @@ local function TierSources(specID, slotName, season)
     return out
 end
 
+local function IsMasterDatabaseItem(itemID)
+    itemID = tonumber(itemID)
+    if not itemID then return false end
+    local db = KeyLab and KeyLab.GearLootDatabase
+    if not db or type(db.items) ~= "table" then return nil end
+    return db.items[itemID] ~= nil
+end
+
 local function UpgradeAction(slot)
     if not slot or not slot.itemID then return nil end
     local track = tostring(slot.upgradeTrack or slot.trackName or "")
@@ -204,15 +212,28 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
     local tierChecked = tierEligible and tierState.slots and tierState.slots[slotName] == true or false
     local tierNeeded = tierEligible and not tierChecked and not tierState.complete
     local targetEquipped = target and tonumber(target.itemID) == tonumber(slot.itemID) or false
+    local masterDatabaseItem = IsMasterDatabaseItem(slot.itemID)
+    local craftedItem = slot.itemID and (slot.isCrafted == true or slot.craftedDetected == true or masterDatabaseItem == false) or false
+    local voidforgedItem = slot.voidforgedDetected == true or slot.ascendantVoidforgedDetected == true
+    local voidforgeAvailable = not voidforgedItem and slot.voidforgeCandidate == true
+    local isMythTrack = tostring(slot.upgradeTrack or slot.trackName or "") == "Myth"
     local upgradeAction = UpgradeAction(slot)
     local action
 
     if offHandBlocked then
         action = "Not used with equipped weapon"
-    elseif upgradeAction then
-        action = upgradeAction
     elseif tierNeeded then
         action = slot.itemID and "Catalyst for Tier" or "Find a Tier base item"
+    elseif tierChecked then
+        action = upgradeAction or ""
+    elseif craftedItem then
+        action = "Crafted Item"
+    elseif voidforgedItem then
+        action = "Ascendant Voidforged"
+    elseif voidforgeAvailable then
+        action = "Ascendant Voidforge Available"
+    elseif upgradeAction then
+        action = upgradeAction
     elseif target then
         action = targetEquipped and "Target Equipped" or ("Target: " .. ShortName(target.name or target.itemNameClean, 24))
     elseif slot.itemID then
@@ -226,7 +247,7 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
     if tierNeeded then
         guidanceSources = TierSources(specID, slotName, season)
         sourceLabel = "Tier Sources:"
-    elseif target then
+    elseif not tierChecked and not craftedItem and not isMythTrack and target then
         guidanceSources = target.sourcesForDashboard or {}
         sourceLabel = #guidanceSources == 1 and "Target Source:" or "Target Sources:"
     end
@@ -250,6 +271,11 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
         tierBadge = tierChecked and "Tier" or (tierNeeded and "Need Tier" or ""),
         target = target,
         targetEquipped = targetEquipped,
+        masterDatabaseItem = masterDatabaseItem,
+        craftedItem = craftedItem,
+        voidforgedItem = voidforgedItem,
+        voidforgeAvailable = voidforgeAvailable,
+        isMythTrack = isMythTrack,
         sourceLabel = sourceLabel,
         guidanceSources = guidanceSources,
         offHandBlocked = offHandBlocked == true,
@@ -370,8 +396,10 @@ function Analysis.GetLogicSummary()
     return {
         "The dashboard uses equipped gear, saved Targets, saved Alternatives, and the manual Tier Set checklist.",
         "Tier guidance has source priority until four manually selected Tier slots are complete.",
-        "Saved Target sources are shown after Tier guidance is complete or not relevant to the slot.",
-        "Upgrade actions are limited to Upgrade to Hero and Upgrade to Myth.",
+        "Checked Tier slots show only their remaining track upgrade, without Target or Catalyst source guidance.",
+        "Items outside the Master Item Database are treated as crafted and do not receive track-upgrade guidance.",
+        "Ascendant Voidforged weapons and trinkets retain their Hero or Myth base track at the upgraded item level.",
+        "Saved Target sources are shown after Tier guidance is complete or not relevant, and are hidden once the equipped item is Myth track.",
         "No item scoring, priority-slot scoring, polish reminders, or overall gear score is calculated.",
     }
 end
@@ -404,6 +432,9 @@ function Analysis.PrintGearDebug()
             rank = row.rankText,
             tierBadge = row.tierBadge,
             action = row.actionText,
+            craftedItem = row.craftedItem,
+            voidforgedItem = row.voidforgedItem,
+            voidforgeAvailable = row.voidforgeAvailable,
             sourceCount = #(row.guidanceSources or {}),
         })
     end
