@@ -67,6 +67,15 @@ local function Panel(parent, x, y, width, height, border)
     return frame
 end
 
+local function AddDivider(parent, x, y, width, height)
+    local line = parent:CreateTexture(nil, "ARTWORK")
+    line:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    line:SetSize(width or 1, height or 1)
+    local color = Color("divider", { 0.440, 0.580, 0.780, 0.32 })
+    line:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
+    return line
+end
+
 local function Clear(frame)
     for _, child in ipairs({ frame:GetChildren() }) do child:Hide(); child:SetParent(nil) end
     for _, region in ipairs({ frame:GetRegions() }) do region:Hide() end
@@ -237,18 +246,16 @@ local function BuildOptions(tab)
         end
     end
     table.sort(primary, function(a, b)
-        if a.value == nil then return true end
-        if b.value == nil then return false end
+        if a.value == nil or b.value == nil then return a.value == nil and b.value ~= nil end
         return tostring(a.label) < tostring(b.label)
     end)
     table.sort(secondary, function(a, b)
-        if a.value == nil then return true end
-        if b.value == nil then return false end
-        return tab.mode == "mplus" and (a.value > b.value) or tostring(a.label) < tostring(b.label)
+        if a.value == nil or b.value == nil then return a.value == nil and b.value ~= nil end
+        if tab.mode == "mplus" then return tonumber(a.value) > tonumber(b.value) end
+        return tostring(a.label) < tostring(b.label)
     end)
     table.sort(specs, function(a, b)
-        if a.value == nil then return true end
-        if b.value == nil then return false end
+        if a.value == nil or b.value == nil then return a.value == nil and b.value ~= nil end
         return tostring(a.label) < tostring(b.label)
     end)
     return primary, secondary, specs
@@ -259,7 +266,7 @@ local function Matches(tab, encounter)
     if tab.selectedPrimary and PrimaryValue(tab.mode, encounter) ~= tab.selectedPrimary then return false end
     if tab.selectedSecondary and SecondaryValue(tab.mode, encounter) ~= tab.selectedSecondary then return false end
     if tab.selectedSpec and SpecName(encounter) ~= tab.selectedSpec then return false end
-    return GetMetricValue(encounter, tab.selectedMetricKey) ~= nil
+    return true
 end
 
 local function BuildProfiles(tab)
@@ -274,20 +281,30 @@ local function BuildProfiles(tab)
             local value = tonumber(GetMetricValue(encounter, tab.selectedMetricKey))
             local group = groups[key]
             if not group then
-                group = { key = key, signature = signature, gear = gear, spec = SpecName(encounter), uses = 0, total = 0, bestValue = nil, bestEncounter = nil }
+                group = { key = key, signature = signature, gear = gear, spec = SpecName(encounter), uses = 0, metricUses = 0, total = 0, bestValue = nil, bestEncounter = nil, latestEncounter = nil }
                 groups[key] = group
             end
             group.uses = group.uses + 1
-            group.total = group.total + value
-            group.average = group.total / group.uses
-            if group.bestValue == nil or (lowerIsBetter and value < group.bestValue) or (not lowerIsBetter and value > group.bestValue) then
-                group.bestValue, group.bestEncounter, group.gear = value, encounter, gear
+            if not group.latestEncounter or (tonumber(encounter.timestamp) or 0) > (tonumber(group.latestEncounter.timestamp) or 0) then
+                group.latestEncounter = encounter
+            end
+            if value ~= nil then
+                group.metricUses = group.metricUses + 1
+                group.total = group.total + value
+                group.average = group.total / group.metricUses
+                if group.bestValue == nil or (lowerIsBetter and value < group.bestValue) or (not lowerIsBetter and value > group.bestValue) then
+                    group.bestValue, group.bestEncounter, group.gear = value, encounter, gear
+                end
             end
         end
     end
     local profiles = {}
     for _, profile in pairs(groups) do table.insert(profiles, profile) end
     table.sort(profiles, function(a, b)
+        if a.average == nil or b.average == nil then
+            if a.average == nil and b.average == nil then return a.uses > b.uses end
+            return a.average ~= nil
+        end
         if a.average == b.average then return a.uses > b.uses end
         return lowerIsBetter and a.average < b.average or (not lowerIsBetter and a.average > b.average)
     end)
@@ -372,9 +389,11 @@ local function BuildDynamic(tab, profiles, lowerIsBetter)
 
     local maxValue, minValue = 0, nil
     for index = 1, showCount do
-        local value = tonumber(profiles[index].average) or 0
-        maxValue = math.max(maxValue, value)
-        minValue = minValue == nil and value or math.min(minValue, value)
+        local value = tonumber(profiles[index].average)
+        if value ~= nil then
+            maxValue = math.max(maxValue, value)
+            minValue = minValue == nil and value or math.min(minValue, value)
+        end
     end
 
     for index = 1, showCount do
@@ -391,24 +410,31 @@ local function BuildDynamic(tab, profiles, lowerIsBetter)
         local trinkets = Short(ItemDisplayName(trinket1), 18) .. " + " .. Short(ItemDisplayName(trinket2), 18)
         Place(card, trinkets, 320, -11, 280, "GameFontHighlightSmall", nil, Color("soft"))
         Place(card, string.format("%d use%s", profile.uses, profile.uses == 1 and "" or "s"), 608, -11, 80, "GameFontDisableSmall", nil, Color("muted"), "CENTER")
-        Place(card, "Avg " .. FormatNumber(profile.average), 692, -11, 102, "GameFontNormal", nil, Color("blue"), "RIGHT")
-        CreateComparisonBar(card, profile.average, maxValue, minValue or 0, lowerIsBetter)
+        Place(card, profile.average ~= nil and ("Avg " .. FormatNumber(profile.average)) or "Outcome unavailable", 680, -11, 114, "GameFontNormal", nil, profile.average ~= nil and Color("blue") or Color("muted"), "RIGHT")
+        if profile.average ~= nil then CreateComparisonBar(card, profile.average, maxValue, minValue or 0, lowerIsBetter) end
         y = y - PROFILE_CARD_HEIGHT - PROFILE_CARD_GAP
     end
 
-    local detail = Panel(tab.dynamic, 0, y - 10, PROFILE_WIDTH, 300, Color("cardStrongBorder"))
+    local detail = Panel(tab.dynamic, 0, y - 10, PROFILE_WIDTH, 300, Color("detailBorder"))
+    Style(detail, Color("detailBg"), Color("detailBorder"))
+    local detailEncounter = selected.bestEncounter or selected.latestEncounter or {}
     Place(detail, "Selected Gear Profile", 16, -10, 250, "GameFontNormal", 14, Color("gold"))
-    Place(detail, string.format("Average %s: %s  •  Best: %s  •  Used %d time%s", metricLabel, FormatNumber(selected.average), FormatNumber(selected.bestValue), selected.uses, selected.uses == 1 and "" or "s"), 280, -10, 608, "GameFontHighlightSmall", nil, Color("blue"), "RIGHT")
-    Place(detail, ContextText(tab, selected.bestEncounter), 16, -34, 430, "GameFontHighlightSmall", nil, Color("text"))
+    local outcomeSummary = selected.average ~= nil
+        and string.format("Average %s: %s  •  Best: %s  •  Used %d time%s", metricLabel, FormatNumber(selected.average), FormatNumber(selected.bestValue), selected.uses, selected.uses == 1 and "" or "s")
+        or string.format("%s outcome unavailable  •  Gear saved from %d run%s", metricLabel, selected.uses, selected.uses == 1 and "" or "s")
+    Place(detail, outcomeSummary, 280, -10, 608, "GameFontHighlightSmall", nil, selected.average ~= nil and Color("blue") or Color("muted"), "RIGHT")
+    Place(detail, ContextText(tab, detailEncounter), 16, -34, 430, "GameFontHighlightSmall", nil, Color("text"))
     Place(detail, string.format("Average Item Level: %.1f", tonumber(selected.gear.averageItemLevel) or 0), 620, -34, 268, "GameFontHighlightSmall", nil, Color("text"), "RIGHT")
-    Place(detail, StatsText(selected.bestEncounter), 16, -56, 872, "GameFontDisableSmall", nil, Color("muted"))
-    Place(detail, "Equipped Items", 16, -80, 200, "GameFontNormal", 13, Color("gold"))
+    Place(detail, StatsText(detailEncounter), 16, -56, 872, "GameFontDisableSmall", nil, Color("muted"))
+    AddDivider(detail, 16, -78, PROFILE_WIDTH - 32, 1)
+    Place(detail, "Equipped Items", 16, -82, 200, "GameFontNormal", 13, Color("gold"))
+    AddDivider(detail, 464, -105, 1, 179)
 
     for index, slotName in ipairs(SLOT_ORDER) do
         local column = index <= 8 and 0 or 1
         local row = column == 0 and index or (index - 8)
-        local x = column == 0 and 16 or 469
-        AddGearItem(detail, slotName, selected.gear.slots and selected.gear.slots[slotName], x, -94 - ((row - 1) * 24), 442)
+        local x = column == 0 and 16 or 476
+        AddGearItem(detail, slotName, selected.gear.slots and selected.gear.slots[slotName], x, -104 - ((row - 1) * 23), 436)
     end
     tab.dynamic:SetHeight(math.max(570, math.abs(y) + 320))
 end
@@ -445,7 +471,13 @@ local function NewGearTab(mode)
         local profiles, lowerIsBetter = BuildProfiles(self)
         local info = GetMetricInfo(self.selectedMetricKey)
         local direction = info and info.higherIsBetter == false and "lowest" or "highest"
-        self.summary:SetText(string.format("Showing top %d of %d equipped setup%s - ranked by average %s observed %s", math.min(5, #profiles), #profiles, #profiles == 1 and "" or "s", direction, info and info.label or self.selectedMetricKey))
+        local observedProfiles = 0
+        for _, profile in ipairs(profiles) do if profile.average ~= nil then observedProfiles = observedProfiles + 1 end end
+        if #profiles > 0 and observedProfiles == 0 then
+            self.summary:SetText(string.format("Showing top %d of %d equipped setup%s - selected outcome was unavailable for the saved run%s", math.min(5, #profiles), #profiles, #profiles == 1 and "" or "s", #profiles == 1 and "" or "s"))
+        else
+            self.summary:SetText(string.format("Showing top %d of %d equipped setup%s - ranked by average %s observed %s", math.min(5, #profiles), #profiles, #profiles == 1 and "" or "s", direction, info and info.label or self.selectedMetricKey))
+        end
         BuildDynamic(self, profiles, lowerIsBetter)
     end
 
