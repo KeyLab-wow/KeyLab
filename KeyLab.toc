@@ -2,7 +2,7 @@
 ## Title: KeyLab
 ## Notes: Mythic+ experimentation journal and raid boss-pull tracker.
 ## Author: Brione
-## Version: 1.6.0
+## Version: 1.6.1
 ## SavedVariables: KeyLabDB, KeyLabCaptureDB, KeyLabGearStatsProbeDB
 
 utils/KeyLab_Utils.lua
