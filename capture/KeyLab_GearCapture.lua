@@ -285,6 +285,14 @@ local function DetectVoidforged(lines)
     return line ~= nil, line
 end
 
+local function ParseVoidforgeTrack(line)
+    local lower = CleanLine(line):lower()
+    local track = lower:match("ascendant voidforged:%s*([%a]+)")
+    if track == "hero" then return "Hero" end
+    if track == "myth" then return "Myth" end
+    return nil
+end
+
 local function ExtractStats(lines, statDefs)
     local found = {}
     for _, line in ipairs(lines or {}) do
@@ -377,7 +385,9 @@ local function EmptySlot(slotName)
         ascendantVoidforgedDetected = false,
         voidforgedDetected = false,
         voidforgeLine = nil,
+        voidforgeTrack = nil,
         craftedWeaponVoidforgeCandidate = false,
+        weaponVoidforgeCandidate = false,
         trinketVoidforgeCandidate = false,
         voidforgeCandidate = false,
         primaryStatsShown = {},
@@ -413,16 +423,36 @@ local function ScanEquippedSlot(slotName)
     local embellishedDetected, embellishmentLine = DetectEmbellishment(tooltipLines)
     local voidforgedDetected, voidforgeLine = DetectVoidforged(tooltipLines)
     local equipLoc = GetItemEquipLoc(itemID)
-    local trackName = upgrade.track
+    local itemLevel = GetInventoryItemLevel(itemLink)
     local radianceCraftedDetected = tooltipText:lower():find("radiance crafted", 1, true) ~= nil
     local craftedIndicatorVisible = craftedDetected == true or radianceCraftedDetected == true or craftQualityTier ~= nil
     local voidforgeRules = DB().Voidforge or {}
+    local voidforgeTrack = ParseVoidforgeTrack(voidforgeLine)
+    if not voidforgeTrack and voidforgedDetected and not craftedIndicatorVisible and itemLevel then
+        local baseMax = voidforgeRules.baseMaxItemLevel or {}
+        if tonumber(baseMax.Myth) and itemLevel > tonumber(baseMax.Myth) then
+            voidforgeTrack = "Myth"
+        elseif tonumber(baseMax.Hero) and itemLevel > tonumber(baseMax.Hero) then
+            voidforgeTrack = "Hero"
+        end
+    end
+    local trackName = upgrade.track or voidforgeTrack
+    local upgradeRank = upgrade.rank
+    local upgradeMaxRank = upgrade.maxRank
+    if voidforgeTrack and not upgradeRank then
+        upgradeRank = tonumber(voidforgeRules.requiredRank) or 6
+        upgradeMaxRank = tonumber(voidforgeRules.requiredMaxRank) or 6
+    end
     local isVoidforgeTrack = voidforgeRules.eligibleTracks and voidforgeRules.eligibleTracks[trackName] == true
-    local isMaxRank = tonumber(upgrade.rank) == tonumber(voidforgeRules.requiredRank or 6)
-        and tonumber(upgrade.maxRank) == tonumber(voidforgeRules.requiredMaxRank or 6)
+    local isMaxRank = tonumber(upgradeRank) == tonumber(voidforgeRules.requiredRank or 6)
+        and tonumber(upgradeMaxRank) == tonumber(voidforgeRules.requiredMaxRank or 6)
     local craftedWeaponVoidforgeCandidate = tonumber(slotDef.slotID) == tonumber(voidforgeRules.craftedWeaponSlotID or 16)
         and craftedIndicatorVisible == true
         and (craftQualityTier == nil or tonumber(craftQualityTier) >= 5)
+    local weaponVoidforgeCandidate = voidforgeRules.weaponSlotIDs
+        and voidforgeRules.weaponSlotIDs[tonumber(slotDef.slotID) or 0] == true
+        and isVoidforgeTrack
+        and isMaxRank
     local trinketVoidforgeCandidate = voidforgeRules.trinketSlotIDs
         and voidforgeRules.trinketSlotIDs[tonumber(slotDef.slotID) or 0] == true
         and isVoidforgeTrack
@@ -431,16 +461,16 @@ local function ScanEquippedSlot(slotName)
     info.itemLink = itemLink
     info.link = itemLink
     info.itemID = itemID
-    info.itemLevel = GetInventoryItemLevel(itemLink)
+    info.itemLevel = itemLevel
     info.icon = GetItemTexture(slotDef.slotID, itemID)
     info.texture = info.icon
     info.equipLoc = equipLoc
     info.upgradeRawLine = upgrade.rawLine
     info.upgradeTrack = trackName
     info.trackName = trackName
-    info.upgradeRank = upgrade.rank
-    info.upgradeMaxRank = upgrade.maxRank
-    info.upgradeMax = upgrade.maxRank
+    info.upgradeRank = upgradeRank
+    info.upgradeMaxRank = upgradeMaxRank
+    info.upgradeMax = upgradeMaxRank
     info.enchantDetected = enchantDetected
     info.enchantLines = enchantLines
     info.emptySocketCount = emptySocketCount
@@ -462,9 +492,11 @@ local function ScanEquippedSlot(slotName)
     info.ascendantVoidforgedDetected = voidforgedDetected
     info.voidforgedDetected = voidforgedDetected
     info.voidforgeLine = voidforgeLine
+    info.voidforgeTrack = voidforgeTrack
     info.craftedWeaponVoidforgeCandidate = craftedWeaponVoidforgeCandidate
+    info.weaponVoidforgeCandidate = weaponVoidforgeCandidate
     info.trinketVoidforgeCandidate = trinketVoidforgeCandidate
-    info.voidforgeCandidate = craftedWeaponVoidforgeCandidate or trinketVoidforgeCandidate
+    info.voidforgeCandidate = craftedWeaponVoidforgeCandidate or weaponVoidforgeCandidate or trinketVoidforgeCandidate
     info.primaryStatsShown = ExtractStats(tooltipLines, PRIMARY_STATS)
     info.secondaryStatsShown = ExtractStats(tooltipLines, SECONDARY_STATS)
     info.tooltipText = tooltipText

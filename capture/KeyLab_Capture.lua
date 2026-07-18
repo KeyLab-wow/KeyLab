@@ -13,6 +13,10 @@ local StatCapture = KeyLab.Capture.Stats
 local TalentCapture = KeyLab.Capture.Talents
 local GearCapture = KeyLab.GearCapture
 
+local METRICS_PENDING_REASON = "Blizzard damage meter totals are not ready"
+local FINALIZE_RETRY_DELAYS = { 3, 8, 15, 30 }
+local RECOVERY_RETRY_DELAYS = { 5, 15, 30 }
+
 --[[
 KeyLab_Capture.lua
 
@@ -34,6 +38,14 @@ end
 
 local function ResetCaptureDB()
     return Sessions.ResetCaptureDB(true)
+end
+
+local function HasPerformanceMetrics(metrics)
+    if type(metrics) ~= "table" then return false end
+    return metrics.damageDone ~= nil
+        or metrics.dps ~= nil
+        or metrics.healingDone ~= nil
+        or metrics.hps ~= nil
 end
 
 local function SumPullDeathMetrics(combatSessions)
@@ -113,8 +125,8 @@ local function BuildEncounterRecord()
     end
 
     local metrics, metricError, metricRanks = DamageMeter.GetSnapshot(context)
-    if type(metrics) ~= "table" or next(metrics) == nil then
-        return nil, metricError or "No mapped local-player metric values found"
+    if not HasPerformanceMetrics(metrics) then
+        return nil, metricError or METRICS_PENDING_REASON
     end
 
     local aggregateMeterDeaths = tonumber(metrics.deaths)
@@ -227,6 +239,64 @@ local function BuildEncounterRecord()
     return encounter, nil
 end
 
+local function SamePlayer(encounterPlayer, currentPlayer)
+    if type(encounterPlayer) ~= "table" or type(currentPlayer) ~= "table" then return false end
+    if tostring(encounterPlayer.playerName or "") ~= tostring(currentPlayer.playerName or "") then return false end
+    local encounterRealm = tostring(encounterPlayer.realm or "")
+    local currentRealm = tostring(currentPlayer.realm or "")
+    return encounterRealm == "" or currentRealm == "" or encounterRealm == currentRealm
+end
+
+function Capture.RepairLatestIncompleteEncounter()
+    if not DamageMeter or not DamageMeter.GetSnapshot then return false, "Damage meter capture unavailable" end
+    local encounters = KeyLab.DB and KeyLab.DB.Encounters and KeyLab.DB.Encounters.GetAll and KeyLab.DB.Encounters.GetAll() or nil
+    if type(encounters) ~= "table" then return false, "Encounter database unavailable" end
+
+    local currentPlayer = PlayerCapture and PlayerCapture.GetSnapshot and PlayerCapture.GetSnapshot() or {}
+    local now = time()
+    local candidate = nil
+    for _, encounter in ipairs(encounters) do
+        local timestamp = tonumber(encounter and encounter.timestamp) or 0
+        local isRecent = timestamp > 0 and now >= timestamp and (now - timestamp) <= (12 * 60 * 60)
+        if isRecent
+            and type(encounter.challenge) == "table"
+            and SamePlayer(encounter.player, currentPlayer)
+            and not HasPerformanceMetrics(encounter.metrics)
+            and (not candidate or timestamp > (tonumber(candidate.timestamp) or 0))
+        then
+            candidate = encounter
+        end
+    end
+    if not candidate then return false, "No recent incomplete encounter found" end
+
+    local metrics, metricError, metricRanks = DamageMeter.GetSnapshot(candidate.challenge)
+    if not HasPerformanceMetrics(metrics) then return false, metricError or METRICS_PENDING_REASON end
+
+    candidate.metrics = type(candidate.metrics) == "table" and candidate.metrics or {}
+    for key, value in pairs(metrics) do candidate.metrics[key] = value end
+    candidate.metricRanks = type(metricRanks) == "table" and metricRanks or {}
+
+    if DamageMeter.GetCombatSessionsSnapshot then
+        local combatSessions = DamageMeter.GetCombatSessionsSnapshot(candidate.challenge)
+        if type(combatSessions) == "table" and next(combatSessions) ~= nil then
+            candidate.combatSessions = combatSessions
+            local pullDeaths, pullGroupDeaths, hasPullDeaths, hasPullGroupDeaths = SumPullDeathMetrics(combatSessions)
+            if hasPullDeaths then candidate.metrics.deaths = pullDeaths end
+            local officialGroupDeaths = tonumber(candidate.challenge.officialDeathCount or candidate.challenge.deathCount)
+            if officialGroupDeaths ~= nil then
+                candidate.metrics.groupDeaths = officialGroupDeaths
+            elseif hasPullGroupDeaths then
+                candidate.metrics.groupDeaths = pullGroupDeaths
+            end
+        end
+    end
+
+    candidate.capture = type(candidate.capture) == "table" and candidate.capture or {}
+    candidate.capture.metricsRecovered = true
+    candidate.capture.metricsRecoveredAt = now
+    return true, candidate
+end
+
 function Capture.StartChallenge()
     local captureDB = ResetCaptureDB()
     local context = Sessions.GetChallengeContext()
@@ -313,7 +383,11 @@ function Capture.Finalize(reason)
         captureDB.lastFinalizeError = buildError or "Unknown finalize error"
         captureDB.lastFinalizeReason = reason
         captureDB.lastFinalizeAt = date("%Y-%m-%d %H:%M:%S")
-        Print("Finalize failed: " .. tostring(captureDB.lastFinalizeError))
+        if captureDB.lastFinalizeError == METRICS_PENDING_REASON then
+            Print("Waiting for Blizzard damage meter totals before saving this run.")
+        else
+            Print("Finalize failed: " .. tostring(captureDB.lastFinalizeError))
+        end
         return false, captureDB.lastFinalizeError
     end
 
@@ -355,6 +429,18 @@ frame:SetScript("OnEvent", function(_, event, ...)
             if KeyLab.DB and KeyLab.DB.Initialize then
                 KeyLab.DB.Initialize()
             end
+            if C_Timer and C_Timer.After then
+                for _, delaySeconds in ipairs(RECOVERY_RETRY_DELAYS) do
+                    local retryDelay = delaySeconds
+                    C_Timer.After(retryDelay, function()
+                        local repaired, encounter = Capture.RepairLatestIncompleteEncounter()
+                        if repaired then
+                            Print("Recovered Blizzard damage meter totals for " .. tostring(encounter.challenge and encounter.challenge.dungeonName or "the latest Mythic+ run") .. ".")
+                            if KeyLab.UI and KeyLab.UI.RefreshSelectedTab then KeyLab.UI:RefreshSelectedTab() end
+                        end
+                    end)
+                end
+            end
         end
         return
     end
@@ -367,16 +453,15 @@ frame:SetScript("OnEvent", function(_, event, ...)
     if event == "CHALLENGE_MODE_COMPLETED" then
         Capture.MarkCompleted()
 
-        C_Timer.After(3, function()
-            Capture.Finalize("CHALLENGE_MODE_COMPLETED + 3s")
-        end)
-
-        C_Timer.After(8, function()
-            local captureDB = EnsureCaptureDB()
-            if captureDB.completedSeen == true then
-                Capture.Finalize("CHALLENGE_MODE_COMPLETED + 8s retry")
-            end
-        end)
+        for _, delaySeconds in ipairs(FINALIZE_RETRY_DELAYS) do
+            local retryDelay = delaySeconds
+            C_Timer.After(retryDelay, function()
+                local captureDB = EnsureCaptureDB()
+                if captureDB.completedSeen == true then
+                    Capture.Finalize("CHALLENGE_MODE_COMPLETED + " .. tostring(retryDelay) .. "s")
+                end
+            end)
+        end
 
         return
     end
