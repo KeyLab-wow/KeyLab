@@ -289,7 +289,7 @@ local function ResumeNightFromCheckpoint(context)
                 groupMembers = DeepCopy(checkpoint.groupMembers),
                 groupMetricTotals = DeepCopy(checkpoint.groupMetricTotals),
             }
-            Probe("RESUMED raid night " .. tostring(checkpoint.id) .. " with " .. tostring(#state.night.pullIDs) .. " saved pull(s)")
+            Probe("RESUMED raid session " .. tostring(checkpoint.id) .. " with " .. tostring(#state.night.pullIDs) .. " saved pull(s)")
             return state.night
         end
     end
@@ -375,7 +375,7 @@ FinalizePull = function(finalAttempt, token)
     end
 
     local night = state.night
-    if type(night) ~= "table" then return false, "raid night missing" end
+    if type(night) ~= "table" then return false, "raid session missing" end
 
     local endedAt = pull.endedAt or time()
     local durationSeconds = meterSession and tonumber(meterSession.durationSeconds) or nil
@@ -476,17 +476,17 @@ CloseNight = function(reason, forcePullFinalize, preserveForResume)
     end
 
     local night = state.night
-    if type(night) ~= "table" then return false, "no active raid night" end
+    if type(night) ~= "table" then return false, "no active raid session" end
 
     if #(night.pullIDs or {}) == 0 then
         if preserveForResume == true then
-            return false, "raid night checkpoint had no completed boss pulls"
+            return false, "raid session checkpoint had no completed boss pulls"
         end
         state.night = nil
         state.activePull = nil
         state.pendingCloseReason = nil
         state.pendingClosePreserve = nil
-        return false, "raid night had no completed boss pulls"
+        return false, "raid session had no completed boss pulls"
     end
 
     local bossesAttempted, bossesKilled = 0, 0
@@ -537,7 +537,7 @@ CloseNight = function(reason, forcePullFinalize, preserveForResume)
             state.activePull = nil
         end
         if KeyLab.RefreshTabs then KeyLab.RefreshTabs() end
-        Print("raid night " .. (preserveForResume == true and "checkpoint saved: " or "closed: ") .. tostring(reason))
+        Print("raid session " .. (preserveForResume == true and "checkpoint saved: " or "closed: ") .. tostring(reason))
         Probe(
             (preserveForResume == true and "SUMMARY CHECKPOINT SAVED reason=" or "SUMMARY SAVED reason=") .. tostring(reason)
             .. " pulls=" .. tostring(summary.totalPulls)

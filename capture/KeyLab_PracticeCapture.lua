@@ -37,6 +37,10 @@ local function PracticeDamageMeter()
     return KeyLab.Capture and KeyLab.Capture.PracticeDamageMeter or {}
 end
 
+local function SequencerLibrary()
+    return KeyLab.SequencerLibrary or {}
+end
+
 local function Print(message)
     if KeyLab.Utils and KeyLab.Utils.Print then
         KeyLab.Utils.Print(message)
@@ -99,6 +103,24 @@ local function ReadPracticeSnapshot(baselineSessionIDs, startedAt, stoppedAt)
     return snapshot, errorMessage
 end
 
+local function ReadSequencerUsageSnapshot()
+    local library = SequencerLibrary()
+    if not library.GetUsageSnapshot then return {} end
+    local ok, snapshot = pcall(library.GetUsageSnapshot)
+    return ok and type(snapshot) == "table" and snapshot or {}
+end
+
+local function DetectSequencerUsages(baseline)
+    local library = SequencerLibrary()
+    if library.GetUsagesSince then
+        local ok, usages = pcall(library.GetUsagesSince, baseline)
+        return ok and type(usages) == "table" and usages or {}
+    end
+    if not library.GetMostUsedSince then return {} end
+    local ok, usage = pcall(library.GetMostUsedSince, baseline)
+    return ok and type(usage) == "table" and { usage } or {}
+end
+
 function Practice.GetActiveSession()
     return DB().GetActive and DB().GetActive() or nil
 end
@@ -107,7 +129,7 @@ function Practice.IsActive()
     return Practice.GetActiveSession() ~= nil
 end
 
-function Practice.StartSession(testType, targetDurationSeconds)
+function Practice.StartSession(testType, targetDurationSeconds, sequenceUsage)
     if Practice.IsActive() then
         return false, "A practice session is already running."
     end
@@ -135,6 +157,9 @@ function Practice.StartSession(testType, targetDurationSeconds)
         player = PlayerCapture().GetSnapshot and PlayerCapture().GetSnapshot() or {},
         stats = StatCapture().GetSnapshot and StatCapture().GetSnapshot() or {},
         talents = TalentCapture().GetSnapshot and TalentCapture().GetSnapshot() or {},
+        sequenceUsage = type(sequenceUsage) == "table" and CopyTable(sequenceUsage) or nil,
+        sequenceUsageAutoDetect = type(sequenceUsage) ~= "table",
+        sequencerUsageBaseline = ReadSequencerUsageSnapshot(),
     }
 
     if DB().SetActive then
@@ -166,6 +191,18 @@ function Practice.StopSession()
     local durationSeconds = snapshot and tonumber(snapshot.durationSeconds)
         or math.max(0, stoppedAt - (tonumber(active.startedAt) or stoppedAt))
     local normalizedMetrics = NormalizePracticeRates(snapshot and snapshot.metrics, durationSeconds)
+    local sequenceUsage = type(active.sequenceUsage) == "table" and CopyTable(active.sequenceUsage) or nil
+    local sequenceUsages = {}
+    local sequenceUsageDetection = "manual"
+    if type(sequenceUsage) == "table" then
+        table.insert(sequenceUsages, CopyTable(sequenceUsage))
+    elseif active.sequenceUsageAutoDetect then
+        sequenceUsages = DetectSequencerUsages(active.sequencerUsageBaseline)
+        sequenceUsage = sequenceUsages[1] and CopyTable(sequenceUsages[1]) or nil
+        sequenceUsageDetection = #sequenceUsages > 0 and "automatic" or "none"
+    else
+        sequenceUsageDetection = "none"
+    end
     local session = {
         id = active.id,
         timestamp = active.startedAt,
@@ -178,6 +215,9 @@ function Practice.StopSession()
         player = CopyTable(active.player or {}),
         stats = CopyTable(active.stats or {}),
         talents = CopyTable(active.talents or {}),
+        sequenceUsage = CopyTable(sequenceUsage),
+        sequenceUsages = CopyTable(sequenceUsages),
+        sequenceUsageDetection = sequenceUsageDetection,
         metrics = normalizedMetrics,
         combatSessions = CopyTable(snapshot and snapshot.combatSessions or {}),
         captureError = false,
