@@ -156,7 +156,21 @@ local function GetTarget(specID, slotName)
     local record = Targets().GetTargetForSlot(specID, slotName)
     if not record then return nil end
     local item = Mapping().GetItem and Mapping().GetItem(record.itemID, specID, nil, record.sourceID) or nil
-    item = item or { itemID = record.itemID, name = "Item " .. tostring(record.itemID) }
+    item = item or {
+        itemID = record.itemID,
+        name = record.itemName or ("Item " .. tostring(record.itemID)),
+        itemLink = record.itemLink,
+        link = record.itemLink,
+        slot = record.itemSlot or slotName,
+        sourceName = record.sourceName,
+        sourceType = record.sourceType,
+        upgradeTrack = record.upgradeTrack,
+        upgradeRank = record.upgradeRank,
+        upgradeMaxRank = record.upgradeMaxRank,
+        itemLevel = record.itemLevel,
+        projectedItemLevel = record.projectedItemLevel,
+        ownedMatcherItem = record.ownedMatcherItem == true,
+    }
     item.slotInstance = slotName
     item.sourceID = record.sourceID or item.sourceID
     item.sourcesForDashboard = GetItemSources(item.itemID, specID, record.sourceID)
