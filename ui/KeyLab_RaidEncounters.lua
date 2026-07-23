@@ -353,7 +353,7 @@ local function BuildDetails(panel, encounter)
     pullY = AddDetailRow(panel, "Result", GetResult(encounter), CFG.details.colPullX, pullY, CFG.details.colPullW)
     pullY = AddDetailRow(panel, "Duration", FormatDuration(raid.durationSeconds), CFG.details.colPullX, pullY, CFG.details.colPullW)
     pullY = AddDetailRow(panel, "Difficulty", raid.difficultyName or tostring(raid.difficultyID or "-"), CFG.details.colPullX, pullY, CFG.details.colPullW)
-    pullY = AddDetailRow(panel, "Raid-night Pull", tostring(raid.nightPullNumber or "-"), CFG.details.colPullX, pullY, CFG.details.colPullW)
+    pullY = AddDetailRow(panel, "Raid-session Pull", tostring(raid.nightPullNumber or "-"), CFG.details.colPullX, pullY, CFG.details.colPullW)
 
     AddSectionTitle(panel, "Stats (Before Pull)", CFG.details.colStatsX, sectionTop, CFG.details.colStatsW)
     AddStatRows(panel, encounter, CFG.details.colStatsX, sectionTop - 24, CFG.details.colStatsW)

@@ -34,14 +34,15 @@ local TABLE_COLUMNS = {
     duration = { x = 282, width = 80, label = "Duration" },
     metric = { x = 374, width = 112, label = "Outcome" },
     spec = { x = 500, width = 118, label = "Spec" },
-    stats = { x = 626, width = 138, label = "Stats" },
+    sequence = { x = 626, width = 112, label = "Sequence Version" },
     status = { x = 746, width = 84, label = "Status" },
 }
 
 local PAGE_SIZE = 9
 
+local NEW_SESSION_HEIGHT = 86
 local LAYOUT = { newSessionY = -66 }
-LAYOUT.filtersY = LAYOUT.newSessionY - 86 - SPACING.card
+LAYOUT.filtersY = LAYOUT.newSessionY - NEW_SESSION_HEIGHT - SPACING.card
 LAYOUT.tableY = LAYOUT.filtersY - 78 - SPACING.card
 LAYOUT.detailsY = LAYOUT.tableY - 380 - SPACING.card
 
@@ -291,6 +292,102 @@ end
 
 local function GetSessions()
     return Analysis.GetSessions and Analysis.GetSessions() or {}
+end
+
+local function GetSequenceVersionOptions()
+    local options = {
+        { sequenceID = nil, versionID = nil, label = "Auto-detect KeyLab use (optional)" },
+    }
+    local library = KeyLab.SequencerLibrary or {}
+    if not library.GetCollectionSnapshot then return options end
+
+    local ok, collection = pcall(library.GetCollectionSnapshot)
+    if not ok or type(collection) ~= "table" then return options end
+    for _, sequenceID in ipairs(collection.order or {}) do
+        local sequence = collection.sequences and collection.sequences[sequenceID]
+        local versionID = sequence and sequence.activeVersionId
+        local version = sequence and sequence.versions and sequence.versions[versionID]
+        if sequence and version then
+            table.insert(options, {
+                sequenceID = sequenceID,
+                versionID = versionID,
+                sequenceName = tostring(sequence.name or "Sequence"),
+                versionName = tostring(version.name or "Version"),
+                className = collection.className,
+                specName = collection.specName,
+                label = tostring(sequence.name or "Sequence") .. " - " .. tostring(version.name or "Version"),
+            })
+        end
+    end
+    return options
+end
+
+local function GetSelectedSequenceUsage()
+    local selectedID = Practice.selectedStartSequenceID
+    if not selectedID then return nil end
+    for _, option in ipairs(GetSequenceVersionOptions()) do
+        if option.sequenceID == selectedID then
+            return {
+                sequenceID = option.sequenceID,
+                versionID = option.versionID,
+                sequenceName = option.sequenceName,
+                versionName = option.versionName,
+                className = option.className,
+                specName = option.specName,
+            }
+        end
+    end
+    Practice.selectedStartSequenceID = nil
+    return nil
+end
+
+local function SequenceUsageLabel(sequenceUsage)
+    if type(sequenceUsage) ~= "table" then return "Not selected" end
+    local sequenceName = tostring(sequenceUsage.sequenceName or "")
+    local versionName = tostring(sequenceUsage.versionName or "")
+    if sequenceName == "" and versionName == "" then return "Not selected" end
+    if sequenceName == "" then return versionName end
+    if versionName == "" then return sequenceName end
+    return sequenceName .. " - " .. versionName
+end
+
+local function SessionSequenceUsages(session)
+    if type(session) ~= "table" then return {} end
+    if type(session.sequenceUsages) == "table" and #session.sequenceUsages > 0 then
+        return session.sequenceUsages
+    end
+    if type(session.sequenceUsage) == "table" then
+        return { session.sequenceUsage }
+    end
+    return {}
+end
+
+local function SessionSequenceSummary(session)
+    local usages = SessionSequenceUsages(session)
+    if #usages == 0 then
+        return session and session.sequenceUsageDetection == "none" and "No KeyLab sequence used" or "Not selected"
+    end
+    local label = SequenceUsageLabel(usages[1])
+    if #usages > 1 then
+        label = label .. " +" .. tostring(#usages - 1) .. " more"
+    end
+    return label
+end
+
+local function SessionSequenceDetails(session)
+    local usages = SessionSequenceUsages(session)
+    if #usages == 0 then return SessionSequenceSummary(session) end
+    local labels = {}
+    for _, usage in ipairs(usages) do
+        local label = SequenceUsageLabel(usage)
+        local combatPresses = tonumber(usage.combatPresses) or 0
+        local presses = combatPresses > 0 and combatPresses or tonumber(usage.pressCount)
+        if presses and presses > 0 then
+            label = label .. " (" .. tostring(presses) .. " press" .. (presses == 1 and "" or "es") .. ")"
+        end
+        table.insert(labels, label)
+    end
+    return table.concat(labels, ";  ")
 end
 
 local function ShortText(value, maxLength)
@@ -629,6 +726,11 @@ function Practice:RefreshDropdowns(baseSessions)
     SetDropdownText(self.startTypeDropdown, FindOptionLabel(TestTypeOptions(), self.selectedStartType or "ST", "ST"))
     SetDropdownText(self.startDurationDropdown, FindOptionLabel(DurationOptions(false), self.selectedStartDuration or 60, "60 Seconds"))
 
+    local sequenceText = "Auto-detect KeyLab use (optional)"
+    local selectedUsage = GetSelectedSequenceUsage()
+    if selectedUsage then sequenceText = SequenceUsageLabel(selectedUsage) end
+    SetDropdownText(self.startSequenceDropdown, sequenceText)
+
     local specText = "All Specs"
     if self.selectedSpec then specText = self.selectedSpec end
     SetDropdownText(self.specDropdown, specText)
@@ -648,15 +750,15 @@ function Practice:RefreshDropdowns(baseSessions)
 end
 
 function Practice:BuildNewSession(parent)
-    local panel = MakePanel(parent, 0, LAYOUT.newSessionY, 908, 86, "New Session")
+    local panel = MakePanel(parent, 0, LAYOUT.newSessionY, 908, NEW_SESSION_HEIGHT, "New Session")
     local active = Capture().GetActiveSession and Capture().GetActiveSession()
     local actionX = 756
-    local instructionX = 310
-    local instructionWidth = actionX - instructionX - 16
 
     if active then
         local lengthText = active.targetDurationSeconds and FormatDuration(active.targetDurationSeconds) or "Manual"
         AddLine(panel, "Session running: " .. tostring(active.testType or "Practice") .. "  |  " .. lengthText, 16, -42, 350, COLORS.green, "GameFontNormal")
+        local activeSequenceText = active.sequenceUsageAutoDetect and "Auto-detecting KeyLab use" or SequenceUsageLabel(active.sequenceUsage)
+        AddLine(panel, "Sequence: " .. activeSequenceText, 16, -66, 700, COLORS.text, "GameFontHighlightSmall")
         local showTimer = MakeButton(panel, "Show Timer", 120, 24)
         showTimer:SetPoint("TOPLEFT", panel, "TOPLEFT", actionX, -34)
         showTimer:SetScript("OnClick", function()
@@ -665,7 +767,7 @@ function Practice:BuildNewSession(parent)
         return panel
     end
 
-    self.startTypeDropdown = MakeDropdown(panel, 115, 16, -36, "Session Type", function(_, level)
+    self.startTypeDropdown = MakeDropdown(panel, 105, 16, -36, "Session Type", function(_, level)
         for _, option in ipairs(TestTypeOptions()) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.label
@@ -678,7 +780,7 @@ function Practice:BuildNewSession(parent)
     end)
 
 
-    self.startDurationDropdown = MakeDropdown(panel, 105, 166, -36, "Test Length", function(_, level)
+    self.startDurationDropdown = MakeDropdown(panel, 95, 151, -36, "Test Length", function(_, level)
         for _, option in ipairs(DurationOptions(false)) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.label
@@ -690,9 +792,18 @@ function Practice:BuildNewSession(parent)
         end
     end)
 
-    AddLine(panel, "Timed tests are recommended and snapshot automatically.", instructionX, -34, instructionWidth, COLORS.muted, "GameFontDisableSmall")
-    local warning = AddLine(panel, "Blizzard training dummies may keep you in combat. Timed tests give the clearest stopping point; compare Damage Done if DPS keeps changing.", instructionX, -54, instructionWidth, COLORS.orange, "GameFontDisableSmall")
-    warning:SetHeight(28)
+    self.startSequenceDropdown = MakeDropdown(panel, 390, 276, -36, "Sequence / Active Version", function(_, level)
+        for _, option in ipairs(GetSequenceVersionOptions()) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = option.label
+            info.checked = option.sequenceID == Practice.selectedStartSequenceID
+            info.func = function()
+                Practice.selectedStartSequenceID = option.sequenceID
+                Practice:Refresh()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
 
     local start = MakeButton(panel, "Start Session", 126, 26)
     start:SetPoint("TOPLEFT", panel, "TOPLEFT", actionX, -38)
@@ -701,7 +812,7 @@ function Practice:BuildNewSession(parent)
         if Capture().StartSession then
             local duration = Practice.selectedStartDuration
             if duration == "manual" then duration = nil end
-            ok, resultOrError = Capture().StartSession(Practice.selectedStartType or "ST", duration)
+            ok, resultOrError = Capture().StartSession(Practice.selectedStartType or "ST", duration, GetSelectedSequenceUsage())
         end
         if ok then
             if KeyLab.UI and KeyLab.UI.Hide then
@@ -863,7 +974,7 @@ function Practice:BuildSessionTable(parent, sessions, baseCount)
         AddLine(row, FormatDuration(session.durationSeconds), TABLE_COLUMNS.duration.x - 8, -5, TABLE_COLUMNS.duration.width, COLORS.text, "GameFontDisableSmall")
         AddLine(row, FormatMetric(self.selectedMetricKey, metricValue), TABLE_COLUMNS.metric.x - 8, -5, TABLE_COLUMNS.metric.width, metricColor, "GameFontDisableSmall")
         AddLine(row, ShortText(session.player and session.player.spec or "-", 16), TABLE_COLUMNS.spec.x - 8, -5, TABLE_COLUMNS.spec.width, COLORS.text, "GameFontDisableSmall")
-        AddLine(row, ShortText(StatLine(session.stats), 22), TABLE_COLUMNS.stats.x - 8, -5, TABLE_COLUMNS.stats.width, COLORS.muted, "GameFontDisableSmall")
+        AddLine(row, ShortText(SessionSequenceSummary(session), 22), TABLE_COLUMNS.sequence.x - 8, -5, TABLE_COLUMNS.sequence.width, COLORS.muted, "GameFontDisableSmall")
 
         local statusButton = MakeSmallButton(row, StatusLabel(session.status) .. " v", TABLE_COLUMNS.status.width, 20)
         statusButton:SetPoint("TOPLEFT", row, "TOPLEFT", TABLE_COLUMNS.status.x - 8, -2)
@@ -904,7 +1015,7 @@ function Practice:BuildSessionTable(parent, sessions, baseCount)
 end
 
 function Practice:BuildDetails(parent, session)
-    local panel = MakePanel(parent, 0, LAYOUT.detailsY, 908, 168, "Session Details")
+    local panel = MakePanel(parent, 0, LAYOUT.detailsY, 908, 192, "Session Details")
     if not session then
         AddLine(panel, "Select a saved practice session to view its captured setup.", 14, -44, 830, COLORS.muted, "GameFontNormal")
         return panel
@@ -936,13 +1047,16 @@ function Practice:BuildDetails(parent, session)
 
     AddLine(panel, "Stats", 14, -122, 70, COLORS.gold, "GameFontNormal")
     AddLine(panel, StatLine(session.stats), 84, -122, 420, COLORS.text, "GameFontHighlightSmall")
+    AddLine(panel, "Sequence(s)", 515, -122, 76, COLORS.gold, "GameFontNormal")
+    local sequenceDetails = AddLine(panel, ShortText(SessionSequenceDetails(session), 92), 594, -122, 280, COLORS.text, "GameFontHighlightSmall")
+    sequenceDetails:SetHeight(38)
 
     local talentString = session.talents and session.talents.talentString
-    AddLine(panel, "Talent", 14, -146, 70, COLORS.gold, "GameFontNormal")
-    AddLine(panel, talentString and ShortText(talentString, 92) or "No talent string captured", 84, -146, 690, COLORS.text, "GameFontDisableSmall")
+    AddLine(panel, "Talent", 14, -170, 70, COLORS.gold, "GameFontNormal")
+    AddLine(panel, talentString and ShortText(talentString, 92) or "No talent string captured", 84, -170, 690, COLORS.text, "GameFontDisableSmall")
     if talentString then
         local copy = MakeButton(panel, "Copy", 70, 22)
-        copy:SetPoint("TOPLEFT", panel, "TOPLEFT", 790, -140)
+        copy:SetPoint("TOPLEFT", panel, "TOPLEFT", 790, -164)
         copy:SetScript("OnClick", function()
             RegisterCopyTalentPopup()
             StaticPopup_Show("KEYLAB_PRACTICE_COPY_TALENT", nil, nil, talentString)

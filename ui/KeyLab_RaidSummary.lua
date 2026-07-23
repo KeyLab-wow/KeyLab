@@ -373,7 +373,7 @@ end
 
 local function CreateOverview(parent, night, pulls, groups)
     local card = Panel(parent, 18, -4, 852, 112, Color("cardBg"), Color("cardStrongBorder"))
-    Place(card, "Raid Night Summary", 14, -11, 400, "GameFontNormal", 14, Color("gold"))
+    Place(card, "Raid Session Summary", 14, -11, 400, "GameFontNormal", 14, Color("gold"))
 
     AddSummaryValue(card, "Raid", tostring(night.instanceName or "Unknown Raid"), 14, 196, Color("text"))
     Divider(card, 218, -38, 60)
@@ -407,9 +407,9 @@ end
 local function CreateNightResultCards(parent, night, y)
     local playerCard = Panel(parent, 18, y, 420, 224, Color("cardBg"), Color("blue"))
     local rankCard = Panel(parent, 450, y, 420, 224, Color("cardBg"), Color("purple", Color("cardStrongBorder")))
-    Place(playerCard, "Raid Night Player Results", 14, -10, 392, "GameFontNormal", 14, Color("gold"))
+    Place(playerCard, "Raid Session Player Results", 14, -10, 392, "GameFontNormal", 14, Color("gold"))
     Place(playerCard, "Boss pulls only • raid trash excluded", 14, -31, 392, "GameFontDisableSmall", nil, Color("muted"))
-    Place(rankCard, "Raid Night Group Rankings", 14, -10, 392, "GameFontNormal", 14, Color("gold"))
+    Place(rankCard, "Raid Session Group Rankings", 14, -10, 392, "GameFontNormal", 14, Color("gold"))
     Place(rankCard, "Overall placement across saved boss pulls", 14, -31, 392, "GameFontDisableSmall", nil, Color("muted"))
 
     local metrics = type(night.nightMetrics) == "table" and night.nightMetrics or {}
@@ -425,7 +425,7 @@ local function CreateNightResultCards(parent, night, y)
         Place(rankCard, RankLabel(ranks[definition.key]), x + 116, rowY, 68, "GameFontNormalSmall", nil, ranks[definition.key] and MetricColor(definition.key) or Color("muted"), "RIGHT")
     end
     if next(ranks) == nil then
-        Place(rankCard, "Overall rankings begin with raid nights captured after this update.", 14, -200, 392, "GameFontDisableSmall", nil, Color("warning"), "CENTER")
+        Place(rankCard, "Overall rankings begin with raid sessions captured after this update.", 14, -200, 392, "GameFontDisableSmall", nil, Color("warning"), "CENTER")
     end
     return 224
 end
@@ -679,7 +679,7 @@ function RaidSummary:Refresh()
     if not night then
         self.empty:Show()
         self.scroll:Hide()
-        self.context:SetText("No completed raid night yet")
+        self.context:SetText("No completed raid session yet")
         return
     end
 
@@ -705,7 +705,7 @@ function RaidSummary:Refresh()
         y = y - height - SPACING.card
     end
     if #groups == 0 then
-        Place(self.content, "No boss pulls were saved for this raid night.", 32, y, 700, "GameFontHighlightSmall", nil, Color("muted"))
+        Place(self.content, "No boss pulls were saved for this raid session.", 32, y, 700, "GameFontHighlightSmall", nil, Color("muted"))
         y = y - 38
     end
     self.content:SetHeight(math.max(650, math.abs(y) + 20))
@@ -721,9 +721,9 @@ function RaidSummary:Create(parent)
     Style(frame, Color("bg"), { 0, 0, 0, 0 })
     self.frame = frame
 
-    local title = Text(frame, "Raid Summary", "GameFontNormalLarge", HEADER.titleSize, Color("gold"))
+    local title = Text(frame, "Last Raid", "GameFontNormalLarge", HEADER.titleSize, Color("gold"))
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", HEADER.x, HEADER.titleY)
-    local subtitle = Text(frame, "Your latest saved raid night, with role-based performance and raid placement for every boss pull.", "GameFontHighlightSmall", nil, Color("muted"))
+    local subtitle = Text(frame, "Your latest saved raid session, with role-based performance and raid placement for every boss pull.", "GameFontHighlightSmall", nil, Color("muted"))
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -7)
     subtitle:SetSize(850, 20)
     self.context = Text(frame, "", "GameFontDisableSmall", nil, Color("muted"))
@@ -737,7 +737,7 @@ function RaidSummary:Create(parent)
     self.content:SetSize(888, 650)
     self.scroll:SetScrollChild(self.content)
 
-    self.empty = Text(frame, "A Raid Summary will appear after you leave a raid with saved boss pulls.", "GameFontHighlight", 14, Color("muted"), "CENTER")
+    self.empty = Text(frame, "Your Last Raid will appear after you leave a raid with saved boss pulls.", "GameFontHighlight", 14, Color("muted"), "CENTER")
     self.empty:SetPoint("CENTER", frame, "CENTER", 0, 10)
     self.empty:SetSize(760, 30)
 

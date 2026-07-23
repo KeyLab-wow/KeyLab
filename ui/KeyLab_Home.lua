@@ -370,7 +370,7 @@ function HOME:Create(parent)
     latestSaved:SetPoint("TOPRIGHT", latest, "TOPRIGHT", -16, -56)
     latestSaved:SetSize(190, 22)
 
-    local latestHint = MakeText(latest, "Choose Mythic+ and open Summary to review the full run, group lineup, totals, and pull graph.", 11, COLORS.muted, "LEFT")
+    local latestHint = MakeText(latest, "Choose Mythic+ and open Last Run to review the full run, group lineup, totals, and pull graph.", 11, COLORS.muted, "LEFT")
     latestHint:SetPoint("TOPLEFT", latest, "TOPLEFT", 14, -84)
     latestHint:SetSize(width - 28, 18)
 
@@ -385,7 +385,7 @@ function HOME:Create(parent)
 
     local releaseBody = MakeText(
         releaseNote,
-        "Complete Raid support adds Encounters, Summary, Talent Builds, Stat Profiles, Gear Profiles, and Trends alongside shared Mythic+ | Raid navigation. This update also adds Gear Planning, the Master Item Database, Stat Goal Matcher, redesigned Gear Targets and Gear Dashboard, and timed Practice Sessions.\n\n" ..
+        "Complete Raid support adds Encounters, Last Run or Last Raid, Talent Builds, Stat Profiles, Gear Profiles, and Trends alongside shared Mythic+ | Raid navigation. This update also adds Gear Planning, the Master Item Database, Stat Goal Matcher, redesigned Gear Targets and Gear Dashboard, and timed Practice Sessions.\n\n" ..
         "Previously saved encounters remain in your journal. New Raid, profile, ranking, and gear fields appear only on encounters captured with this version.",
         11,
         COLORS.muted,
