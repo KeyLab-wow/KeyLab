@@ -177,10 +177,13 @@ end
 
 function StatGoalsDB.Validate(specID)
     local goals = EnsureGoals(specID)
+    local hasEnteredGoal = false
     for statKey in pairs(VALID_STATS) do
         local value = tonumber(goals.targets[statKey])
         if value == nil or value < 0 or value > 100 then return false, "Each stat goal must be from 0% to 100%." end
+        if value > 0 then hasEnteredGoal = true end
     end
+    if not hasEnteredGoal then return false, "Enter your stat goal percentages before running the matcher." end
     return true, nil
 end
 
