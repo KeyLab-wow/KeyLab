@@ -1248,17 +1248,17 @@ local function BuildReachability(positions, initialStats, actualStats, finalStat
             unavailableSlots = CopyArray(availabilityByStat[key].unavailable),
         }
         if current and current > goal + GOAL_MATCH_TOLERANCE then
-            table.insert(messages, string.format("Current %s is %.1f%%, already above the %.1f%% goal.", STAT_LABELS[key], current, goal))
+            table.insert(messages, string.format("Your current %s is %.1f%%, which is already above your %.1f%% goal.", STAT_LABELS[key], current, goal))
         elseif final > goal + GOAL_MATCH_TOLERANCE then
-            table.insert(messages, string.format("The chosen set projects %.1f%% %s, above the %.1f%% goal.", final, STAT_LABELS[key], goal))
+            table.insert(messages, string.format("The matched set reaches %.1f%% %s, which is above your %.1f%% goal.", final, STAT_LABELS[key], goal))
         end
         if belowReach then
-            table.insert(messages, string.format("The available open-slot items can reach at most %.1f%% %s, below the %.1f%% goal.", maximum, STAT_LABELS[key], goal))
+            table.insert(messages, string.format("The available items can reach up to %.1f%% %s, below your %.1f%% goal.", maximum, STAT_LABELS[key], goal))
             if #availabilityByStat[key].available == 0 then
-                table.insert(messages, string.format("None of the available candidates for the open slots provide %s.", STAT_LABELS[key]))
+                table.insert(messages, string.format("None of the available items for your open slots provide %s.", STAT_LABELS[key]))
             end
         elseif aboveFloor then
-            table.insert(messages, string.format("Locked equipment keeps %s at or above %.1f%%, already above the %.1f%% goal.", STAT_LABELS[key], minimum, goal))
+            table.insert(messages, string.format("Your locked gear keeps %s at or above %.1f%%, which is already above your %.1f%% goal.", STAT_LABELS[key], minimum, goal))
         end
     end
 
@@ -1269,12 +1269,12 @@ local function BuildReachability(positions, initialStats, actualStats, finalStat
         diminishingReturns[key] = { current = current, projected = projected, enters = not current and projected }
         if projected then
             table.insert(messages, (not current and "Projected " or "Current and projected ") .. STAT_LABELS[key]
-                .. " rating is in a reduced-efficiency range. It still adds value, but each additional point contributes less percentage.")
+                .. " is in a reduced-efficiency range. It still helps, but each new rating point adds less percentage.")
         end
     end
 
     if not exact then
-        table.insert(messages, "This is the closest available match. Opening additional slots or adjusting crafted stats, gems, or enchants may make another goal combination reachable.")
+        table.insert(messages, "This is the closest match KeyLab found. Opening more slots or changing crafted stats, gems, or enchants may bring the set closer to your goals.")
     end
     return {
         exact = exact,
@@ -1365,13 +1365,13 @@ local function BuildResult(specID, itemType, itemSource, ownedRecords, best, goa
     )
     if #upgradeAssumptions > 0 then
         table.insert(reachability.messages, string.format(
-            "This projection assumes %d owned item%s will be upgraded to the maximum of its known track.",
+            "This result assumes %d owned item%s will be upgraded to the highest rank of its known track.",
             #upgradeAssumptions,
             #upgradeAssumptions == 1 and "" or "s"
         ))
     end
     if #unmatchedSlots > 0 then
-        table.insert(reachability.messages, "No distinct eligible candidate was available for: " .. table.concat(unmatchedSlots, ", ") .. ".")
+        table.insert(reachability.messages, "No different eligible item was available for: " .. table.concat(unmatchedSlots, ", ") .. ".")
     end
     return {
         specID = specID,
@@ -1428,11 +1428,11 @@ local function RunJob(job)
             return {
                 ok = false,
                 message = job.itemSource == "owned"
-                    and ("No eligible bag item is available for: " .. table.concat(unmatchedSlots, ", ") .. ". Put usable gear for those slots in your bags, or choose Master Item Database.")
-                    or ("The selected item pool has no eligible candidates for: " .. table.concat(unmatchedSlots, ", ") .. ". Try Dungeon & Raid Items or unequip a different slot."),
+                    and ("No usable bag item was found for: " .. table.concat(unmatchedSlots, ", ") .. ". Put gear for those slots in your bags, or choose Master Item Database.")
+                    or ("No matching database item was found for: " .. table.concat(unmatchedSlots, ", ") .. ". Try Dungeon and Raid Items or open a different slot."),
             }
         end
-        return { ok = false, message = "Unequip one or more eligible items to open slots for the Stat Goal Matcher." }
+        return { ok = false, message = "Unequip at least one eligible item so KeyLab has a slot to fill." }
     end
 
     SyncRecognizedTargets(specID, snapshot.recognized)
@@ -1447,7 +1447,7 @@ local function RunJob(job)
     end
     if job.cancelled then return { ok = false, cancelled = true, message = "Matcher cancelled." } end
     local result = BuildResult(specID, job.itemType, job.itemSource, ownedRecords, best, goals, projection, estimate, mode, positions, unmatchedSlots, snapshot)
-    if not result then return { ok = false, message = "No valid item combination was found for the open slots." } end
+    if not result then return { ok = false, message = "KeyLab could not find a valid item combination for the open slots." } end
     return { ok = true, result = result }
 end
 
