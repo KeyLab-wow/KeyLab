@@ -1,5 +1,22 @@
 # KeyLab Changelog
 
+## Version 1.8.46 - Empty Stat Goal Guidance
+
+Released July 23, 2026
+
+- Added a clear prompt when all four Stat Goal Matcher percentages are still 0%.
+- Individual stats may still use a 0% goal when at least one other stat has a percentage entered.
+- Prevented an all-zero goal set from opening or running the matcher.
+
+## Version 1.8.45 - Friendlier Player Text
+
+Released July 23, 2026
+
+- Rewrote player-facing explanations across Home, tabs, guides, prompts, matcher results, settings, and empty states in a shorter, friendlier voice.
+- Renamed player-facing **KeyLab Action Sequencer** references to **KeyLab Macro Sequencer**.
+- Simplified Gear Planning, Macro Sequencer Information, Insights, and Stat Goal Matcher guidance without changing how they work.
+- Kept saved data, commands, filters, statuses, calculations, and addon behavior unchanged.
+
 ## Version 1.8.44 - Example Names and Read-Only Switching
 
 Released July 22, 2026

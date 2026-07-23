@@ -491,7 +491,7 @@ function KeyLab.UI:ShowSequencerCombatMessage(draftPreserved)
     StaticPopupDialogs = StaticPopupDialogs or {}
     if not StaticPopupDialogs["KEYLAB_SEQUENCER_COMBAT"] then
         StaticPopupDialogs["KEYLAB_SEQUENCER_COMBAT"] = {
-            text = "Sequencer editing is unavailable during combat. Your saved and bound sequence remains active. Leave combat to open this tab.",
+            text = "The Macro Sequencer Editor cannot open during combat. Your saved sequence and binding still work. Leave combat to edit it.",
             button1 = OKAY,
             timeout = 0,
             whileDead = true,

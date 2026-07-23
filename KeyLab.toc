@@ -1,8 +1,8 @@
 ## Interface: 120005, 120007
 ## Title: KeyLab
-## Notes: Mythic+ experimentation journal and raid boss-pull tracker.
+## Notes: Mythic+ and Raid tracking, practice tests, gear planning, and macro sequences in one personal journal.
 ## Author: Brione
-## Version: 1.8.44
+## Version: 1.8.46
 ## SavedVariables: KeyLabDB, KeyLabCaptureDB, KeyLabGearStatsProbeDB
 
 utils/KeyLab_Utils.lua
