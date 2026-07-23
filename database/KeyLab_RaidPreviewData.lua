@@ -10,28 +10,49 @@ local PREVIEW_PREFIX = "keylab-preview-raid-"
 local RAID_DEFINITIONS = {
     {
         instanceID = 1307,
-        instanceName = "Voidspire",
+        instanceName = "The Voidspire",
         difficultyID = 15,
         difficultyName = "Heroic",
         daysAgo = 0,
         latestPreview = true,
         bosses = {
-            { encounterID = 2733, encounterName = "[Preview] Voidspire Boss 1", pulls = 4, killPull = 4, offset = 60000 },
-            { encounterID = 2734, encounterName = "[Preview] Voidspire Boss 2", pulls = 8, killPull = 8, offset = 120000 },
-            { encounterID = 2735, encounterName = "[Preview] Voidspire Boss 3", pulls = 25, killPull = 25, offset = 180000 },
-            { encounterID = 2736, encounterName = "[Preview] Voidspire Boss 4", pulls = 6, killPull = 6, offset = 240000 },
-            { encounterID = 2737, encounterName = "[Preview] Voidspire Boss 5", pulls = 50, killPull = 50, offset = 300000 },
-            { encounterID = 2738, encounterName = "[Preview] Voidspire Boss 6", pulls = 9, killPull = 9, offset = 360000 },
+            { encounterID = 2733, encounterName = "Imperator Averzian", pulls = 3, killPull = 3, offset = -25000 },
+            { encounterID = 2734, encounterName = "Vorasius", pulls = 4, killPull = 4, offset = 15000 },
+            { encounterID = 2735, encounterName = "Fallen-King Salhadaar", pulls = 7, killPull = 7, offset = 35000 },
+            { encounterID = 2736, encounterName = "Vaelgor & Ezzorak", pulls = 4, killPull = 4, offset = 60000 },
+            { encounterID = 2737, encounterName = "Lightblinded Vanguard", pulls = 12, killPull = 12, offset = 20000 },
+            { encounterID = 2738, encounterName = "Crown of the Cosmos", pulls = 8, killPull = 8, offset = 75000 },
         },
     },
     {
         instanceID = 1314,
-        instanceName = "Dreamrift",
+        instanceName = "The Dreamrift",
         difficultyID = 14,
         difficultyName = "Normal",
-        daysAgo = 3,
+        daysAgo = 12,
         bosses = {
-            { encounterID = 2795, encounterName = "[Preview] Dreamrift Boss", pulls = 5, killPull = 5, offset = 90000 },
+            { encounterID = 2795, encounterName = "Chimaerus the Undreamt God", pulls = 8, killPull = 8, offset = 45000 },
+        },
+    },
+    {
+        instanceID = 1308,
+        instanceName = "March on Quel'Danas",
+        difficultyID = 15,
+        difficultyName = "Heroic",
+        daysAgo = 5,
+        bosses = {
+            { encounterID = 2739, encounterName = "Belo'ren, Child of Al'ar", pulls = 6, killPull = 6, offset = 30000 },
+            { encounterID = 2740, encounterName = "Midnight Falls", pulls = 11, killPull = 11, offset = 90000 },
+        },
+    },
+    {
+        instanceID = 1305,
+        instanceName = "Sporefall",
+        difficultyID = 15,
+        difficultyName = "Heroic",
+        daysAgo = 2,
+        bosses = {
+            { encounterID = 2711, encounterName = "Rotmire", pulls = 10, killPull = 10, offset = 55000 },
         },
     },
 }
@@ -102,23 +123,42 @@ local function PlayerSnapshot()
     }
 end
 
-local function BuildMetrics(pullIndex, bossOffset, duration, killed)
+local function BuildMetrics(player, pullIndex, bossOffset, duration, killed)
     local wave = (((pullIndex * 7) + math.floor(bossOffset / 60000)) % 11) - 5
-    local dps = 820000 + bossOffset + (pullIndex * 18000) + (wave * 22000) + (killed and 85000 or 0)
-    local hps = 155000 + math.floor(bossOffset * 0.12) + (pullIndex * 3500) + (wave * 6000)
-    local damageTaken = math.max(12000000, 27000000 + (duration * 115000) + (wave * 1100000) + bossOffset * 8)
-    local avoidableShare = math.max(0.07, 0.27 - (math.min(pullIndex, 24) * 0.007) + (wave * 0.004))
+    local progress = math.min(pullIndex - 1, 12)
+    local role = tostring(player and (player.role or player.blizzardRole) or "DAMAGER"):upper()
+    local dps, hps, damageTaken, absorbShare
+    if role == "HEALER" then
+        dps = 245000 + bossOffset + (progress * 9000) + (wave * 11000) + (killed and 28000 or 0)
+        hps = 835000 + math.floor(bossOffset * 0.45) + (progress * 18000) + (wave * 24000)
+        damageTaken = math.max(9000000, 15000000 + (duration * 68000) + (wave * 520000))
+        absorbShare = 0.20
+    elseif role == "TANK" then
+        dps = 445000 + bossOffset + (progress * 12000) + (wave * 15000) + (killed and 40000 or 0)
+        hps = 285000 + math.floor(bossOffset * 0.18) + (progress * 8000) + (wave * 9000)
+        damageTaken = math.max(28000000, 42000000 + (duration * 185000) + (wave * 1300000))
+        absorbShare = 0.11
+    else
+        dps = 760000 + bossOffset + (progress * 16000) + (wave * 19000) + (killed and 60000 or 0)
+        hps = 34000 + math.floor(math.max(0, bossOffset) * 0.05) + (progress * 1800) + (wave * 2200)
+        damageTaken = math.max(10000000, 19000000 + (duration * 82000) + (wave * 680000))
+        absorbShare = 0.035
+    end
+    local avoidableShare = math.max(0.055, 0.25 - (progress * 0.012) + (wave * 0.004))
+    local playerDeaths = killed and 0 or (((pullIndex + math.floor(math.abs(bossOffset) / 5000)) % 5 == 0) and 1 or 0)
+    local groupDeaths = killed and 0 or math.max(1, math.min(20, 15 - progress + (wave % 4)))
     return {
         damageDone = dps * duration,
         dps = dps,
         healingDone = hps * duration,
         hps = hps,
-        absorbs = math.floor(hps * duration * 0.16),
+        absorbs = math.floor(hps * duration * absorbShare),
         interrupts = (pullIndex % 4) + 1,
         dispels = pullIndex % 3,
         damageTaken = damageTaken,
         avoidableDamageTaken = math.floor(damageTaken * avoidableShare),
-        deaths = killed and 0 or (pullIndex % 3),
+        deaths = playerDeaths,
+        groupDeaths = groupDeaths,
     }
 end
 
@@ -140,6 +180,7 @@ local function BuildRanks(pullIndex, bossIndex)
         damageTaken = { rank = pressureRank, total = 20 },
         avoidableDamageTaken = { rank = ClampRank(12 - improvement + math.abs(sway)), total = 20 },
         deaths = { rank = ClampRank(5 + (pullIndex % 4)), total = 20 },
+        groupDeaths = { rank = 1, total = 1 },
     }
 end
 
@@ -159,8 +200,9 @@ local function BuildNightRanks(player, metrics, groupSize)
         damageTaken = tankRank,
         avoidableDamageTaken = 6,
         deaths = 3,
+        groupDeaths = 1,
     }
-    local lowerIsBetter = { damageTaken = true, avoidableDamageTaken = true, deaths = true }
+    local lowerIsBetter = { damageTaken = true, avoidableDamageTaken = true, deaths = true, groupDeaths = true }
     local ranks = {}
     for metricKey, rank in pairs(rankByMetric) do
         local value = tonumber(metrics[metricKey]) or 0
@@ -262,7 +304,7 @@ function Preview.Add()
                 local pullID = string.format("%spull-%d-%d-%d", PREVIEW_PREFIX, raidIndex, bossIndex, pullIndex)
                 local variantIndex = ((pullIndex + bossIndex - 2) % #TALENT_VARIANTS) + 1
                 local stats = STAT_VARIANTS[variantIndex]
-                local metrics = BuildMetrics(pullIndex, boss.offset, duration, killed)
+                local metrics = BuildMetrics(player, pullIndex, boss.offset, duration, killed)
                 totalBossSeconds = totalBossSeconds + duration
                 for metricKey, value in pairs(metrics) do
                     if metricKey ~= "dps" and metricKey ~= "hps" then

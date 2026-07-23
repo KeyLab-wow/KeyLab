@@ -85,6 +85,7 @@ local function EnsureGoals(specID)
     goals.priority = nil
     goals.targets = goals.targets or {}
     goals.displayOrder = NormalizeDisplayOrder(goals.displayOrder or legacyPriority)
+    goals.matchStyle = goals.matchStyle == "priority" and "priority" or "balanced"
 
     for statKey, defaultValue in pairs(DEFAULT_TARGETS) do
         goals.targets[statKey] = tonumber(goals.targets[statKey]) or defaultValue
@@ -118,6 +119,21 @@ function StatGoalsDB.GetDisplayOrder(specID)
     return copy
 end
 
+function StatGoalsDB.GetMatchStyle(specID)
+    return EnsureGoals(specID).matchStyle
+end
+
+function StatGoalsDB.SetMatchStyle(specID, style)
+    style = style == "priority" and "priority" or "balanced"
+    local goals = EnsureGoals(specID)
+    local changed = goals.matchStyle ~= style
+    goals.matchStyle = style
+    if changed and KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.ClearResult then
+        KeyLab.StatGoalMatcher.ClearResult(specID, "match_style_changed")
+    end
+    return true
+end
+
 function StatGoalsDB.MoveDisplayStat(specID, statKey, direction)
     if not VALID_STATS[statKey] then return false end
     local goals = EnsureGoals(specID)
@@ -130,6 +146,9 @@ function StatGoalsDB.MoveDisplayStat(specID, statKey, direction)
     local targetIndex = direction == "up" and currentIndex - 1 or direction == "down" and currentIndex + 1 or currentIndex
     if targetIndex < 1 or targetIndex > #order or targetIndex == currentIndex then return false end
     order[currentIndex], order[targetIndex] = order[targetIndex], order[currentIndex]
+    if KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.ClearResult then
+        KeyLab.StatGoalMatcher.ClearResult(specID, "priority_order_changed")
+    end
     return true
 end
 
@@ -158,16 +177,11 @@ end
 
 function StatGoalsDB.Validate(specID)
     local goals = EnsureGoals(specID)
-    local total = 0
     for statKey in pairs(VALID_STATS) do
         local value = tonumber(goals.targets[statKey])
         if value == nil or value < 0 or value > 100 then return false, "Each stat goal must be from 0% to 100%." end
-        total = total + value
     end
-    if math.abs(total - 100) > 0.001 then
-        return false, "Crit, Haste, Mastery, and Versatility must total exactly 100%."
-    end
-    return true, nil, total
+    return true, nil
 end
 
 function StatGoalsDB.IsValidStat(statKey)

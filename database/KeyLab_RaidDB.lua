@@ -63,10 +63,10 @@ end
 
 function Raids.AddNight(night)
     if type(night) ~= "table" then
-        return false, "raid night was not a table"
+        return false, "raid session was not a table"
     end
     if night.contentType ~= "raid" then
-        return false, "raid night contentType was not raid"
+        return false, "raid session contentType was not raid"
     end
 
     local nights = GetTable("raidNights")

@@ -210,24 +210,50 @@ local function FindAssignments(store, itemID)
     return out
 end
 
-local function CanTargetMultipleSlots(itemID, specID)
-    local slots = GetEligibleSlots(itemID, specID)
+local function CanTargetMultipleSlots(itemOrItemID, specID)
+    local slots = GetEligibleSlots(itemOrItemID, specID)
     return Contains(slots, "Main Hand") and Contains(slots, "Off Hand")
 end
 
-local function ItemClosesOffHand(itemID, specID)
+local function ItemClosesOffHand(itemOrItemID, specID)
     local mapping = Mapping()
-    local item = mapping and mapping.GetItem and mapping.GetItem(itemID, specID) or nil
+    local item = type(itemOrItemID) == "table" and itemOrItemID
+        or mapping and mapping.GetItem and mapping.GetItem(itemOrItemID, specID) or nil
     local occupiesBoth = item and (item.slot == "Two-Hand" or item.slot == "Ranged")
-    return occupiesBoth and not (mapping.IsDualWieldEligible and mapping.IsDualWieldEligible(itemID, specID)) or false
+    return occupiesBoth and not (mapping.IsDualWieldEligible and mapping.IsDualWieldEligible(itemOrItemID, specID)) or false
+end
+
+local function AssignmentMetadata(itemOrItemID)
+    if type(itemOrItemID) ~= "table" then return {} end
+    return {
+        itemName = itemOrItemID.name,
+        itemLink = itemOrItemID.itemLink or itemOrItemID.link,
+        itemSlot = itemOrItemID.slot,
+        sourceName = itemOrItemID.sourceName,
+        sourceType = itemOrItemID.sourceType,
+        ownedMatcherItem = itemOrItemID.sourceType == "Owned" or nil,
+        upgradeTrack = itemOrItemID.upgradeTrack,
+        upgradeRank = tonumber(itemOrItemID.upgradeRank),
+        upgradeMaxRank = tonumber(itemOrItemID.upgradeMaxRank),
+        itemLevel = tonumber(itemOrItemID.itemLevel),
+        projectedItemLevel = tonumber(itemOrItemID.projectedItemLevel),
+        mnSeason = tonumber(itemOrItemID.mnSeason),
+    }
 end
 
 local function PruneInvalidAlternatives(slotStore, specID, slotInstance)
     local mapping = Mapping()
     if not slotStore or not slotStore.alternatives or not mapping then return end
-    for itemID in pairs(slotStore.alternatives) do
-        local validSlot = Contains(GetEligibleSlots(itemID, specID), slotInstance)
-        local currentSeason = not mapping.IsCurrentSeasonItem or mapping.IsCurrentSeasonItem(itemID)
+    for itemID, record in pairs(slotStore.alternatives) do
+        local item = record and record.ownedMatcherItem and {
+            itemID = itemID,
+            slot = record.itemSlot,
+            sourceType = record.sourceType,
+            mnSeason = record.mnSeason,
+        } or itemID
+        local validSlot = Contains(GetEligibleSlots(item, specID), slotInstance)
+        local currentSeason = record and record.ownedMatcherItem
+            or not mapping.IsCurrentSeasonItem or mapping.IsCurrentSeasonItem(item)
         if not validSlot or not currentSeason then slotStore.alternatives[itemID] = nil end
     end
 end
@@ -317,7 +343,7 @@ function LootTargetsDB.CanAssign(specID, itemOrItemID, status, slotInstance, rep
     if not itemID then return false, "invalid_item" end
     if not status then return true end
     if not VALID_SLOTS[slotInstance] then return false, "slot_required" end
-    if not Contains(GetEligibleSlots(itemID, specID), slotInstance) then return false, "invalid_slot" end
+    if not Contains(GetEligibleSlots(itemOrItemID, specID), slotInstance) then return false, "invalid_slot" end
 
     local store = LootTargetsDB.GetSpecStore(specID)
     local slotStore = GetSlotStore(store, slotInstance, true)
@@ -344,7 +370,7 @@ function LootTargetsDB.CanAssign(specID, itemOrItemID, status, slotInstance, rep
     if not replaceExisting and slotStore.target and tonumber(slotStore.target.itemID) ~= itemID then
         return false, "slot_has_target"
     end
-    if not CanTargetMultipleSlots(itemID, specID) then
+    if not CanTargetMultipleSlots(itemOrItemID, specID) then
         for _, record in ipairs(FindAssignments(store, itemID)) do
             if record.status == "target" and record.slotInstance and record.slotInstance ~= slotInstance then
                 return false, "already_targeted"
@@ -365,15 +391,15 @@ function LootTargetsDB.SetAssignment(specID, itemOrItemID, status, slotInstance,
         return true
     end
 
-    local allowed, reason = LootTargetsDB.CanAssign(specID, itemID, status, slotInstance, replaceExisting)
+    local allowed, reason = LootTargetsDB.CanAssign(specID, itemOrItemID, status, slotInstance, replaceExisting)
     if not allowed then return false, reason end
-    sourceID = tonumber(sourceID)
+    sourceID = tonumber(sourceID or type(itemOrItemID) == "table" and itemOrItemID.sourceID)
     store.pending[itemID] = nil
     local slotStore = GetSlotStore(store, slotInstance, true)
-    local closesOffHand = status == "target" and slotInstance == "Main Hand" and ItemClosesOffHand(itemID, specID)
-    local record = NewRecord(itemID, sourceID, slotInstance, status, {
-        closesOffHand = closesOffHand == true,
-    })
+    local closesOffHand = status == "target" and slotInstance == "Main Hand" and ItemClosesOffHand(itemOrItemID, specID)
+    local metadata = AssignmentMetadata(itemOrItemID)
+    metadata.closesOffHand = closesOffHand == true
+    local record = NewRecord(itemID, sourceID, slotInstance, status, metadata)
     if status == "target" then
         if closesOffHand then store.slots["Off Hand"] = nil end
         RemoveItemAlternatives(store, itemID)
@@ -475,7 +501,21 @@ end
 local function EnrichRecord(record, specID)
     local mapping = Mapping()
     local item = mapping and mapping.GetItem and mapping.GetItem(record.itemID, specID, nil, record.sourceID) or nil
-    item = item or { itemID = record.itemID, name = "Item " .. tostring(record.itemID), slot = record.slotInstance or "" }
+    item = item or {
+        itemID = record.itemID,
+        name = record.itemName or ("Item " .. tostring(record.itemID)),
+        itemLink = record.itemLink,
+        link = record.itemLink,
+        slot = record.itemSlot or record.slotInstance or "",
+        sourceName = record.sourceName,
+        sourceType = record.sourceType,
+        upgradeTrack = record.upgradeTrack,
+        upgradeRank = record.upgradeRank,
+        upgradeMaxRank = record.upgradeMaxRank,
+        itemLevel = record.itemLevel,
+        projectedItemLevel = record.projectedItemLevel,
+        ownedMatcherItem = record.ownedMatcherItem == true,
+    }
     item.status = record.status
     item.slotInstance = record.slotInstance
     item.sourceID = record.sourceID or item.sourceID

@@ -8,10 +8,14 @@ local Preview = KeyLab.MythicPlusPreviewData
 local PREVIEW_PREFIX = "keylab-preview-mplus-"
 
 local DUNGEONS = {
-    { mapID = 558, name = "Magisters' Terrace", timeLimit = 2040 },
-    { mapID = 560, name = "Maisara Caverns", timeLimit = 1980 },
-    { mapID = 559, name = "Nexus-Point Xenas", timeLimit = 1800 },
-    { mapID = 557, name = "Windrunner Spire", timeLimit = 1980 },
+    { mapID = 558, name = "Magisters' Terrace", timeLimit = 2040, bosses = { "Arcanotron Custos", "Seranel Sunlash", "Gemellus", "Degentrius" } },
+    { mapID = 560, name = "Maisara Caverns", timeLimit = 1980, bosses = { "Muro'jin and Nekraxx", "Vordaza", "Rak'tul, Vessel of Souls" } },
+    { mapID = 559, name = "Nexus-Point Xenas", timeLimit = 1800, bosses = { "Chief Corewright Kasreth", "Corewarden Nysarra", "Lothraxion" } },
+    { mapID = 557, name = "Windrunner Spire", timeLimit = 1980, bosses = { "Emberdawn", "Derelict Duo", "Commander Kroluk", "The Restless Heart" } },
+    { mapID = 161, name = "Skyreach", timeLimit = 1680, bosses = { "Ranjit", "Araknath", "Rukhran", "High Sage Viryx" } },
+    { mapID = 402, name = "Algeth'ar Academy", timeLimit = 1860, bosses = { "Vexamus", "Overgrown Ancient", "Crawth", "Echo of Doragosa" } },
+    { mapID = 556, name = "Pit of Saron", timeLimit = 1800, bosses = { "Forgemaster Garfrost", "Krick and Ick", "Scourgelord Tyrannus" } },
+    { mapID = 583, name = "Seat of the Triumvirate", timeLimit = 2040, bosses = { "Zuraal the Ascended", "Saprish", "Viceroy Nezhar", "L'ura" } },
 }
 
 local TALENT_VARIANTS = {
@@ -27,24 +31,25 @@ local STAT_VARIANTS = {
 }
 
 local RUN_TIMING = {
-    { keyLevel = 9, durationMultiplier = 1.045, timed = false, upgrades = 0 },
-    { keyLevel = 10, durationMultiplier = 0.885, timed = true, upgrades = 1 },
-    { keyLevel = 11, durationMultiplier = 0.745, timed = true, upgrades = 2 },
-    { keyLevel = 12, durationMultiplier = 0.555, timed = true, upgrades = 3 },
+    { keyLevel = 7, durationMultiplier = 1.035, timed = false, upgrades = 0, daysAgo = 34 },
+    { keyLevel = 8, durationMultiplier = 0.978, timed = true, upgrades = 1, daysAgo = 26 },
+    { keyLevel = 9, durationMultiplier = 0.924, timed = true, upgrades = 1, daysAgo = 18 },
+    { keyLevel = 10, durationMultiplier = 0.872, timed = true, upgrades = 1, daysAgo = 10 },
+    { keyLevel = 11, durationMultiplier = 0.824, timed = true, upgrades = 1, daysAgo = 2 },
 }
 
-local PREVIEW_AFFIXES = { 148, 153, 158, 162 }
+local PREVIEW_AFFIXES = { 148, 153, 158, 162, 159 }
 
 local GEAR_SLOTS = {
     "Head", "Neck", "Shoulders", "Back", "Chest", "Wrist", "Hands", "Waist",
     "Legs", "Feet", "Finger 1", "Finger 2", "Trinket 1", "Trinket 2", "Main Hand", "Off Hand",
 }
 
-local function BuildGearProfile(variantIndex)
+local function BuildGearProfile(variantIndex, progressionIndex)
     local slots, signature = {}, {}
-    local level = 264 + (variantIndex * 2)
+    local level = 256 + ((progressionIndex or 1) * 2) + variantIndex
     for slotIndex, slotName in ipairs(GEAR_SLOTS) do
-        local itemID = 990000 + (variantIndex * 100) + slotIndex
+        local itemID = 990000 + ((progressionIndex or 1) * 1000) + (variantIndex * 100) + slotIndex
         local itemName = string.format("[Preview] %s Setup %s", slotName, string.char(64 + variantIndex))
         slots[slotName] = {
             slotName = slotName,
@@ -114,24 +119,38 @@ local function BuildRanks(runIndex)
         damageTaken = { rank = 4, total = 5 },
         avoidableDamageTaken = { rank = math.max(1, 5 - runIndex), total = 5 },
         deaths = { rank = 1, total = 5 },
+        groupDeaths = { rank = 1, total = 1 },
     }
 end
 
-local function BuildCombatSessions(dungeonIndex, runIndex, baseDPS, baseHPS)
+local function BuildCombatSessions(dungeon, dungeonIndex, runIndex, baseDPS, baseHPS, damagePressure)
     local sessions = {}
     local localDeaths, groupDeaths = 0, 0
+    local bossByPull = {}
+    for bossIndex, bossName in ipairs(dungeon.bosses or {}) do
+        local pullIndex = math.floor(((bossIndex * 12) / #dungeon.bosses) + 0.5)
+        bossByPull[pullIndex] = bossName
+    end
+
+    local groupDeathSchedule = {
+        [1] = { [5] = 2, [8] = 2, [11] = 3 },
+        [2] = { [6] = 2, [10] = 2 },
+        [3] = { [7] = 1, [11] = 1 },
+        [4] = { [9] = 1 },
+        [5] = {},
+    }
 
     for pullIndex = 1, 12 do
-        local isBoss = pullIndex == 4 or pullIndex == 8 or pullIndex == 12
+        local bossName = bossByPull[pullIndex]
+        local isBoss = bossName ~= nil
         local duration = isBoss and (92 + pullIndex * 4) or (42 + ((pullIndex * 13) % 39))
-        local performance = 0.78 + (((pullIndex * 17) % 37) / 100)
+        local performance = 0.82 + (((pullIndex * 17) % 31) / 100)
         local dps = math.floor(baseDPS * performance * (isBoss and 0.93 or 1.08))
         local hps = math.floor(baseHPS * (0.80 + (((pullIndex * 11) % 31) / 100)))
-        local damageTaken = math.floor((7600000 + pullIndex * 470000 + dungeonIndex * 310000) * (1.12 - runIndex * 0.055))
-        local playerDied = (runIndex <= 2 and pullIndex == 7) and 1 or 0
-        local groupDied = 0
-        if pullIndex % 5 == 0 then groupDied = 1 end
-        if runIndex == 1 and pullIndex == 11 then groupDied = groupDied + 1 end
+        local damageTaken = math.floor((damagePressure + pullIndex * 310000 + dungeonIndex * 190000) * (1.10 - runIndex * 0.045))
+        local playerDied = ((runIndex == 1 and (pullIndex == 8 or pullIndex == 11)) or (runIndex == 2 and pullIndex == 10) or (runIndex == 3 and pullIndex == 11) or (runIndex == 4 and dungeonIndex % 4 == 0 and pullIndex == 9)) and 1 or 0
+        local groupDied = (groupDeathSchedule[runIndex] and groupDeathSchedule[runIndex][pullIndex]) or 0
+        if runIndex == 5 and dungeonIndex % 3 == 0 and pullIndex == 10 then groupDied = 1 end
 
         localDeaths = localDeaths + playerDied
         groupDeaths = groupDeaths + groupDied
@@ -139,7 +158,7 @@ local function BuildCombatSessions(dungeonIndex, runIndex, baseDPS, baseHPS)
         table.insert(sessions, {
             sessionID = (dungeonIndex * 1000) + (runIndex * 100) + pullIndex,
             sessionName = isBoss
-                and string.format("(!) [Preview] Boss %d", pullIndex / 4)
+                and tostring(bossName)
                 or string.format("[Preview] Trash Pull %d", pullIndex),
             durationSeconds = duration,
             isAggregateSession = false,
@@ -198,16 +217,33 @@ function Preview.Add()
     local player = PlayerSnapshot()
     local now = time()
     local totalRuns = 0
+    local role = tostring(player and (player.role or player.blizzardRole) or "DAMAGER"):upper()
 
     for dungeonIndex, dungeon in ipairs(DUNGEONS) do
         for runIndex, timing in ipairs(RUN_TIMING) do
-            local sequence = ((dungeonIndex - 1) * #RUN_TIMING) + (#RUN_TIMING - runIndex)
-            local timestamp = now - ((sequence * 4 + 1) * 3600)
-            local duration = math.floor(dungeon.timeLimit * timing.durationMultiplier)
+            local timestamp = now - ((timing.daysAgo * 86400) + ((dungeonIndex - 1) * 3 * 3600))
+            local durationVariance = ((((dungeonIndex * 7) + (runIndex * 3)) % 5) - 2) * 0.006
+            local duration = math.floor(dungeon.timeLimit * (timing.durationMultiplier + durationVariance))
             local timeDelta = dungeon.timeLimit - duration
-            local baseDPS = 690000 + dungeonIndex * 38000 + runIndex * 72000
-            local baseHPS = 128000 + dungeonIndex * 8500 + runIndex * 12500
-            local sessions, localDeaths, groupDeaths = BuildCombatSessions(dungeonIndex, runIndex, baseDPS, baseHPS)
+            local dungeonVariance = (((dungeonIndex * 37) % 9) - 4) * 12000
+            local baseDPS, baseHPS, damagePressure, absorbShare
+            if role == "HEALER" then
+                baseDPS = 245000 + dungeonVariance + runIndex * 28000
+                baseHPS = 735000 + dungeonIndex * 16000 + runIndex * 52000
+                damagePressure = 4900000
+                absorbShare = 0.19
+            elseif role == "TANK" then
+                baseDPS = 425000 + dungeonVariance + runIndex * 36000
+                baseHPS = 255000 + dungeonIndex * 9000 + runIndex * 24000
+                damagePressure = 11600000
+                absorbShare = 0.10
+            else
+                baseDPS = 690000 + dungeonVariance + runIndex * 57000
+                baseHPS = 28000 + dungeonIndex * 1800 + runIndex * 4200
+                damagePressure = 6200000
+                absorbShare = 0.035
+            end
+            local sessions, localDeaths, groupDeaths = BuildCombatSessions(dungeon, dungeonIndex, runIndex, baseDPS, baseHPS, damagePressure)
             local totalDamage = baseDPS * duration
             local totalHealing = baseHPS * duration
             local variantIndex = ((dungeonIndex + runIndex - 2) % #TALENT_VARIANTS) + 1
@@ -228,7 +264,7 @@ function Preview.Add()
                 result = timing.timed and "Timed" or "Untimed",
                 challenge = {
                     mapID = dungeon.mapID,
-                    dungeonName = "[Preview] " .. dungeon.name,
+                    dungeonName = dungeon.name,
                     keyLevel = timing.keyLevel,
                     affixIDs = { runIndex % 2 == 0 and 9 or 10, 152, PREVIEW_AFFIXES[runIndex] },
                     durationSeconds = duration,
@@ -249,7 +285,7 @@ function Preview.Add()
                 },
                 player = encounterPlayer,
                 talents = { talentString = TALENT_VARIANTS[variantIndex] },
-                gear = BuildGearProfile(variantIndex),
+                gear = BuildGearProfile(variantIndex, runIndex),
                 stats = {
                     crit = stats.crit,
                     haste = stats.haste,
@@ -261,11 +297,11 @@ function Preview.Add()
                     dps = baseDPS,
                     healingDone = totalHealing,
                     hps = baseHPS,
-                    absorbs = math.floor(totalHealing * 0.17),
-                    interrupts = 18 + runIndex * 3 + dungeonIndex,
-                    dispels = 4 + runIndex,
-                    damageTaken = math.floor(92000000 * (1.10 - runIndex * 0.06) + dungeonIndex * 1800000),
-                    avoidableDamageTaken = math.floor(17500000 * (1.12 - runIndex * 0.12) + dungeonIndex * 420000),
+                    absorbs = math.floor(totalHealing * absorbShare),
+                    interrupts = 17 + runIndex * 2 + (dungeonIndex % 5),
+                    dispels = 2 + runIndex + (dungeonIndex % 3),
+                    damageTaken = math.floor((damagePressure * 11.5) * (1.10 - runIndex * 0.055) + dungeonIndex * 640000),
+                    avoidableDamageTaken = math.floor((damagePressure * 2.35) * (1.14 - runIndex * 0.12) + dungeonIndex * 180000),
                     deaths = localDeaths,
                     groupDeaths = groupDeaths,
                 },
