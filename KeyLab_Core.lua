@@ -3,7 +3,7 @@ KeyLab = KeyLab or {}
 _G.KeyLab = KeyLab
 
 KeyLab.addonName = ADDON_NAME
-KeyLab.version = KeyLab.version or "1.6.0"
+KeyLab.version = KeyLab.version or "1.8.19"
 
 KeyLab.UI = KeyLab.UI or {}
 KeyLab.Tabs = KeyLab.Tabs or {}
@@ -128,6 +128,13 @@ local function Initialize()
 end
 
 local function ResetAll()
+    if KeyLab.SequencerLibrary and KeyLab.SequencerLibrary.PrepareForAddonReset then
+        KeyLab.SequencerLibrary.PrepareForAddonReset()
+    end
+    if KeyLab.SequencerPrototype and KeyLab.SequencerPrototype.PrepareForAddonReset then
+        KeyLab.SequencerPrototype.PrepareForAddonReset()
+    end
+
     if KeyLab.DB and KeyLab.DB.ResetAll then
         KeyLab.DB.ResetAll()
     else

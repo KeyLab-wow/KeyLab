@@ -98,6 +98,7 @@ local CFG = {
         "Gear Planning",
         "Gear Targets",
         "Gear Dashboard",
+        "Sequencer",
         "Insights",
         "Settings",
     },
@@ -111,6 +112,16 @@ local ANALYSIS_ROUTES = {
     ["Gear Profiles"] = { mplus = "M+ Gear Profiles", raid = "Raid Gear Profiles" },
     ["Trends"] = { mplus = "M+ Trends", raid = "Raid Trends" },
 }
+
+local function GetNavigationLabel(category, mode)
+    if category == "Summary" then
+        return mode == "raid" and "Last Raid" or "Last Run"
+    end
+    if category == "Sequencer" then
+        return "Macro Sequencer"
+    end
+    return category
+end
 
 local OPTIONAL_TABS = {
     ["Gear Planning"] = true,
@@ -301,6 +312,11 @@ function KeyLab.UI:Create()
     close:SetSize(CFG.close.width, CFG.close.height)
     close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", CFG.close.x, CFG.close.y)
     close:SetScript("OnClick", function()
+        if GetNavigationKey(KeyLab.UI.selectedTab) == "Sequencer" and KeyLab.Tabs and KeyLab.Tabs.Sequencer
+            and KeyLab.Tabs.Sequencer.RequestLeave then
+            local allowed = KeyLab.Tabs.Sequencer:RequestLeave(function() frame:Hide() end)
+            if not allowed then return end
+        end
         frame:Hide()
     end)
     self.closeButton = close
@@ -333,6 +349,26 @@ function KeyLab.UI:Create()
 
     self:CreateTabButtons()
 
+    if not self.sequencerCombatEvents then
+        local combatEvents = CreateFrame("Frame")
+        combatEvents:RegisterEvent("PLAYER_REGEN_DISABLED")
+        combatEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
+        combatEvents:SetScript("OnEvent", function(_, event)
+            if event == "PLAYER_REGEN_DISABLED" then
+                local wasEditing = GetNavigationKey(KeyLab.UI.selectedTab) == "Sequencer"
+                if wasEditing then
+                    local fallback = KeyLab.UI.lastNonSequencerTab or "Home"
+                    KeyLab.UI:SelectTab(fallback)
+                    if KeyLab.UI.frame and KeyLab.UI.frame:IsShown() then
+                        KeyLab.UI:ShowSequencerCombatMessage(true)
+                    end
+                end
+            end
+            KeyLab.UI:RefreshSequencerNavigationState()
+        end)
+        self.sequencerCombatEvents = combatEvents
+    end
+
     self:SelectTab("Home")
 
     return frame
@@ -347,6 +383,9 @@ function KeyLab.UI:RefreshContentModeSelector()
         button:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
         button:SetBackdropBorderColor(border[1], border[2], border[3], border[4] or 1)
         ApplyColor(button.label, active and CFG.colors.gold or CFG.colors.text)
+    end
+    for category, button in pairs(self.tabButtons or {}) do
+        if button.label then button.label:SetText(GetNavigationLabel(category, selected)) end
     end
 end
 
@@ -410,11 +449,12 @@ function KeyLab.UI:CreateTabButtons()
         button.accent = accent
 
         local label
+        local navigationLabel = GetNavigationLabel(tabName, self.contentMode or GetSavedContentMode())
         if Theme.CreateText then
-            label = Theme.CreateText(button, tabName, "GameFontNormal", nil, CFG.colors.text)
+            label = Theme.CreateText(button, navigationLabel, "GameFontNormal", nil, CFG.colors.text)
         else
             label = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            label:SetText(tabName)
+            label:SetText(navigationLabel)
             ApplyColor(label, CFG.colors.text)
         end
         label:SetPoint("LEFT", button, "LEFT", 14, 0)
@@ -445,6 +485,46 @@ function KeyLab.UI:CreateTabButtons()
             y = y - (CFG.sidebar.modeHeight or 30) - CFG.sidebar.buttonGap
         end
     end
+end
+
+function KeyLab.UI:ShowSequencerCombatMessage(draftPreserved)
+    StaticPopupDialogs = StaticPopupDialogs or {}
+    if not StaticPopupDialogs["KEYLAB_SEQUENCER_COMBAT"] then
+        StaticPopupDialogs["KEYLAB_SEQUENCER_COMBAT"] = {
+            text = "Sequencer editing is unavailable during combat. Your saved and bound sequence remains active. Leave combat to open this tab.",
+            button1 = OKAY,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+        }
+    end
+    if draftPreserved and KeyLab.Tabs and KeyLab.Tabs.Sequencer and KeyLab.Tabs.Sequencer.SetStatus then
+        KeyLab.Tabs.Sequencer.preserveDraft = true
+        KeyLab.Tabs.Sequencer:SetStatus("Combat began while editing. Your current fields were preserved for this session.")
+    end
+    StaticPopup_Show("KEYLAB_SEQUENCER_COMBAT")
+end
+
+function KeyLab.UI:RefreshSequencerNavigationState()
+    local button = self.tabButtons and self.tabButtons["Sequencer"]
+    if not button then return end
+    local inCombat = InCombatLockdown and InCombatLockdown()
+    if inCombat then
+        button:SetBackdropColor(0.28, 0.035, 0.045, 0.94)
+        button:SetBackdropBorderColor(0.84, 0.22, 0.22, 1)
+        if button.label then button.label:SetTextColor(1.0, 0.78, 0.78, 1) end
+        if button.accent then button.accent:Hide() end
+        return
+    end
+
+    local selected = GetNavigationKey(self.selectedTab) == "Sequencer"
+    local bg = selected and (CFG.colors.buttonSelectedBg or CFG.colors.buttonBg) or CFG.colors.buttonBg
+    local border = selected and CFG.colors.buttonSelected or CFG.colors.buttonBorder
+    button:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
+    button:SetBackdropBorderColor(border[1], border[2], border[3], border[4] or 1)
+    ApplyColor(button.label, selected and CFG.colors.gold or CFG.colors.text)
+    if button.accent then button.accent:SetShown(selected) end
 end
 
 function KeyLab.UI:CreateTabFrame(tabName)
@@ -533,12 +613,25 @@ end
 function KeyLab.UI:SelectTab(tabName)
     self:Create()
 
+    if GetNavigationKey(tabName) == "Sequencer" and InCombatLockdown and InCombatLockdown() then
+        self:ShowSequencerCombatMessage(false)
+        self:RefreshSequencerNavigationState()
+        return
+    end
+
     local category, explicitMode = GetAnalysisRoute(tabName)
     if explicitMode then
         self.contentMode = SaveContentMode(explicitMode)
         self:RefreshContentModeSelector()
     elseif category then
         tabName = ResolveNavigationTab(category, self.contentMode or GetSavedContentMode())
+    end
+
+    if GetNavigationKey(self.selectedTab) == "Sequencer" and GetNavigationKey(tabName) ~= "Sequencer"
+        and KeyLab.Tabs and KeyLab.Tabs.Sequencer and KeyLab.Tabs.Sequencer.RequestLeave
+        and not (InCombatLockdown and InCombatLockdown()) then
+        local allowed = KeyLab.Tabs.Sequencer:RequestLeave(function() KeyLab.UI:SelectTab(tabName) end)
+        if not allowed then return end
     end
 
     local selectedFrame = self:CreateTabFrame(tabName)
@@ -556,6 +649,7 @@ function KeyLab.UI:SelectTab(tabName)
     end
 
     local selectedNavigation = GetNavigationKey(tabName)
+    if selectedNavigation ~= "Sequencer" then self.lastNonSequencerTab = tabName end
     for name, button in pairs(self.tabButtons or {}) do
         if name == selectedNavigation then
             local selectedBg = CFG.colors.buttonSelectedBg or {0.055, 0.085, 0.160, 0.90}
@@ -572,6 +666,7 @@ function KeyLab.UI:SelectTab(tabName)
     end
 
     self:RefreshSelectedTab()
+    self:RefreshSequencerNavigationState()
 
 end
 
@@ -583,6 +678,11 @@ end
 
 function KeyLab.UI:Hide()
     if self.frame then
+        if GetNavigationKey(self.selectedTab) == "Sequencer" and KeyLab.Tabs and KeyLab.Tabs.Sequencer
+            and KeyLab.Tabs.Sequencer.RequestLeave then
+            local allowed = KeyLab.Tabs.Sequencer:RequestLeave(function() KeyLab.UI.frame:Hide() end)
+            if not allowed then return end
+        end
         self.frame:Hide()
     end
 end
@@ -591,7 +691,7 @@ function KeyLab.UI:Toggle()
     self:Create()
 
     if self.frame:IsShown() then
-        self.frame:Hide()
+        self:Hide()
     else
         self.frame:Show()
         self:SelectTab(self.selectedTab or "Home")

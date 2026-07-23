@@ -2,11 +2,13 @@
 ## Title: KeyLab
 ## Notes: Mythic+ experimentation journal and raid boss-pull tracker.
 ## Author: Brione
-## Version: 1.6.1
+## Version: 1.8.44
 ## SavedVariables: KeyLabDB, KeyLabCaptureDB, KeyLabGearStatsProbeDB
 
 utils/KeyLab_Utils.lua
 KeyLab_Core.lua
+prototype/KeyLab_SequencerPrototype.lua
+sequencer/KeyLab_SequencerLibrary.lua
 
 mapping/KeyLab_StatMapping.lua
 mapping/KeyLab_MetricMapping.lua
@@ -72,6 +74,7 @@ ui/KeyLab_Trends.lua
 ui/KeyLab_Practice.lua
 ui/KeyLab_GearPlanning.lua
 ui/KeyLab_GearDashboard.lua
+ui/KeyLab_SequencerLibrary.lua
 ui/KeyLab_GearTargets.lua
 ui/KeyLab_GearTargetsWindow.lua
 ui/KeyLab_LFGTooltips.lua
