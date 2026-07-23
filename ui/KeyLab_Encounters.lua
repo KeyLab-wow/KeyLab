@@ -1191,7 +1191,7 @@ function Encounters:Create(parent)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
     subtitle:SetWidth(CFG.header.subtitleWidth)
     subtitle:SetJustifyH("LEFT")
-    subtitle:SetText("Review completed Mythic+ encounters. Select a run to view captured details below.")
+    subtitle:SetText("Review your saved Mythic+ runs and select one to see its details.")
     ApplyColor(subtitle, CFG.colors.muted)
 
     self.summaryText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")

@@ -302,7 +302,7 @@ function HOME:Create(parent)
 
     local subtitle = MakeText(
         hero,
-        "A personal Mythic+ and Raid performance lab for encounter results, stat, talent and gear experiments, gearing plans, and the patterns that work for your characters.",
+        "Track your Mythic+ runs and raid pulls, compare your setups, test rotations, and plan your gear—all in one personal journal.",
         12,
         COLORS.text,
         "LEFT"
@@ -370,7 +370,7 @@ function HOME:Create(parent)
     latestSaved:SetPoint("TOPRIGHT", latest, "TOPRIGHT", -16, -56)
     latestSaved:SetSize(190, 22)
 
-    local latestHint = MakeText(latest, "Choose Mythic+ and open Last Run to review the full run, group lineup, totals, and pull graph.", 11, COLORS.muted, "LEFT")
+    local latestHint = MakeText(latest, "Choose Mythic+ mode and open Summary to review your latest run.", 11, COLORS.muted, "LEFT")
     latestHint:SetPoint("TOPLEFT", latest, "TOPLEFT", 14, -84)
     latestHint:SetSize(width - 28, 18)
 
@@ -379,14 +379,14 @@ function HOME:Create(parent)
     local releaseNoteHeight = 132
     local releaseNote = MakePanel(frame, CFG.x, y, width, releaseNoteHeight, false)
 
-    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.6.0", 14, COLORS.title, "LEFT")
+    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8", 14, COLORS.title, "LEFT")
     releaseTitle:SetPoint("TOPLEFT", releaseNote, "TOPLEFT", 14, -12)
     releaseTitle:SetSize(280, 18)
 
     local releaseBody = MakeText(
         releaseNote,
-        "Complete Raid support adds Encounters, Last Run or Last Raid, Talent Builds, Stat Profiles, Gear Profiles, and Trends alongside shared Mythic+ | Raid navigation. This update also adds Gear Planning, the Master Item Database, Stat Goal Matcher, redesigned Gear Targets and Gear Dashboard, and timed Practice Sessions.\n\n" ..
-        "Previously saved encounters remain in your journal. New Raid, profile, ranking, and gear fields appear only on encounters captured with this version.",
+        "Build and bind your own Macro Sequences, then save the active version with your Practice Session results.\n\n" ..
+        "The improved Stat Goal Matcher now plans complete gear sets, projects your final stats, warns about reduced stat efficiency, and explains the closest match it found.",
         11,
         COLORS.muted,
         "LEFT"
@@ -404,11 +404,11 @@ function HOME:Create(parent)
 
     local reqBody = MakeText(
         required,
-        "KeyLab uses Blizzard's built-in Damage Meter data to capture Mythic+ runs, raid boss pulls, and Practice outcomes.\n\n" ..
-        "Before running content:\n" ..
-        "- Game Menu > Gameplay Enhancements\n" ..
-        "- Under Damage Meter, enable Damage Meter\n" ..
-        "- Enable Auto Reset Damage Meter",
+        "KeyLab uses Blizzard's Damage Meter to save Mythic+ runs, raid boss pulls, and Practice results.\n\n" ..
+        "Before you begin:\n" ..
+        "- Open Game Menu > Gameplay Enhancements\n" ..
+        "- Turn on Damage Meter\n" ..
+        "- Turn on Auto Reset Damage Meter",
         12,
         COLORS.text,
         "LEFT"
@@ -424,8 +424,8 @@ function HOME:Create(parent)
 
     local macroBody = MakeText(
         macro,
-        "Use the minimap icon to open or close the journal.\n\n" ..
-        "You can also type /keylab, or create a General Macro named KeyLab with /keylab as the command.",
+        "Use the minimap icon or type /keylab to open and close KeyLab.\n\n" ..
+        "You can also create a General Macro that uses /keylab.",
         12,
         COLORS.text,
         "LEFT"

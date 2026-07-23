@@ -351,7 +351,7 @@ function GearDashboard:Build()
     self.title = MakeText(self.frame, "Gear Dashboard", "GameFontNormalLarge", HEADER.titleSize, COLORS.gold)
     self.title:SetPoint("TOPLEFT", self.frame, "TOPLEFT", HEADER.x, HEADER.titleY)
     self.title:SetSize(420, 28)
-    self.subtitle = MakeText(self.frame, "Your equipped gear, Tier Set choices, saved Targets, and Alternatives at a glance.", "GameFontHighlightSmall", nil, COLORS.muted)
+    self.subtitle = MakeText(self.frame, "See your equipped gear, Tier progress, Targets, and Alternatives at a glance.", "GameFontHighlightSmall", nil, COLORS.muted)
     self.subtitle:SetPoint("TOPLEFT", self.title, "BOTTOMLEFT", 0, -4)
     self.subtitle:SetSize(900, 20)
 

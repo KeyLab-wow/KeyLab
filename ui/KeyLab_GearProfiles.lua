@@ -489,7 +489,7 @@ local function NewGearTab(mode)
         self.frame = frame
         local titleText = Place(frame, self.title, HEADER.x, HEADER.titleY, HEADER.titleWidth, "GameFontNormalLarge", HEADER.titleSize, Color("gold"))
         titleText:SetHeight(HEADER.titleHeight)
-        local description = Place(frame, "Groups identical equipped setups and compares their observed outcomes, using the same profile workflow as talents and stats.", HEADER.x, HEADER.descriptionY, HEADER.descriptionWidth, "GameFontHighlightSmall", nil, Color("muted"))
+        local description = Place(frame, "Compare complete gear setups you actually used and the results you recorded with them.", HEADER.x, HEADER.descriptionY, HEADER.descriptionWidth, "GameFontHighlightSmall", nil, Color("muted"))
         description:SetHeight(HEADER.descriptionHeight)
         self.summary = Place(frame, "Loading gear profiles...", HEADER.x, HEADER.summaryY, HEADER.summaryWidth, "GameFontDisableSmall", nil, Color("muted"))
         self.summary:SetHeight(HEADER.summaryHeight)

@@ -790,8 +790,8 @@ local function BuildPullGraph(parent, state, profile, yOffset)
     AddLine(card, profile.subtitle or "Performance for each captured combat session in this run.", 14, -34, 700, COLORS.muted, "GameFontDisableSmall")
 
     if #sessions == 0 then
-        AddLine(card, "No pull timeline yet.", 18, -74, 820, COLORS.gold, "GameFontNormal")
-        AddLine(card, "Complete a fresh Mythic+ run with combat sessions available and KeyLab will draw this graph here.", 18, -100, 820, COLORS.muted, "GameFontNormal")
+        AddLine(card, "No pull timeline is available yet.", 18, -74, 820, COLORS.gold, "GameFontNormal")
+        AddLine(card, "Complete a new Mythic+ run and KeyLab will draw the pull graph here.", 18, -100, 820, COLORS.muted, "GameFontNormal")
         return card
     end
 
@@ -947,7 +947,7 @@ function LastRun:Refresh()
     local state = Analysis().BuildState and Analysis().BuildState() or { hasRun = false }
     if not state.hasRun then
         local card = MakeCard(self.content, 0, 0, CONTENT_WIDTH, 120, "M+ Last Run", COLORS.gold)
-        AddLine(card, "Complete a Mythic+ run and KeyLab will keep the newest recap here.", 18, -48, 820, COLORS.muted, "GameFontNormal")
+        AddLine(card, "Complete a Mythic+ run and your newest summary will appear here.", 18, -48, 820, COLORS.muted, "GameFontNormal")
         self.content:SetHeight(150)
         return
     end
@@ -970,7 +970,7 @@ function LastRun:Create(parent)
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", HEADER.x, HEADER.titleY)
     title:SetSize(900, 24)
 
-    local subtitle = MakeText(frame, "Your newest Mythic+ recap: timer result, group lineup, run totals, pull timeline, and role focus.", "GameFontHighlightSmall", nil, COLORS.muted)
+    local subtitle = MakeText(frame, "See your latest Mythic+ run, including the timer, group, totals, pulls, and role results.", "GameFontHighlightSmall", nil, COLORS.muted)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     subtitle:SetSize(900, 20)
 

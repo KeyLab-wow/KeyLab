@@ -203,7 +203,7 @@ local function EnsureFrame()
     frame.subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     frame.subtitle:SetPoint("TOPLEFT", frame.title, "BOTTOMLEFT", 0, -4)
     frame.subtitle:SetPoint("RIGHT", frame, "RIGHT", -44, 0)
-    frame.subtitle:SetText("Targets saved from KeyLab's loot database")
+    frame.subtitle:SetText("Targets saved in Gear Targets")
     frame.subtitle:SetTextColor(unpack(CFG.colors.muted))
 
     local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
@@ -279,7 +279,7 @@ function GearWindow.Refresh(resultNames)
         SortItems(targets)
         if #targets == 0 then
             AddLine(f, "No Gear Targets saved yet.", CFG.colors.muted)
-            AddLine(f, "Open the Gear Targets tab and choose items as Targets.", CFG.colors.text, 16)
+            AddLine(f, "Open Gear Targets and choose the items you want to track.", CFG.colors.text, 16)
         else
             local byDungeon, names = {}, {}
             for _, item in ipairs(targets) do

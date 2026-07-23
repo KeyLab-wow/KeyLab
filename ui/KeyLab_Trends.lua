@@ -1604,7 +1604,7 @@ function Trends:Create(parent)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
     subtitle:SetWidth(CFG.header.subtitleWidth)
     subtitle:SetJustifyH("LEFT")
-    subtitle:SetText("Shows whether recent saved runs are improving, stable, or slipping.")
+    subtitle:SetText("See whether your recent Mythic+ results are improving, steady, or changing.")
     ApplyColor(subtitle, CFG.colors.muted)
 
     self.summaryText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")

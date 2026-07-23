@@ -585,7 +585,7 @@ local function EnsureMonitor()
     frame.timer:SetPoint("TOP", frame, "TOP", 0, -54)
     frame.timer:SetSize(320, 32)
 
-    frame.note = MakeText(frame, "Let pets and lingering damage finish, then press Stop. KeyLab freezes the test time.", "GameFontHighlightSmall", nil, COLORS.muted, "CENTER")
+    frame.note = MakeText(frame, "Let pets and leftover damage finish, then choose Stop. KeyLab will save the test time.", "GameFontHighlightSmall", nil, COLORS.muted, "CENTER")
     frame.note:SetPoint("TOP", frame.timer, "BOTTOM", 0, -10)
     frame.note:SetSize(310, 34)
 
@@ -687,10 +687,10 @@ function Practice:ShowMonitor()
     local targetDuration = active and tonumber(active.targetDurationSeconds)
     if targetDuration then
         monitor.title:SetText("Practice Session - " .. FormatDuration(targetDuration))
-        monitor.note:SetText("Damage Done will snapshot automatically when the timer reaches the selected test length.")
+        monitor.note:SetText("KeyLab will save the Damage Done total when the timer ends.")
     else
         monitor.title:SetText("Practice Session - Manual")
-        monitor.note:SetText("Press Stop when your test ends. KeyLab will snapshot the active Damage Meter totals.")
+        monitor.note:SetText("Choose Stop when the test ends. KeyLab will save the active Damage Meter totals.")
     end
     ApplyColor(monitor.note, COLORS.muted)
     if monitor.stop then
@@ -1017,7 +1017,7 @@ end
 function Practice:BuildDetails(parent, session)
     local panel = MakePanel(parent, 0, LAYOUT.detailsY, 908, 192, "Session Details")
     if not session then
-        AddLine(panel, "Select a saved practice session to view its captured setup.", 14, -44, 830, COLORS.muted, "GameFontNormal")
+        AddLine(panel, "Select a saved Practice Session to see its setup and results.", 14, -44, 830, COLORS.muted, "GameFontNormal")
         return panel
     end
 
@@ -1086,7 +1086,7 @@ function Practice:Refresh()
     title:SetPoint("TOPLEFT", self.content, "TOPLEFT", HEADER.x, HEADER.titleY)
     title:SetSize(880, 24)
 
-    local subtitle = MakeText(self.content, "Compare controlled training dummy sessions by setup, stats, talents, and captured outcomes.", "GameFontHighlightSmall", nil, COLORS.muted)
+    local subtitle = MakeText(self.content, "Test your setup at a training dummy and compare the results you save.", "GameFontHighlightSmall", nil, COLORS.muted)
     subtitle:SetPoint("TOPLEFT", self.content, "TOPLEFT", 18, -44)
     subtitle:SetSize(860, 16)
 

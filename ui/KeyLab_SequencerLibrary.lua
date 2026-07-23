@@ -379,7 +379,7 @@ function Sequencer:RefreshMacroValidation()
     end
     if Trim(value)=="" then
         self.characterCount:SetText(tostring(#value).." / 255 characters"); Color(self.characterCount,COLORS.muted)
-        self.validationText:SetText("Enter a macro block. Add will turn green when it is ready."); Color(self.validationText,COLORS.muted)
+        self.validationText:SetText("Enter a macro block. Add becomes available when the block is ready."); Color(self.validationText,COLORS.muted)
         return
     end
     local valid,message
@@ -387,11 +387,11 @@ function Sequencer:RefreshMacroValidation()
     self.characterCount:SetText(tostring(#value).." / 255 characters")
     Color(self.characterCount,#value>255 and COLORS.red or #value>220 and COLORS.yellow or COLORS.muted)
     if valid and not self.selectedBlockIndex then
-        self.validationText:SetText("Ready to Add - choose Add to place this macro in Sequence Blocks."); Color(self.validationText,COLORS.green); ButtonAccent(self.macroAddButton,COLORS.green,COLORS.green)
+        self.validationText:SetText("Ready to add. Choose Add to place this macro in Sequence Blocks."); Color(self.validationText,COLORS.green); ButtonAccent(self.macroAddButton,COLORS.green,COLORS.green)
     elseif valid and self.editorChanged then
-        self.validationText:SetText("Ready - choose Save to update this block, or Add to create another block."); Color(self.validationText,COLORS.green); ButtonAccent(self.macroSaveButton,COLORS.green,COLORS.green); ButtonAccent(self.macroAddButton,COLORS.green,COLORS.green)
+        self.validationText:SetText("Ready. Choose Save to update this block, or Add to make a new one."); Color(self.validationText,COLORS.green); ButtonAccent(self.macroSaveButton,COLORS.green,COLORS.green); ButtonAccent(self.macroAddButton,COLORS.green,COLORS.green)
     elseif valid then
-        self.validationText:SetText("Saved block selected. Edit it and choose Save, or Clear to start a new block."); Color(self.validationText,COLORS.green)
+        self.validationText:SetText("Block selected. Edit it and choose Save, or choose Clear to start a new block."); Color(self.validationText,COLORS.green)
     else self.validationText:SetText("Invalid: "..tostring(message)); Color(self.validationText,COLORS.red) end
 end
 function Sequencer:ClearMacroEditor()
@@ -802,7 +802,7 @@ function Sequencer:BuildMacroEditor(parent)
     end)
     edit:SetScript("OnCursorChanged",function(_,x,y,w,h) caret:ClearAllPoints(); caret:SetPoint("TOPLEFT",edit,"TOPLEFT",(x or 0)+1,y or 0); caret:SetHeight(math.max(12,h or 14)); caret:SetShown(edit:HasFocus()); local offset=scroll:GetVerticalScroll(); local height=scroll:GetHeight(); if -(y or 0)<offset then scroll:SetVerticalScroll(math.max(0,-(y or 0))) elseif -(y or 0)+(h or 14)>offset+height then scroll:SetVerticalScroll(-(y or 0)+(h or 14)-height) end end)
     self.macroEdit=edit
-    self.validationText=Text(panel,"Enter a macro block. Add will turn green when it is ready.","GameFontHighlightSmall",11,COLORS.muted); self.validationText:SetPoint("TOPLEFT",14,-154); self.validationText:SetSize(430,38)
+    self.validationText=Text(panel,"Enter a macro block. Add becomes available when the block is ready.","GameFontHighlightSmall",11,COLORS.muted); self.validationText:SetPoint("TOPLEFT",14,-154); self.validationText:SetSize(430,38)
     local clear=Button(panel,"Clear",58,function() Sequencer:ClearMacroEditor() end); clear:SetPoint("BOTTOMRIGHT",-210,10)
     local add=Button(panel,"Add",58,function() Sequencer:AddMacroBlock() end); add:SetPoint("BOTTOMRIGHT",-146,10)
     local save=Button(panel,"Save",58,function() Sequencer:SaveMacroBlock() end); save:SetPoint("BOTTOMRIGHT",-82,10)
@@ -868,7 +868,7 @@ end
 function Sequencer:BuildBindingList(frame)
     local view=FullViewPanel(frame); self.views.binding=view
     local title=Text(view,"Binding List","GameFontNormalLarge",18,COLORS.gold); title:SetPoint("TOPLEFT",20,-18)
-    local help=Text(view,"Current class and specialization. Select a sequence to return to its editor.","GameFontHighlightSmall",11,COLORS.muted); help:SetPoint("TOPLEFT",20,-48); help:SetSize(860,18)
+    local help=Text(view,"Bindings for your current class and spec. Select a sequence to open it in the Editor.","GameFontHighlightSmall",11,COLORS.muted); help:SetPoint("TOPLEFT",20,-48); help:SetSize(860,18)
     local headings={{"Binding",32,105},{"Sequence",142,250},{"Active Version",412,150},{"Status",570,140}}
     for _,item in ipairs(headings) do local label=Text(view,item[1],"GameFontHighlightSmall",11,COLORS.gold); label:SetPoint("TOPLEFT",item[2],-82); label:SetSize(item[3],18) end
     local scroll=CreateFrame("ScrollFrame",nil,view,"UIPanelScrollFrameTemplate"); scroll:SetPoint("TOPLEFT",20,-104); scroll:SetPoint("BOTTOMRIGHT",-34,54)
@@ -883,59 +883,56 @@ local function InfoJoin(parts) return table.concat(parts,"\n\n") end
 
 local INFORMATION_SECTIONS={
     {
-        title="1. Welcome to the KeyLab Action Sequencer",
+        title="1. Welcome to the KeyLab Macro Sequencer",
         body=InfoJoin({
             InfoHeading("What It Does"),
-            "The KeyLab Action Sequencer lets you arrange multiline World of Warcraft macro blocks into a sequence and assign that sequence to a keyboard key or mouse button.\n\nEvery physical press attempts one predetermined sequence block. KeyLab does not automatically press keys, choose abilities, or determine the best action for you.",
+            "Build a sequence from the World of Warcraft macro blocks you want to use. Then bind the sequence to a keyboard key or mouse button.\n\nEach physical press tries one planned block. KeyLab never presses keys, chooses abilities, or decides what is best for you.",
             InfoTip(),
-            "KeyLab controls which macro block is attempted. World of Warcraft controls whether the action in that block can execute.",
+            "KeyLab chooses which saved block to try. World of Warcraft decides whether that block can run.",
         }),
     },
     {
         title="2. One Press, One Step",
         body=InfoJoin({
-            "Every complete keyboard or mouse-button press advances the sequence by exactly one step.\n\nKeyLab supports both World of Warcraft input settings:\n"..InfoList({
-                "Cast actions when the key is pressed down",
-                "Cast actions when the key is released",
-            }).."\n\nOnly the selected input edge can execute or advance the sequence. The opposite edge is ignored.\n\nHolding a key does not authorize KeyLab to generate additional presses. Every sequence step requires a new physical keyboard or mouse-button press.",
+            "Each full keyboard or mouse-button press moves the sequence forward by one step.\n\nThis works whether WoW casts on key-down or key-up. Only the active part of the press can run the block. The other part is ignored.\n\nHolding a key does not create more presses. Every step needs a new physical press.",
             InfoHeading("Important"),
-            "A sequence step is consumed when it is attempted, even when its spell or item cannot execute because of:\n"..InfoList({
+            "A step is used when KeyLab tries it, even if the action cannot run because of:\n"..InfoList({
                 "The Global Cooldown",
                 "A cooldown",
-                "Insufficient resources",
-                "An invalid target",
-                "Range or line-of-sight restrictions",
+                "Not enough resources",
+                "The wrong target",
+                "Range or line of sight",
                 "A missing item",
-                "Another World of Warcraft restriction",
-            }).."\n\nKeyLab does not inspect the result and retry or select another action.",
+                "Another WoW rule",
+            }).."\n\nKeyLab does not check the result, retry the block, or choose a different action.",
         }),
     },
     {
         title="3. Sequence Blocks",
         body=InfoJoin({
-            "Each sequence consists of one or more Action Blocks.\n\nAn Action Block may contain multiple supported World of Warcraft macro lines, up to 255 characters total.",
+            "A sequence contains one or more macro blocks. Each block may contain several supported WoW macro lines, up to 255 characters total.",
             InfoHeading("Example"),
             "/startattack\n/petattack\n/autoshot\n/cast [mod:ctrl,@player] Binding Shot; [@target] Kill Command",
-            "One press attempts the complete selected block. World of Warcraft evaluates its commands, conditionals, targets, cooldowns, and restrictions.\n\nUse the arrows beside a block to change its position. Disable a block when you want to keep it saved without including it in the active sequence.\n\nChoose any [Example] entry in the Editor's Sequence menu to explore complete read-only references. Examples cannot be edited, bound, saved, activated, or executed.",
+            "One press tries the whole selected block. WoW checks its commands, conditions, targets, cooldowns, and other rules.\n\nUse the arrows to move a block. Turn off Enabled to keep a block saved without using it.\n\nThe Sequence menu also includes read-only examples. You can study them, but you cannot edit, bind, save, activate, or run them.",
         }),
     },
     {
         title="4. Sequence Modes",
         body=InfoJoin({
             InfoHeading("Sequential"),
-            "Attempts each enabled block in order, then returns to the first block.\n\n1 -> 2 -> 3 -> 4 -> 1\n\nThis provides the most direct and predictable sequence pattern.",
+            "Tries each enabled block in order, then starts again.\n\n1 -> 2 -> 3 -> 4 -> 1\n\nThis is the simplest and most predictable mode.",
             InfoHeading("Priority"),
-            "Revisits earlier blocks more frequently while progressing through the sequence.\n\nThis can be useful when actions placed near the beginning should be attempted more often. Longer Priority sequences may feel repetitive because the earlier blocks are revisited frequently.",
+            "Returns to earlier blocks more often as it moves through the sequence. Put actions you want tried more often near the beginning.\n\nLong Priority sequences may feel repetitive.",
             InfoHeading("Reverse Priority"),
-            "Uses the opposite priority pattern, revisiting later blocks more frequently according to the configured sequence order.",
+            "Works in the opposite direction and returns to later blocks more often.",
             InfoTip(),
-            "Sequential is the easiest mode to understand. When using either Priority mode, start with a small number of blocks and expand only when the sequence still feels responsive.",
+            "Start with Sequential. If you use Priority or Reverse Priority, begin with a few blocks and add more only if the sequence still feels smooth.",
         }),
     },
     {
         title="5. Versions",
         body=InfoJoin({
-            "A sequence may contain multiple named versions for different situations, such as:\n"..InfoList({
+            "Create named versions for different situations, such as:\n"..InfoList({
                 "Mythic+",
                 "Raid",
                 "Delves",
@@ -943,88 +940,88 @@ local INFORMATION_SECTIONS={
                 "Single Target",
                 "Multi-Target",
             }),
-            "Only one version of a sequence is active at a time. Changing the active version is a manual player decision and is performed outside combat.\n\nThe key or mouse binding belongs to the sequence, so activating another version does not require rebinding it.\n\nWhen a Practice Session is saved, KeyLab records the sequence and active version used for that session.",
+            "Only one version is active at a time. You must change it yourself while out of combat.\n\nThe binding belongs to the sequence, so changing versions does not change its key or mouse button.\n\nPractice Sessions save the sequence and active version used during the test.",
         }),
     },
     {
         title="6. Key and Mouse Bindings",
         body=InfoJoin({
             "Each sequence may have one keyboard or mouse-button binding.\n\nThe Binding List shows:\n"..InfoList({
-                "Assigned binding",
-                "Sequence name",
+                "Binding",
+                "Sequence",
                 "Active version",
-                "Current status",
+                "Status",
             }),
-            "Bindings are stored for the current class and specialization. A binding cannot control more than one KeyLab sequence for the same class and specialization.\n\nSequence names must also be unique within the current class and specialization.\n\nUse Set to create a binding, Edit to replace it, or Delete to remove it.",
+            "Bindings are saved for your current class and spec. One binding cannot control two KeyLab sequences for the same class and spec.\n\nSequence names must also be unique for that class and spec.\n\nUse Set to add a binding, Edit to change it, or Delete to remove it.",
         }),
     },
     {
-        title="7. Macro Conditionals",
+        title="7. Macro Conditions",
         body=InfoJoin({
-            "World of Warcraft macro conditionals can change what a block attempts without allowing KeyLab to make the decision itself.",
+            "WoW macro conditions can change what a block tries.",
             InfoHeading("Example"),
             "/cast [mod:ctrl,@player] Binding Shot; [@target] Kill Command",
-            "While Ctrl is held, World of Warcraft attempts Binding Shot at the player's location. Otherwise, it attempts Kill Command at the current target.\n\nCommon modifiers include:\n\n[mod:ctrl]\n[mod:shift]\n[mod:alt]\n\nTargets and conditionals are interpreted entirely by World of Warcraft. Invalid combinations simply will not execute.",
+            "Hold Ctrl to try Binding Shot at your location. Without Ctrl, the macro tries Kill Command on your target.\n\nCommon modifiers:\n\n[mod:ctrl]\n[mod:shift]\n[mod:alt]\n\nWoW reads all targets and conditions. If a combination is not valid, it will not run.",
         }),
     },
     {
         title="8. Action, Nil",
         body=InfoJoin({
-            "World of Warcraft can manage a simple action-once-per-target pattern with /castsequence, reset=target, and nil.",
+            "WoW can use /castsequence, reset=target, and nil to try an action once for each selected target.",
             InfoHeading("Example"),
             "/castsequence reset=target Hunter's Mark, nil",
-            "Hunter's Mark is attempted once for the selected target. The internal cast sequence then reaches nil until World of Warcraft detects a target change and resets it.\n\nKeyLab does not detect the target change or control the internal reset. World of Warcraft manages that behavior.",
+            "The macro tries Hunter's Mark once, then reaches nil. When WoW detects a new selected target, it resets the cast sequence.\n\nWoW—not KeyLab—tracks the target and controls this reset.",
         }),
     },
     {
         title="9. Global Cooldown and Spell Queue",
         body=InfoJoin({
-            "The KeyLab Action Sequencer does not create a custom Global Cooldown, delay, timer, click rate, or Spell Queue Window.\n\nWorld of Warcraft determines:\n"..InfoList({
-                "When the Global Cooldown begins and ends",
+            "KeyLab does not add its own Global Cooldown, delay, timer, click rate, or Spell Queue Window.\n\nWoW decides:\n"..InfoList({
+                "When the Global Cooldown starts and ends",
                 "Whether an ability is ready",
-                "Whether a spell can enter the spell queue",
-                "Whether the attempted action executes",
+                "Whether a spell enters the spell queue",
+                "Whether the action runs",
             }),
-            "Pressing faster does not make KeyLab bypass these systems. It may, however, advance through multiple sequence blocks while actions are unavailable.",
+            "Pressing faster cannot bypass these rules. It can move past blocks while their actions are unavailable.",
             InfoTip(),
-            "A steady press rhythm near your character's Global Cooldown usually makes sequence behavior easier to follow than pressing as rapidly as possible.",
+            "A steady rhythm near your Global Cooldown is usually easier to follow than pressing as fast as possible.",
         }),
     },
     {
-        title="10. Combat Restrictions",
+        title="10. Changes During Combat",
         body=InfoJoin({
-            "Sequences may be executed in combat, but protected configuration cannot be changed during combat.\n\nWhile your character is in combat, you cannot:\n"..InfoList({
-                "Open the Sequencer editor",
-                "Add, edit, delete, enable, disable, or reorder blocks",
-                "Change sequence modes",
+            "Your saved sequence can run in combat, but WoW does not allow protected setup changes during combat.\n\nWhile in combat, you cannot:\n"..InfoList({
+                "Open the Sequencer Editor",
+                "Add, edit, delete, turn on, turn off, or move blocks",
+                "Change the sequence mode",
                 "Activate another version",
-                "Create or modify bindings",
+                "Add or change a binding",
                 "Save protected sequence changes",
             }),
-            "These restrictions are required by World of Warcraft's secure interface.",
+            "Leave combat to make these changes.",
         }),
     },
     {
         title="11. Supported Use",
         body=InfoJoin({
-            "The KeyLab Action Sequencer is designed for ordinary World of Warcraft macro commands and conditionals.\n\nIt does not provide:\n"..InfoList({
+            "The KeyLab Macro Sequencer is made for normal WoW macro commands and conditions.\n\nIt does not provide:\n"..InfoList({
                 "Automatic key presses",
                 "Timed casting",
-                "Cooldown or resource-based decisions",
-                "Proc or aura detection",
-                "Automatic rotation selection",
+                "Cooldown or resource decisions",
+                "Proc or aura checks",
+                "Automatic rotation choices",
                 "Automatic content switching",
                 "Input broadcasting",
                 "Sequence importing, exporting, or sharing",
-                "Arbitrary Lua or script execution",
+                "Lua or script execution",
             }),
-            "Commands such as /run, /script, /dump, and /click are not supported.\n\nEvery action requires direct player input, and World of Warcraft remains responsible for deciding whether it can execute.",
+            "/run, /script, /dump, and /click are not supported.\n\nEvery action needs a direct player press. WoW always decides whether it can run.",
         }),
     },
     {
         title="12. Recycle Bin",
         body=InfoJoin({
-            "Deleted sequences and versions remain in the Recycle Bin for 30 days.\n\nYou can restore an accidentally deleted entry during that period. Restored sequences must still have a unique name, and their previous binding may need to be reassigned if it is already in use.\n\nAfter 30 days, deleted entries are permanently removed.",
+            "Deleted sequences and versions stay in the Recycle Bin for 30 days.\n\nYou can restore them during that time. A restored sequence still needs a unique name. You may also need to set its binding again if that binding is now in use.\n\nAfter 30 days, the deleted item is removed for good.",
         }),
     },
 }
@@ -1032,8 +1029,8 @@ local INFORMATION_SECTIONS={
 function Sequencer:BuildInformation(frame)
     local view=FullViewPanel(frame); self.views.information=view
     local header=Panel(view,14,-14,878,68,COLORS.panel,COLORS.border)
-    local title=Text(header,"KeyLab Action Sequencer","GameFontNormalLarge",18,COLORS.gold); title:SetPoint("TOPLEFT",16,-10); title:SetSize(500,24)
-    local subtitle=Text(header,"One physical press, one predetermined step, with World of Warcraft always deciding what executes.","GameFontHighlightSmall",12,COLORS.muted); subtitle:SetPoint("TOPLEFT",title,"BOTTOMLEFT",0,-6); subtitle:SetSize(840,22)
+    local title=Text(header,"KeyLab Macro Sequencer","GameFontNormalLarge",18,COLORS.gold); title:SetPoint("TOPLEFT",16,-10); title:SetSize(500,24)
+    local subtitle=Text(header,"One press moves one step. World of Warcraft always decides what can cast.","GameFontHighlightSmall",12,COLORS.muted); subtitle:SetPoint("TOPLEFT",title,"BOTTOMLEFT",0,-6); subtitle:SetSize(840,22)
     local scroll=CreateFrame("ScrollFrame",nil,view,"UIPanelScrollFrameTemplate"); scroll:SetPoint("TOPLEFT",18,-98); scroll:SetPoint("BOTTOMRIGHT",-30,18)
     local content=CreateFrame("Frame",nil,scroll); content:SetSize(840,520); scroll:SetScrollChild(content)
     local accordionColors={
@@ -1056,7 +1053,7 @@ end
 function Sequencer:BuildRecycleBin(frame)
     local view=FullViewPanel(frame); self.views.recycle=view
     local title=Text(view,"Recycle Bin","GameFontNormalLarge",18,COLORS.gold); title:SetPoint("TOPLEFT",20,-18)
-    local help=Text(view,"Deleted sequences and versions remain recoverable for 30 days. Restored sequences stay unbound when an old binding is already in use.","GameFontHighlightSmall",12,COLORS.muted); help:SetPoint("TOPLEFT",20,-48); help:SetSize(860,34)
+    local help=Text(view,"Deleted sequences and versions stay here for 30 days. If an old binding is already in use, the restored sequence stays unbound.","GameFontHighlightSmall",12,COLORS.muted); help:SetPoint("TOPLEFT",20,-48); help:SetSize(860,34)
     self.recycleRows={}
     for index=1,8 do
         local row=Panel(view,20,-88-((index-1)*64),866,56)
@@ -1094,7 +1091,7 @@ function Sequencer:Create(parent)
     if Theme.StylePanel then Theme.StylePanel(frame,COLORS.bg,{0,0,0,0}) end
     self.frame=frame; self.views={}; self.selectedView="editor"
     local title=Text(frame,"Macro Sequencer","GameFontNormalLarge",20,COLORS.gold); title:SetPoint("TOPLEFT",18,-18); title:SetSize(900,22)
-    local description=Text(frame,"Build class/spec sequences from exact multiline macro blocks around KeyLab's proven one-press/one-step engine.","GameFontHighlightSmall",nil,COLORS.muted); description:SetPoint("TOPLEFT",18,-45); description:SetSize(900,18)
+    local description=Text(frame,"Build class and spec Macro Sequences from the exact macro blocks you want to use.","GameFontHighlightSmall",nil,COLORS.muted); description:SetPoint("TOPLEFT",18,-45); description:SetSize(900,18)
     self:BuildTop(frame); self:BuildEditor(frame); self:BuildBindingList(frame); self:BuildInformation(frame); self:BuildRecycleBin(frame)
     self:LoadSequence(nil); self:SetView("editor")
     frame.Refresh=function() Sequencer:Refresh() end

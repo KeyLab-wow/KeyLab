@@ -60,7 +60,7 @@ local SECTIONS = {
     {
         title = "Encounter Variables",
         body = Join({
-            "Gameplay factors can change real Mythic+ outcomes from run to run.",
+            "Real Mythic+ results can change from run to run, even when you use the same setup.",
             Heading("Core Variables"),
             List({
                 "Movement",
@@ -80,7 +80,7 @@ local SECTIONS = {
                 "Recovery after mistakes",
             }),
             Heading("Pressure Points"),
-            "Different encounters may reward different strengths. A build or stat setup that feels strong in one dungeon may feel weaker when movement, interrupts, or survivability pressure changes.",
+            "Different dungeons reward different strengths. A setup that feels great in one run may feel weaker when movement, interrupts, damage, or survival needs change.",
         }),
     },
     {
@@ -110,7 +110,7 @@ local SECTIONS = {
     {
         title = "Character Stats Reference",
         body = Join({
-            "Stats can affect pacing, burst, survivability, and specialization-specific mechanics.",
+            "Stats can change your damage, healing, survival, and how your spec feels to play.",
             Heading("Primary Stats"),
             "Strength, Agility, Intellect, and Stamina",
             Heading("Secondary Stats"),
@@ -134,24 +134,24 @@ local SECTIONS = {
                 "Healing effectiveness",
                 "Defensive strength",
                 "Ability interactions",
-            }) .. "\n\nEach specialization has a unique Mastery effect. Different encounters and builds may benefit differently from Mastery.",
+            }) .. "\n\nMastery works differently for each spec, so its value can change with your build and the content you play.",
         }),
     },
     {
         title = "Spell Queue Window",
         body = Join({
-            "Spell Queue Window changes how early the game accepts your next ability input before the current cast or global cooldown ends. Different values may change how responsive combat feels depending on latency and playstyle.",
+            "Spell Queue Window controls how early WoW accepts your next ability before the current cast or Global Cooldown ends. Different values may feel better depending on your latency and key-press rhythm.",
             Heading("Check Current Value"),
             "/dump GetCVar(\"SpellQueueWindow\")",
             Heading("Change the Value"),
             "/console SpellQueueWindow NUMBER",
-            "400 ms is Blizzard's default value.",
+            "Blizzard's default is 400 ms.",
         }),
     },
     {
         title = "Macros",
         body = Join({
-            "Macros can reduce targeting friction, support different playstyles, and improve comfort.",
+            "Macros can make targeting and repeated actions faster and more comfortable.",
             Heading("Macros can help"),
             List({
                 "Simplify repetitive actions",
@@ -169,7 +169,7 @@ local SECTIONS = {
     {
         title = "Conditional Macro Examples",
         body = Join({
-            "Macros can combine targeting conditions to support utility, off-healing, dispels, and combat resurrection abilities from a single keybind. This can reduce targeting friction and improve reaction speed during fast-paced encounters.",
+            "One macro can use conditions to handle utility, healing, dispels, or combat resurrection for a chosen player. This can save time during fast fights.",
             Heading("Party 3 Example"),
             "/cast [mod:ctrl, @party3] Cleanse; [@party3, dead] Intercession; [@party3, nochanneling] Flash Heal",
             Heading("Party 4 Example"),
@@ -180,7 +180,7 @@ local SECTIONS = {
     },
     {
         title = "Sims",
-        body = "Simulation tools are often used to test builds, stats, and gear combinations in controlled environments.\n\nReal encounter results may still vary depending on mechanics, group composition, movement, and playstyle.",
+        body = "Sims test builds, stats, and gear in controlled conditions.\n\nReal results can be different because of mechanics, movement, group makeup, mistakes, and your own playstyle.\n\nTheory proposes. Real play tests. KeyLab remembers.",
     },
 }
 
@@ -199,7 +199,7 @@ function Insights:Create(parent)
     title:SetPoint("TOPLEFT", header, "TOPLEFT", 16, -10)
     title:SetSize(420, 24)
 
-    local subtitle = Text(header, "Expandable reference notes for encounter variables, character stats, spell queue window, macros, and sims.", "GameFontHighlightSmall", 12, COLORS.muted)
+    local subtitle = Text(header, "Quick notes about combat results, stats, macros, the spell queue, and sims.", "GameFontHighlightSmall", 12, COLORS.muted)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
     subtitle:SetSize(850, 24)
 

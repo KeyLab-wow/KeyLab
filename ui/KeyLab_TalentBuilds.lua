@@ -985,7 +985,7 @@ local function BuildDetails(panel, cardData, variantNumber)
         local title = AddFont(panel, "Talent Build Details", "GameFontNormalLarge", padding, -16, CFG.details.width - 28)
         ApplyColor(title, CFG.colors.gold)
 
-        local body = AddFont(panel, "Select a build above to view the run details, stat snapshot, talent string, and captured outcomes for its best observed run.", "GameFontHighlightSmall", padding, -48, CFG.details.width - 28)
+        local body = AddFont(panel, "Select a build above to see its best saved run, stats, talent string, and results.", "GameFontHighlightSmall", padding, -48, CFG.details.width - 28)
         ApplyColor(body, CFG.colors.muted)
 
         panel:SetHeight(CFG.details.minHeight)
@@ -1295,7 +1295,7 @@ function TalentStatBuild:Refresh()
 
     if #cards == 0 then
         self.emptyText:Show()
-        self.emptyText:SetText("No matching talent build data yet.\n\nCapture completed Mythic+ runs with talent strings, stat snapshots, and mapped outcomes to populate this view.")
+        self.emptyText:SetText("No saved talent builds match these filters yet.\n\nComplete more Mythic+ runs with these filters to add results here.")
         self.selectedCardData = nil
         self.selectedIndex = nil
         self:RefreshSelection()
@@ -1363,7 +1363,7 @@ function TalentStatBuild:Create(parent)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
     subtitle:SetWidth(CFG.header.subtitleWidth)
     subtitle:SetJustifyH("LEFT")
-    subtitle:SetText("Shows the top 5 different talent builds for the selected filters. Use All to compare across broader context.")
+    subtitle:SetText("Compare the talent builds you used in Mythic+ and see their best saved results.")
     ApplyColor(subtitle, CFG.colors.muted)
 
     self.summaryText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")

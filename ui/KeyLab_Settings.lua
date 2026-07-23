@@ -165,7 +165,7 @@ local function BuildSettings(content)
         content,
         y,
         "Export Journal Data",
-        "Exports saved KeyLab journal data for backup or transfer.",
+        "Copy your saved KeyLab data for backup or transfer.",
         "Export Journal Data",
         nil,
         ExportJournalData
@@ -176,7 +176,7 @@ local function BuildSettings(content)
         content,
         y,
         "Import Journal Data",
-        "Imports previously exported KeyLab journal data.",
+        "Load KeyLab data that you exported earlier.",
         "Import Journal Data",
         nil,
         ImportJournalData
@@ -187,7 +187,7 @@ local function BuildSettings(content)
         content,
         y,
         "Delete / Reset Journal Data",
-        "Permanently deletes saved KeyLab journal data for all characters. This action cannot be undone.",
+        "Permanently delete all saved KeyLab data for every character. This cannot be undone.",
         "Delete / Reset Data",
         "danger",
         function()
@@ -205,7 +205,7 @@ local function BuildSettings(content)
 
     local purpose = MakeText(
         content,
-        "KeyLab is a personal Mythic+ and Raid performance lab focused on real encounters, talent experimentation, stat and gear profiles, gearing plans, and gameplay trends.",
+        "KeyLab brings Mythic+, raids, practice tests, build comparisons, gear planning, and Macro Sequences together in one personal journal.",
         "GameFontHighlightSmall",
         FONT_BODY,
         COLORS.muted,

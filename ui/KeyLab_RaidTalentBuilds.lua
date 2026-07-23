@@ -380,7 +380,7 @@ local function BuildDetails(panel, cardData, variantNumber)
     if not cardData then
         local title = AddFont(panel, "Talent Build Details", "GameFontNormalLarge", 14, -16, 900)
         ApplyColor(title, CFG.colors.gold)
-        local body = AddFont(panel, "Select a build above to view the pull details, stat snapshot, talent string, and captured outcomes for its best observed pull.", "GameFontHighlightSmall", 14, -48, 900)
+        local body = AddFont(panel, "Select a build above to see its best saved pull, stats, talent string, and results.", "GameFontHighlightSmall", 14, -48, 900)
         ApplyColor(body, CFG.colors.muted)
         return
     end
@@ -526,7 +526,7 @@ function RaidTalentBuilds:Refresh()
     if #cards == 0 then
         self.summaryText:SetText("No matching raid talent build data found.")
         self.emptyText:Show()
-        self.emptyText:SetText("No matching raid talent build data yet.\n\nCapture boss pulls with talent strings, stat snapshots, and mapped outcomes to populate this view.")
+        self.emptyText:SetText("No saved talent builds match these raid filters yet.\n\nComplete more pulls with these filters to add results here.")
         self.selectedCardData, self.selectedIndex = nil, nil
         self:RefreshSelection()
         return
@@ -563,7 +563,7 @@ function RaidTalentBuilds:Create(parent)
     local title = AddFont(frame, "Raid Talent Builds", "GameFontNormalLarge", HEADER.x, HEADER.titleY, 500)
     title:SetFont(STANDARD_TEXT_FONT, HEADER.titleSize, "")
     ApplyColor(title, CFG.colors.gold)
-    local subtitle = AddFont(frame, "Shows the top 5 different talent builds for the selected raid filters. Use All to compare across broader context.", "GameFontHighlightSmall", 18, -47, 900)
+    local subtitle = AddFont(frame, "Compare the talent builds you used for the selected raid boss.", "GameFontHighlightSmall", 18, -47, 900)
     ApplyColor(subtitle, CFG.colors.muted)
     self.summaryText = AddFont(frame, "Loading raid talent build data...", "GameFontDisableSmall", 18, -70, 900)
     ApplyColor(self.summaryText, CFG.colors.soft)

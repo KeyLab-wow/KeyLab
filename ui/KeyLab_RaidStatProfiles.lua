@@ -412,7 +412,7 @@ local function BuildDetails(panel, profile)
     if not profile then
         local title = AddFont(panel, "Stat Priority Details", "GameFontNormalLarge", 14, -16, 900)
         ApplyColor(title, CFG.colors.gold)
-        local body = AddFont(panel, "Select a stat priority above to view the best source pull, stat snapshot, talent string, and captured outcomes for that lineup.", "GameFontHighlightSmall", 14, -48, 900)
+        local body = AddFont(panel, "Select a stat setup above to see its best saved pull, talents, stats, and results.", "GameFontHighlightSmall", 14, -48, 900)
         ApplyColor(body, CFG.colors.muted)
         return
     end
@@ -565,7 +565,7 @@ function RaidStatProfiles:Refresh()
     local direction = info and info.higherIsBetter == false and "lowest" or "highest"
     if total == 0 then
         self.emptyText:Show()
-        self.emptyText:SetText("No matching raid stat priority data yet.\n\nCapture boss pulls with all four secondary-stat snapshots and mapped outcomes to populate this view.")
+        self.emptyText:SetText("No saved stat setups match these raid filters yet.\n\nComplete more pulls with these filters to add results here.")
         self.summaryText:SetText("No matching raid stat priority data found.")
         self.selectedProfile, self.selectedIndex = nil, nil
         self:RefreshSelection()
@@ -599,7 +599,7 @@ function RaidStatProfiles:Create(parent)
     local title = AddFont(frame, "Raid Stat Profiles", "GameFontNormalLarge", HEADER.x, HEADER.titleY, 500)
     title:SetFont(STANDARD_TEXT_FONT, HEADER.titleSize, "")
     ApplyColor(title, CFG.colors.gold)
-    local subtitle = AddFont(frame, "Shows observed raid stat priority lineups ranked by average outcome. Select a row to view its best source pull below.", "GameFontHighlightSmall", 18, -47, 900)
+    local subtitle = AddFont(frame, "Compare the stat setups you used for the selected raid boss.", "GameFontHighlightSmall", 18, -47, 900)
     ApplyColor(subtitle, CFG.colors.muted)
     self.summaryText = AddFont(frame, "Loading raid stat priority data...", "GameFontDisableSmall", 18, -70, 900)
     ApplyColor(self.summaryText, CFG.colors.soft)

@@ -614,7 +614,7 @@ function GearTargets:MakeLootRow(parent, item, y)
     matchHover:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine(matched and "Goal Match" or "No current match")
-        GameTooltip:AddLine("Goal Match identifies the closest secondary-stat combination. It does not mean Best in Slot.", 0.8, 0.85, 1.0, true)
+        GameTooltip:AddLine("Goal Match shows the closest secondary-stat combination KeyLab found. It does not mean Best in Slot.", 0.8, 0.85, 1.0, true)
         GameTooltip:Show()
     end)
     matchHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -630,7 +630,7 @@ function GearTargets:MakeLootRow(parent, item, y)
         btn:SetBackdropBorderColor(unpack(CFG.colors.blue))
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
         GameTooltip:AddLine("Status: " .. StatusLabel(status))
-        GameTooltip:AddLine("Target and Alternative are your choices. Goal Match never changes them automatically.", 0.8, 0.85, 1.0, true)
+        GameTooltip:AddLine("You choose Targets and Alternatives. Goal Match never changes them for you.", 0.8, 0.85, 1.0, true)
         local assignments = KeyLab.LootTargetsDB.GetAssignmentsForItem(TargetSpecID(), item.itemID)
         for _, assignment in ipairs(assignments or {}) do
             if assignment.slotInstance then GameTooltip:AddLine((assignment.status == "target" and "Target: " or "Alternative: ") .. assignment.slotInstance, 0.9, 0.9, 0.7) end
@@ -706,7 +706,7 @@ function GearTargets:RefreshMatcherCard()
     for key, box in pairs(self.goalBoxes or {}) do
         if not box:HasFocus() then box:SetText(tostring(tonumber(goals.targets and goals.targets[key]) or 0)) end
     end
-    local valid = KeyLab.StatGoalsDB.Validate(TargetSpecID()) == true
+    local valid, validationMessage = KeyLab.StatGoalsDB.Validate(TargetSpecID())
     self.goalTotal:SetText("Character % goals")
     self.goalTotal:SetTextColor(unpack(valid and CFG.colors.green or CFG.colors.warning))
 
@@ -792,11 +792,11 @@ function GearTargets:RefreshMatcherCard()
         self.matcherState:SetTextColor(unpack(CFG.colors.green))
         self:SetMatcherStatusStyle("success")
     elseif valid then
-        self.matcherState:SetText("Goals are valid. Unequip only the slots you want the matcher to fill.")
+        self.matcherState:SetText("Your goals are ready. Unequip only the slots you want KeyLab to fill.")
         self.matcherState:SetTextColor(unpack(CFG.colors.text))
         self:SetMatcherStatusStyle("neutral")
     else
-        self.matcherState:SetText("Each Character-panel stat goal must be from 0% to 100% before the matcher can run.")
+        self.matcherState:SetText(validationMessage or "Enter a value from 0% to 100% for each stat.")
         self.matcherState:SetTextColor(unpack(CFG.colors.warning))
         self:SetMatcherStatusStyle("warning")
     end
@@ -990,7 +990,7 @@ local function RenderMatcherResults(popup, result)
     end
 
     local drCard = ResultCard(popup, 166, "Diminishing Returns / Reduced Efficiency", CFG.colors.blue)
-    local explanation = MakeText(drCard, "Based on the complete projected gear set and WoW's underlying rating conversion.", "GameFontDisableSmall", nil, CFG.colors.muted)
+    local explanation = MakeText(drCard, "Based on the projected finished set and WoW's stat-rating rules.", "GameFontDisableSmall", nil, CFG.colors.muted)
     explanation:SetPoint("TOPLEFT", drCard, "TOPLEFT", 14, -32)
     explanation:SetSize(popup.contentWidth - 28, 18)
     for index, definition in ipairs(RESULT_STATS) do
@@ -1035,9 +1035,9 @@ local function RenderMatcherResults(popup, result)
         end
     end
 
-    local footer = ResultCard(popup, 64, "Planning Estimate", CFG.colors.border)
+    local footer = ResultCard(popup, 64, "How This Was Projected", CFG.colors.border)
     local footerText = MakeText(footer,
-        "Current values come from WoW's live Character panel. Projected values combine the chosen set, locked equipment, and the maximum upgrade of each identified owned track.",
+        "Current values come from your Character panel. Projected values include your locked gear, the matched set, and the highest known upgrade for owned items.",
         "GameFontDisableSmall", nil, CFG.colors.muted)
     footerText:SetPoint("TOPLEFT", footer, "TOPLEFT", 14, -32)
     footerText:SetSize(popup.contentWidth - 28, 28)
@@ -1074,7 +1074,7 @@ function GearTargets:CreateMatcherResultsPopup()
     local title = MakeText(popup, "Stat Goal Matcher Results", "GameFontNormalLarge", nil, CFG.colors.gold, "CENTER")
     title:SetPoint("TOP", popup, "TOP", 0, -18)
     title:SetSize(790, 28)
-    local subtitle = MakeText(popup, "Chosen items, projected percentages, and anything the player should know.", "GameFontDisableSmall", nil, CFG.colors.muted, "CENTER")
+    local subtitle = MakeText(popup, "Review the matched items, projected stats, and important notes.", "GameFontDisableSmall", nil, CFG.colors.muted, "CENTER")
     subtitle:SetPoint("TOP", title, "BOTTOM", 0, -2)
     subtitle:SetSize(790, 20)
 
@@ -1152,8 +1152,9 @@ function GearTargets:CreatePreparationPopup()
     title:SetPoint("TOP", popup, "TOP", 0, -18)
     title:SetSize(530, 28)
     local body = MakeText(popup,
-        "Use this time to equip anything you want KeyLab to keep locked, including Tier, crafted, embellished, trinket, set, and other keeper items. Unequip only the slots you want the matcher to fill.\n\n" ..
-        "Choose the Master Item Database or gear owned by this character, then choose Balanced or Favor Priority matching. Both sources project the Character-panel percentages after filling the open slots. Known owned upgrade tracks are projected to their maximum; track, primary stat, stamina, and item level decide only close results. Neither mode judges bonuses, effects, or Best in Slot.",
+        "Equip every item you want to keep, including Tier, crafted, embellished, trinket, set, and other keeper items.\n\n" ..
+        "Unequip only the slots you want KeyLab to fill.\n\n" ..
+        "Choose where KeyLab should search and how it should match your goals. The matcher compares secondary stats and projects the finished set. It does not judge bonuses, special effects, or Best in Slot.",
         "GameFontHighlightSmall", nil, CFG.colors.text)
     body:SetPoint("TOPLEFT", popup, "TOPLEFT", 24, -58)
     body:SetSize(522, 145)
@@ -1185,7 +1186,7 @@ function GearTargets:CreatePreparationPopup()
             UIDropDownMenu_AddButton(info, level)
         end
     end)
-    local scopeHelp = MakeText(popup, "This choice applies to this matcher run. It does not change the item-list browsing filter.", "GameFontDisableSmall", nil, CFG.colors.muted)
+    local scopeHelp = MakeText(popup, "This choice is only for this matcher run. It does not change the gear list above.", "GameFontDisableSmall", nil, CFG.colors.muted)
     scopeHelp:SetPoint("TOPLEFT", popup, "TOPLEFT", 24, -274)
     scopeHelp:SetSize(522, 46)
     scopeHelp:SetWordWrap(true)
@@ -1205,7 +1206,7 @@ function GearTargets:CreatePreparationPopup()
             UIDropDownMenu_AddButton(info, level)
         end
     end)
-    local styleHelp = MakeText(popup, "Balanced minimizes the total gap. Favor Priority weights unmet goals from #1 through #4, then uses overall closeness.", "GameFontDisableSmall", nil, CFG.colors.muted)
+    local styleHelp = MakeText(popup, "Balanced looks for the smallest total gap. Favor Priority gives more weight to your #1 stat, then #2, #3, and #4.", "GameFontDisableSmall", nil, CFG.colors.muted)
     styleHelp:SetPoint("TOPLEFT", popup, "TOPLEFT", 298, -326)
     styleHelp:SetSize(248, 48)
     styleHelp:SetWordWrap(true)
@@ -1218,8 +1219,8 @@ function GearTargets:CreatePreparationPopup()
         self.scopeLabel:SetTextColor(unpack(owned and CFG.colors.muted or CFG.colors.text))
         SetDropdownText(self.styleDropdown, MatcherStyleLabel(GearTargets.matcherMatchStyle))
         scopeHelp:SetText(owned
-            and "Equipped items remain locked. Known worn and bag upgrade tracks are projected to their maximum. Goal fit comes first; track, primary stat, stamina, and item level decide close results."
-            or "Choose dungeon items, raid items, or both from KeyLab's Master Item Database. Recorded tooltip levels are normalized internally so stat patterns compare on one neutral per-slot budget.")
+            and "Equipped gear stays locked. Known upgrade tracks for worn and bag items are projected to their highest rank. Your stat goals come first; other item details break close ties."
+            or "Choose Dungeon, Raid, or Dungeon and Raid items. KeyLab evens out recorded item levels so it can compare each item's stat pattern fairly.")
     end
 
     popup.countdown = MakeText(popup, "", "GameFontHighlightSmall", nil, CFG.colors.blue, "CENTER")
@@ -1367,7 +1368,7 @@ function GearTargets:Create(parent)
     local title = MakeText(frame, "Gear Targets", "GameFontNormalLarge", HEADER.titleSize, CFG.colors.gold)
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", HEADER.x, HEADER.titleY)
     title:SetSize(400, 28)
-    local subtitle = MakeText(frame, "Browse dungeon and raid loot, save Targets and Alternatives, and find items that match your stat goals.", "GameFontHighlightSmall", nil, CFG.colors.muted)
+    local subtitle = MakeText(frame, "Browse dungeon and raid gear, save your Targets and Alternatives, or match items to your stat goals.", "GameFontHighlightSmall", nil, CFG.colors.muted)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
     subtitle:SetSize(540, 20)
 
@@ -1520,7 +1521,7 @@ function GearTargets:Create(parent)
     self.refreshStatsButton:SetScript("OnClick", function()
         GearTargets:RefreshCurrentStats(true)
     end)
-    local matcherNote = MakeText(matcherPanel, "Enter the percentages you want on WoW's Character panel. The matcher projects the completed gear set and fills the open slots toward these goals.", "GameFontDisableSmall", nil, CFG.colors.muted)
+    local matcherNote = MakeText(matcherPanel, "Enter the percentages you want to see on your Character panel. KeyLab fills the open slots and projects the finished set.", "GameFontDisableSmall", nil, CFG.colors.muted)
     matcherNote:SetPoint("TOPLEFT", matcherTitle, "BOTTOMLEFT", 0, -4)
     matcherNote:SetSize(380, 28)
     matcherNote:SetWordWrap(true)

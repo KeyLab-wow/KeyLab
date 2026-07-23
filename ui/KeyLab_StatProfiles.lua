@@ -935,7 +935,7 @@ local function BuildDetails(panel, profile)
         local title = AddFont(panel, "Stat Priority Details", "GameFontNormalLarge", padding, -16, CFG.details.width - 28)
         ApplyColor(title, CFG.colors.gold)
 
-        local body = AddFont(panel, "Select a stat priority above to view the best source run, stat snapshot, talent string, and captured outcomes for that priority lineup.", "GameFontHighlightSmall", padding, -48, CFG.details.width - 28)
+        local body = AddFont(panel, "Select a stat setup above to see its best saved run, talents, stats, and results.", "GameFontHighlightSmall", padding, -48, CFG.details.width - 28)
         ApplyColor(body, CFG.colors.muted)
 
         panel:SetHeight(CFG.details.minHeight)
@@ -1227,7 +1227,7 @@ function StatProfiles:Refresh()
 
     if total == 0 then
         self.emptyText:Show()
-        self.emptyText:SetText("No matching stat priority data yet.\n\nCapture completed Mythic+ runs with stat snapshots and mapped outcomes to populate this view.")
+        self.emptyText:SetText("No saved stat setups match these filters yet.\n\nComplete more Mythic+ runs with these filters to add results here.")
         self.summaryText:SetText("No matching stat priority data found.")
         self.selectedProfile = nil
         self.selectedIndex = nil
@@ -1300,7 +1300,7 @@ function StatProfiles:Create(parent)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
     subtitle:SetWidth(CFG.header.subtitleWidth)
     subtitle:SetJustifyH("LEFT")
-    subtitle:SetText("Shows observed stat priority lineups ranked by average outcome. Select a row to view the best source run below.")
+    subtitle:SetText("Compare the stat setups you used in Mythic+ and see how they performed.")
     ApplyColor(subtitle, CFG.colors.muted)
 
     self.summaryText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")

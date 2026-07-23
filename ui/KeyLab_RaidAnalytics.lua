@@ -767,7 +767,7 @@ end
 local RaidTalentBuilds = NewTab(
     "RaidTalentBuilds",
     "Raid Talent Builds",
-    "Compares captured talent builds for one raid boss at a time, matched by encounterID.",
+    "Compare the talent builds you used for one raid boss at a time.",
     "raidTalentMetric",
     BuildTalentContent
 )
@@ -775,7 +775,7 @@ local RaidTalentBuilds = NewTab(
 local RaidStatProfiles = NewTab(
     "RaidStatProfiles",
     "Raid Stat Profiles",
-    "Compares observed secondary-stat priority lineups for one raid boss at a time.",
+    "Compare the stat setups you used for one raid boss at a time.",
     "raidStatMetric",
     BuildStatContent
 )
@@ -783,7 +783,7 @@ local RaidStatProfiles = NewTab(
 local RaidTrends = NewTab(
     "RaidTrends",
     "Raid Trends",
-    "Shows whether your performance is improving, stable, or changing on each raid boss.",
+    "See how your results change from pull to pull for the selected boss.",
     "raidTrendMetric",
     BuildTrendContent,
     Analysis.GetTrendMetricOptions,
