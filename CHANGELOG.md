@@ -1,5 +1,28 @@
 # KeyLab Changelog
 
+## Version 1.8.49 - Reliable Practice Stat Capture
+
+Released July 24, 2026
+
+- Practice sessions now safely fill missing stat values from the end-of-session snapshot while keeping valid start-of-session values unchanged.
+- Existing end-of-session refreshes can recover a stat snapshot when WoW briefly withholds the values at session start.
+- Sessions without saved stats now show **Not captured** instead of four empty stat values.
+
+## Version 1.8.48 - Clearer Sequencer Introduction
+
+Released July 23, 2026
+
+- Clarified that players create a complete rotation by arranging individual macros into a sequence.
+
+## Version 1.8.47 - Practice Setup Comparison
+
+Released July 23, 2026
+
+- Practice sessions now save and display the Spell Queue Window value used when the test began.
+- Added colored Build A, Build B, and Build C-style labels for distinct captured talent builds.
+- Added the talent-build label to both the saved session list and Session Details, making build changes easy to spot when the same sequence version was used.
+- Older sessions remain available and show **Not captured** for setup details they did not save.
+
 ## Version 1.8.46 - Empty Stat Goal Guidance
 
 Released July 23, 2026

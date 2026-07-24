@@ -2,7 +2,7 @@
 ## Title: KeyLab
 ## Notes: Mythic+ and Raid tracking, practice tests, gear planning, and macro sequences in one personal journal.
 ## Author: Brione
-## Version: 1.8.46
+## Version: 1.8.49
 ## SavedVariables: KeyLabDB, KeyLabCaptureDB, KeyLabGearStatsProbeDB
 
 utils/KeyLab_Utils.lua
