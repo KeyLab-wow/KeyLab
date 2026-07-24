@@ -29,13 +29,14 @@ local COLORS = (Theme and Theme.colors) or {
 
 local TABLE_COLUMNS = {
     rank = { x = 14, width = 30, label = "#" },
-    type = { x = 48, width = 88, label = "Type" },
-    date = { x = 142, width = 130, label = "Date" },
-    duration = { x = 282, width = 80, label = "Duration" },
-    metric = { x = 374, width = 112, label = "Outcome" },
-    spec = { x = 500, width = 118, label = "Spec" },
-    sequence = { x = 626, width = 112, label = "Sequence Version" },
-    status = { x = 746, width = 84, label = "Status" },
+    type = { x = 48, width = 66, label = "Type" },
+    date = { x = 122, width = 120, label = "Date" },
+    duration = { x = 250, width = 62, label = "Duration" },
+    metric = { x = 320, width = 88, label = "Outcome" },
+    spec = { x = 416, width = 100, label = "Spec" },
+    sequence = { x = 524, width = 112, label = "Sequence Version" },
+    build = { x = 644, width = 70, label = "Build" },
+    status = { x = 722, width = 108, label = "Status" },
 }
 
 local PAGE_SIZE = 9
@@ -51,6 +52,14 @@ local METRIC_COLORS = {
     dps = COLORS.orange,
     healingDoneWithAbsorbs = COLORS.green,
     hpsWithAbsorbs = COLORS.green,
+}
+
+local TALENT_BUILD_COLORS = {
+    COLORS.blue,
+    COLORS.purple,
+    COLORS.green,
+    COLORS.orange,
+    COLORS.gold,
 }
 
 local STATUS_FILTER_OPTIONS = {
@@ -399,10 +408,72 @@ end
 
 local function StatLine(stats)
     stats = stats or {}
+    if stats.crit == nil
+        and stats.haste == nil
+        and stats.mastery == nil
+        and stats.versatility == nil
+    then
+        return "Not captured"
+    end
     return "Crit " .. FormatNumber(stats.crit)
         .. "  Haste " .. FormatNumber(stats.haste)
         .. "  Mastery " .. FormatNumber(stats.mastery)
         .. "  Vers " .. FormatNumber(stats.versatility)
+end
+
+local function TalentString(session)
+    local value = session and session.talents and session.talents.talentString
+    return type(value) == "string" and value ~= "" and value or nil
+end
+
+local function BuildLetter(index)
+    index = math.max(1, math.floor(tonumber(index) or 1))
+    local label = ""
+    while index > 0 do
+        local remainder = (index - 1) % 26
+        label = string.char(65 + remainder) .. label
+        index = math.floor((index - 1) / 26)
+    end
+    return label
+end
+
+local function BuildTalentLabels(sessions)
+    local buildsByString = {}
+    for _, session in ipairs(sessions or {}) do
+        local talentString = TalentString(session)
+        if talentString then
+            local timestamp = SafeNumber(session.timestamp) or 0
+            local build = buildsByString[talentString]
+            if not build then
+                build = { talentString = talentString, firstTimestamp = timestamp }
+                buildsByString[talentString] = build
+            elseif timestamp < build.firstTimestamp then
+                build.firstTimestamp = timestamp
+            end
+        end
+    end
+
+    local builds = {}
+    for _, build in pairs(buildsByString) do table.insert(builds, build) end
+    table.sort(builds, function(a, b)
+        if a.firstTimestamp ~= b.firstTimestamp then return a.firstTimestamp < b.firstTimestamp end
+        return a.talentString < b.talentString
+    end)
+
+    local labels = {}
+    for index, build in ipairs(builds) do
+        labels[build.talentString] = {
+            label = "Build " .. BuildLetter(index),
+            color = TALENT_BUILD_COLORS[((index - 1) % #TALENT_BUILD_COLORS) + 1],
+        }
+    end
+    return labels
+end
+
+local function TalentBuildInfo(session)
+    local talentString = TalentString(session)
+    local info = talentString and Practice.talentBuildLabels and Practice.talentBuildLabels[talentString]
+    return info or { label = "Not captured", color = COLORS.muted }
 end
 
 local function StatusLabel(status)
@@ -930,7 +1001,7 @@ function Practice:BuildSessionTable(parent, sessions, baseCount)
     summary = summary .. "  |  ranked by " .. MetricLabel(self.selectedMetricKey)
     AddLine(panel, summary, 14, -34, 720, COLORS.blue, "GameFontDisableSmall")
     if #sessions > 0 then
-        AddLine(panel, "Gold outcome marks the highest saved result for this view.", 540, -34, 330, COLORS.muted, "GameFontDisableSmall")
+        AddLine(panel, "Gold = best result. Build labels mark talent changes.", 540, -34, 330, COLORS.muted, "GameFontDisableSmall")
     end
 
     if #sessions == 0 then
@@ -973,8 +1044,10 @@ function Practice:BuildSessionTable(parent, sessions, baseCount)
         AddLine(row, FormatDate(session.timestamp), TABLE_COLUMNS.date.x - 8, -5, TABLE_COLUMNS.date.width, COLORS.text, "GameFontDisableSmall")
         AddLine(row, FormatDuration(session.durationSeconds), TABLE_COLUMNS.duration.x - 8, -5, TABLE_COLUMNS.duration.width, COLORS.text, "GameFontDisableSmall")
         AddLine(row, FormatMetric(self.selectedMetricKey, metricValue), TABLE_COLUMNS.metric.x - 8, -5, TABLE_COLUMNS.metric.width, metricColor, "GameFontDisableSmall")
-        AddLine(row, ShortText(session.player and session.player.spec or "-", 16), TABLE_COLUMNS.spec.x - 8, -5, TABLE_COLUMNS.spec.width, COLORS.text, "GameFontDisableSmall")
+        AddLine(row, ShortText(session.player and session.player.spec or "-", 14), TABLE_COLUMNS.spec.x - 8, -5, TABLE_COLUMNS.spec.width, COLORS.text, "GameFontDisableSmall")
         AddLine(row, ShortText(SessionSequenceSummary(session), 22), TABLE_COLUMNS.sequence.x - 8, -5, TABLE_COLUMNS.sequence.width, COLORS.muted, "GameFontDisableSmall")
+        local buildInfo = TalentBuildInfo(session)
+        AddLine(row, buildInfo.label, TABLE_COLUMNS.build.x - 8, -5, TABLE_COLUMNS.build.width, buildInfo.color, "GameFontDisableSmall")
 
         local statusButton = MakeSmallButton(row, StatusLabel(session.status) .. " v", TABLE_COLUMNS.status.width, 20)
         statusButton:SetPoint("TOPLEFT", row, "TOPLEFT", TABLE_COLUMNS.status.x - 8, -2)
@@ -1051,9 +1124,16 @@ function Practice:BuildDetails(parent, session)
     local sequenceDetails = AddLine(panel, ShortText(SessionSequenceDetails(session), 92), 594, -122, 280, COLORS.text, "GameFontHighlightSmall")
     sequenceDetails:SetHeight(38)
 
-    local talentString = session.talents and session.talents.talentString
-    AddLine(panel, "Talent", 14, -170, 70, COLORS.gold, "GameFontNormal")
-    AddLine(panel, talentString and ShortText(talentString, 92) or "No talent string captured", 84, -170, 690, COLORS.text, "GameFontDisableSmall")
+    local talentString = TalentString(session)
+    local buildInfo = TalentBuildInfo(session)
+    AddLine(panel, "Talent Build", 14, -146, 86, COLORS.gold, "GameFontNormal")
+    AddLine(panel, buildInfo.label, 104, -146, 110, buildInfo.color, "GameFontHighlightSmall")
+    AddLine(panel, "Spell Queue", 250, -146, 90, COLORS.gold, "GameFontNormal")
+    local spellQueueWindow = SafeNumber(session.spellQueueWindow)
+    AddLine(panel, spellQueueWindow and (FormatNumber(spellQueueWindow) .. " ms") or "Not captured", 344, -146, 120, COLORS.text, "GameFontHighlightSmall")
+
+    AddLine(panel, "Talent String", 14, -170, 86, COLORS.gold, "GameFontNormal")
+    AddLine(panel, talentString and ShortText(talentString, 88) or "No talent string captured", 104, -170, 670, COLORS.text, "GameFontDisableSmall")
     if talentString then
         local copy = MakeButton(panel, "Copy", 70, 22)
         copy:SetPoint("TOPLEFT", panel, "TOPLEFT", 790, -164)
@@ -1091,6 +1171,7 @@ function Practice:Refresh()
     subtitle:SetSize(860, 16)
 
     local baseSessions = GetSessions()
+    self.talentBuildLabels = BuildTalentLabels(baseSessions)
     self:BuildNewSession(self.content)
     self:BuildFilters(self.content, baseSessions)
 

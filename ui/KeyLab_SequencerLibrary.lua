@@ -886,7 +886,7 @@ local INFORMATION_SECTIONS={
         title="1. Welcome to the KeyLab Macro Sequencer",
         body=InfoJoin({
             InfoHeading("What It Does"),
-            "Build a sequence from the World of Warcraft macro blocks you want to use. Then bind the sequence to a keyboard key or mouse button.\n\nEach physical press tries one planned block. KeyLab never presses keys, chooses abilities, or decides what is best for you.",
+            "Create a complete rotation by arranging individual macros into a sequence. Then bind the sequence to a keyboard key or mouse button.\n\nEach physical press tries one planned block. KeyLab never presses keys, chooses abilities, or decides what is best for you.",
             InfoTip(),
             "KeyLab chooses which saved block to try. World of Warcraft decides whether that block can run.",
         }),
