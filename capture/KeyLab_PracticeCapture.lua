@@ -6,6 +6,7 @@ KeyLab.Capture = KeyLab.Capture or {}
 KeyLab.Capture.Practice = KeyLab.Capture.Practice or {}
 
 local Practice = KeyLab.Capture.Practice
+local pendingStatRepairs = {}
 
 --[[
 KeyLab_PracticeCapture.lua
@@ -76,6 +77,49 @@ local function NormalizePracticeRates(metrics, durationSeconds)
     if healingDone ~= nil then out.hps = healingDone / duration end
 
     return out
+end
+
+local function ReadSpellQueueWindow()
+    if type(GetCVar) ~= "function" then return nil end
+    local ok, value = pcall(GetCVar, "SpellQueueWindow")
+    value = ok and tonumber(value) or nil
+    if not value then return nil end
+    return math.floor(value + 0.5)
+end
+
+local REQUIRED_SECONDARY_STATS = {
+    "crit",
+    "haste",
+    "mastery",
+    "versatility",
+}
+
+local function ReadStatSnapshot()
+    local capture = StatCapture()
+    if type(capture.GetSnapshot) ~= "function" then return {} end
+    local ok, snapshot = pcall(capture.GetSnapshot)
+    return ok and type(snapshot) == "table" and snapshot or {}
+end
+
+local function CountRequiredSecondaryStats(stats)
+    if type(stats) ~= "table" then return 0 end
+    local count = 0
+    for _, key in ipairs(REQUIRED_SECONDARY_STATS) do
+        if stats[key] ~= nil then count = count + 1 end
+    end
+    return count
+end
+
+local function HasRequiredSecondaryStats(stats)
+    return CountRequiredSecondaryStats(stats) == #REQUIRED_SECONDARY_STATS
+end
+
+local function MergeMissingStats(primary, fallback)
+    local merged = CopyTable(type(primary) == "table" and primary or {})
+    for key, value in pairs(type(fallback) == "table" and fallback or {}) do
+        if merged[key] == nil then merged[key] = value end
+    end
+    return merged
 end
 
 local function NewPracticeID(startedAt)
@@ -155,8 +199,9 @@ function Practice.StartSession(testType, targetDurationSeconds, sequenceUsage)
         targetDurationSeconds = targetDurationSeconds,
         baselineSessionIDs = baselineSessionIDs,
         player = PlayerCapture().GetSnapshot and PlayerCapture().GetSnapshot() or {},
-        stats = StatCapture().GetSnapshot and StatCapture().GetSnapshot() or {},
+        stats = ReadStatSnapshot(),
         talents = TalentCapture().GetSnapshot and TalentCapture().GetSnapshot() or {},
+        spellQueueWindow = ReadSpellQueueWindow(),
         sequenceUsage = type(sequenceUsage) == "table" and CopyTable(sequenceUsage) or nil,
         sequenceUsageAutoDetect = type(sequenceUsage) ~= "table",
         sequencerUsageBaseline = ReadSequencerUsageSnapshot(),
@@ -203,6 +248,10 @@ function Practice.StopSession()
     else
         sequenceUsageDetection = "none"
     end
+    local sessionStats = CopyTable(active.stats or {})
+    if not HasRequiredSecondaryStats(sessionStats) then
+        sessionStats = MergeMissingStats(sessionStats, ReadStatSnapshot())
+    end
     local session = {
         id = active.id,
         timestamp = active.startedAt,
@@ -213,8 +262,9 @@ function Practice.StopSession()
         targetDurationSeconds = tonumber(active.targetDurationSeconds),
         testType = active.testType or "ST",
         player = CopyTable(active.player or {}),
-        stats = CopyTable(active.stats or {}),
+        stats = sessionStats,
         talents = CopyTable(active.talents or {}),
+        spellQueueWindow = tonumber(active.spellQueueWindow),
         sequenceUsage = CopyTable(sequenceUsage),
         sequenceUsages = CopyTable(sequenceUsages),
         sequenceUsageDetection = sequenceUsageDetection,
@@ -238,6 +288,9 @@ function Practice.StopSession()
             return false, savedOrError
         end
     end
+    if not HasRequiredSecondaryStats(session.stats) then
+        pendingStatRepairs[tostring(session.id)] = stoppedAt + 30
+    end
 
     if DB().ClearActive then
         DB().ClearActive()
@@ -253,29 +306,57 @@ end
 
 function Practice.TryUpdateSessionTotals(sessionID)
     local session = DB().GetByID and DB().GetByID(sessionID)
-    if type(session) ~= "table" or not session.capturePending then
+    if type(session) ~= "table" then
+        pendingStatRepairs[tostring(sessionID or "")] = nil
         return false
     end
 
-    local context = session.snapshotContext or {}
-    local snapshot = nil
-    snapshot = ReadPracticeSnapshot(context.baselineSessionIDs, context.startedAt or session.timestamp, context.stoppedAt or session.stoppedAt)
+    local sessionKey = tostring(sessionID or "")
+    local statRepairExpiresAt = pendingStatRepairs[sessionKey]
+    if statRepairExpiresAt and time() > statRepairExpiresAt then
+        pendingStatRepairs[sessionKey] = nil
+        statRepairExpiresAt = nil
+    end
+    local needsDamageTotals = session.capturePending == true
+    local needsStats = statRepairExpiresAt ~= nil and not HasRequiredSecondaryStats(session.stats)
+    if statRepairExpiresAt and not needsStats then
+        pendingStatRepairs[sessionKey] = nil
+    end
+    if not needsDamageTotals and not needsStats then return false end
 
-    if not snapshot then
-        return false
+    local updates = {}
+    if needsStats then
+        local beforeCount = CountRequiredSecondaryStats(session.stats)
+        local mergedStats = MergeMissingStats(session.stats, ReadStatSnapshot())
+        if CountRequiredSecondaryStats(mergedStats) > beforeCount then
+            updates.stats = mergedStats
+            if HasRequiredSecondaryStats(mergedStats) then
+                pendingStatRepairs[sessionKey] = nil
+            end
+        end
     end
 
-    if DB().UpdateSession then
-        local durationSeconds = tonumber(snapshot.durationSeconds) or session.durationSeconds
-        local normalizedMetrics = NormalizePracticeRates(snapshot.metrics, durationSeconds)
-        local ok = DB().UpdateSession(sessionID, {
-            metrics = normalizedMetrics,
-            combatSessions = CopyTable(snapshot.combatSessions or {}),
-            durationSeconds = durationSeconds,
-            captureError = false,
-            capturePending = false,
-            capturePendingReason = false,
-        })
+    if needsDamageTotals then
+        local context = session.snapshotContext or {}
+        local snapshot = ReadPracticeSnapshot(
+            context.baselineSessionIDs,
+            context.startedAt or session.timestamp,
+            context.stoppedAt or session.stoppedAt
+        )
+        if snapshot then
+            local durationSeconds = tonumber(snapshot.durationSeconds) or session.durationSeconds
+            local normalizedMetrics = NormalizePracticeRates(snapshot.metrics, durationSeconds)
+            updates.metrics = normalizedMetrics
+            updates.combatSessions = CopyTable(snapshot.combatSessions or {})
+            updates.durationSeconds = durationSeconds
+            updates.captureError = false
+            updates.capturePending = false
+            updates.capturePendingReason = false
+        end
+    end
+
+    if next(updates) ~= nil and DB().UpdateSession then
+        local ok = DB().UpdateSession(sessionID, updates)
         return ok == true
     end
 
@@ -287,7 +368,10 @@ function Practice.RetryPendingSessions()
     local sessions = DB().GetAll and DB().GetAll() or {}
     local updated = 0
     for _, session in ipairs(sessions) do
-        if type(session) == "table" and session.capturePending and session.id then
+        local sessionID = type(session) == "table" and tostring(session.id or "") or ""
+        local needsRetry = type(session) == "table"
+            and (session.capturePending or pendingStatRepairs[sessionID])
+        if needsRetry and sessionID ~= "" then
             local ok, result = pcall(Practice.TryUpdateSessionTotals, session.id)
             if ok and result == true then updated = updated + 1 end
         end
