@@ -125,6 +125,8 @@ local function EnsureJournalDefaults(db)
     if db.settings.contentMode ~= "raid" then db.settings.contentMode = "mplus" end
 
     if type(db.encounters) ~= "table" then db.encounters = {} end
+    if type(db.raidEncounters) ~= "table" then db.raidEncounters = {} end
+    if type(db.raidNights) ~= "table" then db.raidNights = {} end
     if type(db.builds) ~= "table" then db.builds = {} end
     if type(db.lootTargets) ~= "table" then db.lootTargets = {} end
     if type(db.lootTargetStatuses) ~= "table" then db.lootTargetStatuses = {} end
