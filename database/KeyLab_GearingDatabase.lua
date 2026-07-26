@@ -68,6 +68,20 @@ GearingDB.TierSlots = {
     Legs = true,
 }
 
+-- All armor positions that can be converted at the Catalyst. Only the five
+-- TierSlots above can count toward the 2-piece and 4-piece set bonuses.
+GearingDB.CatalystSlots = {
+    Head = true,
+    Shoulders = true,
+    Back = true,
+    Chest = true,
+    Wrist = true,
+    Hands = true,
+    Waist = true,
+    Legs = true,
+    Feet = true,
+}
+
 GearingDB.InventorySlots = {
     { name = "Head", slotID = 1 },
     { name = "Neck", slotID = 2 },
@@ -111,8 +125,7 @@ GearingDB.CurrencyKeys = {
 
 GearingDB.Voidforge = {
     ascendantVoidcoreItemID = 268552,
-    craftedWeaponSlotID = 16,
-    weaponSlotIDs = { [16] = true, [17] = true },
+    weaponSlotIDs = { [16] = true },
     trinketSlotIDs = { [13] = true, [14] = true },
     eligibleTracks = { Hero = true, Myth = true },
     baseMaxItemLevel = { Hero = 276, Myth = 289 },

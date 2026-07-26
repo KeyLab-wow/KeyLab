@@ -9,11 +9,19 @@ local PracticeDB = KeyLab.DB.Practice
 local activePracticeSession = nil
 
 local STATUS_OPTIONS = {
-    { value = nil, label = "Unmarked" },
     { value = "baseline", label = "Baseline" },
-    { value = "favorite", label = "Favorite" },
-    { value = "review", label = "Review" },
-    { value = "ignore", label = "Ignore" },
+    { value = "testing", label = "Testing" },
+    { value = "candidate", label = "Candidate" },
+    { value = "current_best", label = "Current Best" },
+    { value = "needs_test", label = "Needs Test" },
+    { value = "archived", label = "Archived" },
+    { value = "exclude", label = "Exclude" },
+}
+
+local LEGACY_STATUS_MAP = {
+    favorite = "current_best",
+    review = "needs_test",
+    ignore = "exclude",
 }
 
 --[[
@@ -112,14 +120,22 @@ function PracticeDB.GetStatusOptions()
     return STATUS_OPTIONS
 end
 
+function PracticeDB.NormalizeStatus(status)
+    if status == nil or status == "" then
+        return "needs_test"
+    end
+    return LEGACY_STATUS_MAP[status] or status
+end
+
 function PracticeDB.GetStatusLabel(status)
+    status = PracticeDB.NormalizeStatus(status)
     for _, option in ipairs(STATUS_OPTIONS) do
         if option.value == status then
             return option.label
         end
     end
 
-    return "Unmarked"
+    return "Needs Test"
 end
 
 function PracticeDB.SetStatus(sessionID, status)

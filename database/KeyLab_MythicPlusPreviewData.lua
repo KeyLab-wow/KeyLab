@@ -5,7 +5,9 @@ _G.KeyLab = KeyLab
 KeyLab.MythicPlusPreviewData = KeyLab.MythicPlusPreviewData or {}
 local Preview = KeyLab.MythicPlusPreviewData
 
-local PREVIEW_PREFIX = "keylab-preview-mplus-"
+local DATA_MARKER = "keylab-author-screenshot-v2"
+local DATA_PREFIX = "keylab-author-mplus-"
+local LEGACY_PREFIX = "keylab-preview-mplus-"
 
 local DUNGEONS = {
     { mapID = 558, name = "Magisters' Terrace", timeLimit = 2040, bosses = { "Arcanotron Custos", "Seranel Sunlash", "Gemellus", "Degentrius" } },
@@ -19,9 +21,9 @@ local DUNGEONS = {
 }
 
 local TALENT_VARIANTS = {
-    "KEYLAB-PREVIEW-MPLUS-TALENT-BUILD-A",
-    "KEYLAB-PREVIEW-MPLUS-TALENT-BUILD-B",
-    "KEYLAB-PREVIEW-MPLUS-TALENT-BUILD-C",
+    "KEYLAB-AUTHOR-MPLUS-TALENT-BUILD-A",
+    "KEYLAB-AUTHOR-MPLUS-TALENT-BUILD-B",
+    "KEYLAB-AUTHOR-MPLUS-TALENT-BUILD-C",
 }
 
 local STAT_VARIANTS = {
@@ -50,7 +52,7 @@ local function BuildGearProfile(variantIndex, progressionIndex)
     local level = 256 + ((progressionIndex or 1) * 2) + variantIndex
     for slotIndex, slotName in ipairs(GEAR_SLOTS) do
         local itemID = 990000 + ((progressionIndex or 1) * 1000) + (variantIndex * 100) + slotIndex
-        local itemName = string.format("[Preview] %s Setup %s", slotName, string.char(64 + variantIndex))
+        local itemName = string.format("%s Setup %s", slotName, string.char(64 + variantIndex))
         slots[slotName] = {
             slotName = slotName,
             itemID = itemID,
@@ -69,11 +71,16 @@ local function GetDB()
     return KeyLabDB
 end
 
-local function IsPreviewRecord(record)
-    return type(record) == "table" and (
-        record.previewData == true
-        or tostring(record.id or ""):sub(1, #PREVIEW_PREFIX) == PREVIEW_PREFIX
-    )
+local function HasPrefix(value, prefix)
+    return tostring(value or ""):sub(1, #prefix) == prefix
+end
+
+local function IsOwnedRecord(record)
+    if type(record) ~= "table" then return false end
+    local id = tostring(record.id or "")
+    local current = record.keylabAuthorData == DATA_MARKER and HasPrefix(id, DATA_PREFIX)
+    local legacy = record.previewData == true and HasPrefix(id, LEGACY_PREFIX)
+    return current or legacy
 end
 
 local function RefreshUI()
@@ -89,12 +96,12 @@ local function PlayerSnapshot()
     local className, classFile, classID
     if UnitClass then className, classFile, classID = UnitClass("player") end
     return {
-        playerName = UnitName and UnitName("player") or "Preview Player",
-        realm = GetRealmName and GetRealmName() or "Preview Realm",
-        class = className or "Preview Class",
+        playerName = UnitName and UnitName("player") or "KeyLab Author",
+        realm = GetRealmName and GetRealmName() or "Sample Realm",
+        class = className or "Sample Class",
         classFile = classFile,
         classID = classID,
-        spec = "Preview Spec",
+        spec = "Sample Spec",
         role = "DAMAGER",
         blizzardRole = "DAMAGER",
     }
@@ -159,7 +166,7 @@ local function BuildCombatSessions(dungeon, dungeonIndex, runIndex, baseDPS, bas
             sessionID = (dungeonIndex * 1000) + (runIndex * 100) + pullIndex,
             sessionName = isBoss
                 and tostring(bossName)
-                or string.format("[Preview] Trash Pull %d", pullIndex),
+                or string.format("Trash Pull %d", pullIndex),
             durationSeconds = duration,
             isAggregateSession = false,
             isBossSession = isBoss,
@@ -193,16 +200,24 @@ end
 
 function Preview.HasData()
     for _, encounter in ipairs(GetDB().encounters or {}) do
-        if IsPreviewRecord(encounter) then return true end
+        if IsOwnedRecord(encounter) then return true end
     end
     return false
+end
+
+function Preview.Count()
+    local count = 0
+    for _, encounter in ipairs(GetDB().encounters or {}) do
+        if IsOwnedRecord(encounter) then count = count + 1 end
+    end
+    return count
 end
 
 function Preview.Remove()
     local encounters = GetDB().encounters or {}
     local removed = 0
     for index = #encounters, 1, -1 do
-        if IsPreviewRecord(encounters[index]) then
+        if IsOwnedRecord(encounters[index]) then
             table.remove(encounters, index)
             removed = removed + 1
         end
@@ -212,7 +227,7 @@ function Preview.Remove()
 end
 
 function Preview.Add()
-    if Preview.HasData() then return false, "M+ preview data is already loaded." end
+    if Preview.HasData() then return false, "M+ screenshot data is already loaded." end
 
     local player = PlayerSnapshot()
     local now = time()
@@ -250,12 +265,12 @@ function Preview.Add()
             local stats = STAT_VARIANTS[variantIndex]
             local encounterPlayer = CopyPlayer(player)
 
-            if not encounterPlayer.spec or encounterPlayer.spec == "" then encounterPlayer.spec = "Preview Spec" end
+            if not encounterPlayer.spec or encounterPlayer.spec == "" then encounterPlayer.spec = "Sample Spec" end
             if not encounterPlayer.role or encounterPlayer.role == "" then encounterPlayer.role = "DAMAGER" end
 
             local encounter = {
-                id = string.format("%srun-%d-%d", PREVIEW_PREFIX, dungeonIndex, runIndex),
-                previewData = true,
+                id = string.format("%srun-%d-%d", DATA_PREFIX, dungeonIndex, runIndex),
+                keylabAuthorData = DATA_MARKER,
                 contentType = "mythicplus",
                 recordType = "run",
                 timestamp = timestamp,
@@ -272,16 +287,16 @@ function Preview.Add()
                     timeDeltaSeconds = timeDelta,
                     remainingSeconds = timeDelta,
                     timed = timing.timed,
-                    timingSource = "previewData",
-                    durationSource = "previewData",
-                    timedSource = "previewData",
-                    remainingSource = "previewData",
-                    timeLimitSource = "previewData",
+                    timingSource = "authorSampleData",
+                    durationSource = "authorSampleData",
+                    timedSource = "authorSampleData",
+                    remainingSource = "authorSampleData",
+                    timeLimitSource = "authorSampleData",
                     keystoneUpgradeLevels = timing.upgrades,
-                    keystoneUpgradeLevelsSource = "previewData",
+                    keystoneUpgradeLevelsSource = "authorSampleData",
                     deathCount = groupDeaths,
                     officialDeathCount = groupDeaths,
-                    deathCountSource = "previewData",
+                    deathCountSource = "authorSampleData",
                 },
                 player = encounterPlayer,
                 talents = { talentString = TALENT_VARIANTS[variantIndex] },
@@ -313,12 +328,12 @@ function Preview.Add()
                     pullSessionDeaths = localDeaths,
                     pullSessionGroupDeaths = groupDeaths,
                     deathMetricSource = "pullSessions",
-                    groupDeathMetricSource = "previewData",
+                    groupDeathMetricSource = "authorSampleData",
                 },
                 flags = {
                     interrupted = false,
                     excludedFromComparisons = false,
-                    previewData = true,
+                    authorSampleData = true,
                 },
             }
 

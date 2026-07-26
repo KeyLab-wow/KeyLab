@@ -5,7 +5,9 @@ _G.KeyLab = KeyLab
 KeyLab.RaidPreviewData = KeyLab.RaidPreviewData or {}
 local Preview = KeyLab.RaidPreviewData
 
-local PREVIEW_PREFIX = "keylab-preview-raid-"
+local DATA_MARKER = "keylab-author-screenshot-v2"
+local DATA_PREFIX = "keylab-author-raid-"
+local LEGACY_PREFIX = "keylab-preview-raid-"
 
 local RAID_DEFINITIONS = {
     {
@@ -14,7 +16,7 @@ local RAID_DEFINITIONS = {
         difficultyID = 15,
         difficultyName = "Heroic",
         daysAgo = 0,
-        latestPreview = true,
+        latestSample = true,
         bosses = {
             { encounterID = 2733, encounterName = "Imperator Averzian", pulls = 3, killPull = 3, offset = -25000 },
             { encounterID = 2734, encounterName = "Vorasius", pulls = 4, killPull = 4, offset = 15000 },
@@ -58,9 +60,9 @@ local RAID_DEFINITIONS = {
 }
 
 local TALENT_VARIANTS = {
-    "KEYLAB-PREVIEW-TALENT-BUILD-A",
-    "KEYLAB-PREVIEW-TALENT-BUILD-B",
-    "KEYLAB-PREVIEW-TALENT-BUILD-C",
+    "KEYLAB-AUTHOR-RAID-TALENT-BUILD-A",
+    "KEYLAB-AUTHOR-RAID-TALENT-BUILD-B",
+    "KEYLAB-AUTHOR-RAID-TALENT-BUILD-C",
 }
 
 local STAT_VARIANTS = {
@@ -79,7 +81,7 @@ local function BuildGearProfile(variantIndex)
     local level = 264 + (variantIndex * 2)
     for slotIndex, slotName in ipairs(GEAR_SLOTS) do
         local itemID = 991000 + (variantIndex * 100) + slotIndex
-        local itemName = string.format("[Preview] %s Setup %s", slotName, string.char(64 + variantIndex))
+        local itemName = string.format("%s Setup %s", slotName, string.char(64 + variantIndex))
         slots[slotName] = {
             slotName = slotName,
             itemID = itemID,
@@ -99,11 +101,16 @@ local function GetDB()
     return KeyLabDB
 end
 
-local function IsPreviewRecord(record)
-    return type(record) == "table" and (
-        record.previewData == true
-        or tostring(record.id or ""):sub(1, #PREVIEW_PREFIX) == PREVIEW_PREFIX
-    )
+local function HasPrefix(value, prefix)
+    return tostring(value or ""):sub(1, #prefix) == prefix
+end
+
+local function IsOwnedRecord(record)
+    if type(record) ~= "table" then return false end
+    local id = tostring(record.id or "")
+    local current = record.keylabAuthorData == DATA_MARKER and HasPrefix(id, DATA_PREFIX)
+    local legacy = record.previewData == true and HasPrefix(id, LEGACY_PREFIX)
+    return current or legacy
 end
 
 local function RefreshUI()
@@ -116,10 +123,10 @@ local function PlayerSnapshot()
         return KeyLab.Capture.Player.GetSnapshot()
     end
     return {
-        playerName = UnitName and UnitName("player") or "Preview Player",
-        realm = GetRealmName and GetRealmName() or "Preview Realm",
-        class = UnitClass and UnitClass("player") or "Preview Class",
-        spec = "Preview Spec",
+        playerName = UnitName and UnitName("player") or "KeyLab Author",
+        realm = GetRealmName and GetRealmName() or "Sample Realm",
+        class = UnitClass and UnitClass("player") or "Sample Class",
+        spec = "Sample Spec",
     }
 end
 
@@ -251,25 +258,37 @@ end
 function Preview.HasData()
     local db = GetDB()
     for _, encounter in ipairs(db.raidEncounters or {}) do
-        if IsPreviewRecord(encounter) then return true end
+        if IsOwnedRecord(encounter) then return true end
     end
     for _, night in ipairs(db.raidNights or {}) do
-        if IsPreviewRecord(night) then return true end
+        if IsOwnedRecord(night) then return true end
     end
     return false
+end
+
+function Preview.Count()
+    local db = GetDB()
+    local pulls, nights = 0, 0
+    for _, encounter in ipairs(db.raidEncounters or {}) do
+        if IsOwnedRecord(encounter) then pulls = pulls + 1 end
+    end
+    for _, night in ipairs(db.raidNights or {}) do
+        if IsOwnedRecord(night) then nights = nights + 1 end
+    end
+    return pulls, nights
 end
 
 function Preview.Remove()
     local db = GetDB()
     local removedEncounters, removedNights = 0, 0
     for index = #(db.raidEncounters or {}), 1, -1 do
-        if IsPreviewRecord(db.raidEncounters[index]) then
+        if IsOwnedRecord(db.raidEncounters[index]) then
             table.remove(db.raidEncounters, index)
             removedEncounters = removedEncounters + 1
         end
     end
     for index = #(db.raidNights or {}), 1, -1 do
-        if IsPreviewRecord(db.raidNights[index]) then
+        if IsOwnedRecord(db.raidNights[index]) then
             table.remove(db.raidNights, index)
             removedNights = removedNights + 1
         end
@@ -279,16 +298,16 @@ function Preview.Remove()
 end
 
 function Preview.Add()
-    if Preview.HasData() then return false, "Raid preview data is already loaded." end
+    if Preview.HasData() then return false, "Raid screenshot data is already loaded." end
 
     local player = PlayerSnapshot()
     local now = time()
     local totalPulls, totalNights = 0, 0
 
     for raidIndex, definition in ipairs(RAID_DEFINITIONS) do
-        local startOffset = definition.latestPreview and (DefinitionElapsed(definition) + 300) or 10800
+        local startOffset = definition.latestSample and (DefinitionElapsed(definition) + 300) or 10800
         local nightStart = now - (definition.daysAgo * 86400) - startOffset
-        local nightID = PREVIEW_PREFIX .. "night-" .. tostring(raidIndex)
+        local nightID = DATA_PREFIX .. "night-" .. tostring(raidIndex)
         local pullIDs, bossAttempts, bossKills = {}, {}, {}
         local killPulls = 0
         local elapsed = 0
@@ -301,7 +320,7 @@ function Preview.Add()
                 local duration = PreviewDuration(pullIndex, bossIndex, killed)
                 local endedAt = nightStart + elapsed + duration
                 elapsed = elapsed + duration + 45
-                local pullID = string.format("%spull-%d-%d-%d", PREVIEW_PREFIX, raidIndex, bossIndex, pullIndex)
+                local pullID = string.format("%spull-%d-%d-%d", DATA_PREFIX, raidIndex, bossIndex, pullIndex)
                 local variantIndex = ((pullIndex + bossIndex - 2) % #TALENT_VARIANTS) + 1
                 local stats = STAT_VARIANTS[variantIndex]
                 local metrics = BuildMetrics(player, pullIndex, boss.offset, duration, killed)
@@ -314,7 +333,7 @@ function Preview.Add()
 
                 local encounter = {
                     id = pullID,
-                    previewData = true,
+                    keylabAuthorData = DATA_MARKER,
                     contentType = "raid",
                     recordType = "bossPull",
                     timestamp = endedAt,
@@ -347,7 +366,7 @@ function Preview.Add()
                     },
                     metrics = metrics,
                     metricRanks = BuildRanks(pullIndex, bossIndex),
-                    flags = { interrupted = false, excludedFromComparisons = false, previewData = true },
+                    flags = { interrupted = false, excludedFromComparisons = false, authorSampleData = true },
                 }
 
                 local ok = AddEncounter(encounter)
@@ -370,13 +389,13 @@ function Preview.Add()
         nightMetrics.avoidableDamageTaken = totalBossSeconds > 0 and (((tonumber(nightMetrics.avoidableDamageTaken) or 0) / totalBossSeconds) * 60) or 0
         local night = {
             id = nightID,
-            previewData = true,
+            keylabAuthorData = DATA_MARKER,
             contentType = "raid",
             recordType = "raidNight",
             startTime = nightStart,
             endTime = nightEnd,
             dateText = date("%Y-%m-%d %H:%M:%S", nightEnd),
-            closeReason = "preview data",
+            closeReason = "author sample data",
             instanceID = definition.instanceID,
             instanceName = definition.instanceName,
             difficultyID = definition.difficultyID,

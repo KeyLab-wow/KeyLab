@@ -125,6 +125,71 @@ function Raids.GetLatestNightForCurrentCharacter()
     return nil
 end
 
+local function GetCurrentSpecIdentity()
+    if not GetSpecialization or not GetSpecializationInfo then return nil, nil end
+    local specializationIndex = GetSpecialization()
+    if not specializationIndex then return nil, nil end
+    local specID, specName = GetSpecializationInfo(specializationIndex)
+    return tonumber(specID), specName
+end
+
+local function NightMatchesCurrentSpec(night)
+    local currentSpecID, currentSpecName = GetCurrentSpecIdentity()
+    if not currentSpecID and (not currentSpecName or currentSpecName == "") then return true end
+
+    local player = type(night) == "table" and night.player or {}
+    local savedSpecID = tonumber(player and player.specID)
+    local savedSpecName = player and (player.spec or player.specName)
+    if currentSpecID and savedSpecID then return currentSpecID == savedSpecID end
+    if currentSpecName and currentSpecName ~= "" and savedSpecName and savedSpecName ~= "" then
+        return tostring(currentSpecName):lower() == tostring(savedSpecName):lower()
+    end
+    return false
+end
+
+local function NightMatchesCurrentCharacter(night)
+    local encounterData = KeyLab.EncounterData or (KeyLab.Analysis and KeyLab.Analysis.EncounterData)
+    local wrapper = { player = type(night) == "table" and night.player or nil }
+    local characterMatches = not (encounterData and encounterData.EncounterMatchesCurrentCharacter)
+        or encounterData.EncounterMatchesCurrentCharacter(wrapper, { allowMissingIdentity = false })
+    local classMatches = not (encounterData and encounterData.EncounterMatchesCurrentClass)
+        or encounterData.EncounterMatchesCurrentClass(wrapper, { allowMissingClass = true })
+    return characterMatches and classMatches
+end
+
+function Raids.GetLatestNightForCurrentCharacterAndSpec()
+    for _, night in ipairs(Raids.GetNights()) do
+        if NightMatchesCurrentCharacter(night) and NightMatchesCurrentSpec(night) then
+            return night
+        end
+    end
+    return nil
+end
+
+function Raids.GetRecentNightsForCurrentCharacter(days)
+    local now = time and time() or 0
+    local cutoff = now - ((tonumber(days) or 7) * 86400)
+    local recent = {}
+    for _, night in ipairs(Raids.GetNights()) do
+        local timestamp = tonumber(night and (night.endTime or night.startTime)) or 0
+        if timestamp >= cutoff
+            and NightMatchesCurrentCharacter(night)
+            and NightMatchesCurrentSpec(night)
+        then
+            table.insert(recent, night)
+        end
+    end
+    return recent
+end
+
+function Raids.FindNightByID(id)
+    if not id then return nil end
+    for _, night in ipairs(Raids.GetNights()) do
+        if night.id == id then return night end
+    end
+    return nil
+end
+
 function Raids.FindEncounterByID(id)
     if not id then return nil end
     for _, encounter in ipairs(GetTable("raidEncounters")) do
