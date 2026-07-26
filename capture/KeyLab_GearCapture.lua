@@ -446,9 +446,9 @@ local function ScanEquippedSlot(slotName)
     local isVoidforgeTrack = voidforgeRules.eligibleTracks and voidforgeRules.eligibleTracks[trackName] == true
     local isMaxRank = tonumber(upgradeRank) == tonumber(voidforgeRules.requiredRank or 6)
         and tonumber(upgradeMaxRank) == tonumber(voidforgeRules.requiredMaxRank or 6)
-    local craftedWeaponVoidforgeCandidate = tonumber(slotDef.slotID) == tonumber(voidforgeRules.craftedWeaponSlotID or 16)
-        and craftedIndicatorVisible == true
-        and (craftQualityTier == nil or tonumber(craftQualityTier) >= 5)
+    -- Ascendant Voidcores apply only to eligible Hero/Myth-track Main Hand
+    -- weapons and trinkets. Crafted items have no upgrade track.
+    local craftedWeaponVoidforgeCandidate = false
     local weaponVoidforgeCandidate = voidforgeRules.weaponSlotIDs
         and voidforgeRules.weaponSlotIDs[tonumber(slotDef.slotID) or 0] == true
         and isVoidforgeTrack
@@ -663,6 +663,20 @@ function Capture.GetItemCount(itemID)
     end
     if GetItemCount then
         local ok, count = pcall(GetItemCount, itemID, true, false, true)
+        if ok then return tonumber(count) or 0 end
+    end
+    return nil
+end
+
+function Capture.GetBagItemCount(itemID)
+    itemID = tonumber(itemID)
+    if not itemID then return nil end
+    if C_Item and C_Item.GetItemCount then
+        local ok, count = pcall(C_Item.GetItemCount, itemID, false, false, false)
+        if ok then return tonumber(count) or 0 end
+    end
+    if GetItemCount then
+        local ok, count = pcall(GetItemCount, itemID, false, false, false)
         if ok then return tonumber(count) or 0 end
     end
     return nil
