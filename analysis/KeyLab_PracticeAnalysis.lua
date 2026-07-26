@@ -237,11 +237,12 @@ function PracticeAnalysis.FilterSessions(sessions, filters)
             if tonumber(session.targetDurationSeconds) ~= tonumber(filters.duration) then keep = false end
         end
 
+        local sessionStatus = DB().NormalizeStatus and DB().NormalizeStatus(session.status) or session.status
         if filters.status == "unmarked" then
             if session.status ~= nil then
                 keep = false
             end
-        elseif filters.status and filters.status ~= "all" and session.status ~= filters.status then
+        elseif filters.status and filters.status ~= "all" and sessionStatus ~= filters.status then
             keep = false
         end
 

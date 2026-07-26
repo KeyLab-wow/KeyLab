@@ -196,6 +196,16 @@ local function IsMasterDatabaseItem(itemID)
     return db.items[itemID] ~= nil
 end
 
+local function GetUpgradeResources()
+    local voidforgeRules = GearingDB().Voidforge or {}
+    return {
+        nebulousVoidcores = Capture().GetCurrencyAmount and (Capture().GetCurrencyAmount(3418) or 0) or 0,
+        ascendantVoidcores = Capture().GetBagItemCount
+            and (Capture().GetBagItemCount(voidforgeRules.ascendantVoidcoreItemID or 268552) or 0)
+            or 0,
+    }
+end
+
 local function UpgradeAction(slot)
     if not slot or not slot.itemID then return nil end
     local track = tostring(slot.upgradeTrack or slot.trackName or "")
@@ -220,17 +230,31 @@ local function RankText(slot)
     return ""
 end
 
-local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, offHandBlocked)
+local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, offHandBlocked, resources)
     slot = slot or EmptySlot(slotName)
+    resources = resources or {}
     local tierEligible = TIER_SLOTS[slotName] == true
     local tierChecked = tierEligible and tierState.slots and tierState.slots[slotName] == true or false
     local tierNeeded = tierEligible and not tierChecked and not tierState.complete
     local targetEquipped = target and tonumber(target.itemID) == tonumber(slot.itemID) or false
     local masterDatabaseItem = IsMasterDatabaseItem(slot.itemID)
-    local craftedItem = slot.itemID and (slot.isCrafted == true or slot.craftedDetected == true or masterDatabaseItem == false) or false
+    local trackName = tostring(slot.upgradeTrack or slot.trackName or "")
+    local upgradeRank = tonumber(slot.upgradeRank)
+    local upgradeMaxRank = tonumber(slot.upgradeMaxRank or slot.upgradeMax)
+    local hasUpgradeTrack = trackName ~= "" or (upgradeRank and upgradeMaxRank)
+    local explicitlyCrafted = slot.isCrafted == true or slot.craftedDetected == true
+    local catalystItem = slot.itemID and masterDatabaseItem == false and not explicitlyCrafted and hasUpgradeTrack or false
+    local craftedItem = slot.itemID and (explicitlyCrafted or (masterDatabaseItem == false and not hasUpgradeTrack)) or false
     local voidforgedItem = slot.voidforgedDetected == true or slot.ascendantVoidforgedDetected == true
-    local voidforgeAvailable = not voidforgedItem and slot.voidforgeCandidate == true
-    local isMythTrack = tostring(slot.upgradeTrack or slot.trackName or "") == "Myth"
+    local voidforgeAvailable = not voidforgedItem
+        and slot.voidforgeCandidate == true
+        and (tonumber(resources.ascendantVoidcores) or 0) > 0
+    local isHeroTrack = trackName == "Hero"
+    local isMythTrack = trackName == "Myth"
+    local isMaxRank = upgradeRank and upgradeMaxRank and upgradeRank >= upgradeMaxRank
+    local nebulousAvailable = isHeroTrack
+        and isMaxRank
+        and (tonumber(resources.nebulousVoidcores) or 0) > 0
     local upgradeAction = UpgradeAction(slot)
     local action
 
@@ -238,14 +262,18 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
         action = "Not used with equipped weapon"
     elseif tierNeeded then
         action = slot.itemID and "Catalyst for Tier" or "Find a Tier base item"
+    elseif voidforgeAvailable then
+        action = "Ascendant Voidcore Available"
+    elseif nebulousAvailable then
+        action = "Nebulous Voidcore Available"
+    elseif voidforgedItem then
+        action = isHeroTrack and "Ascendant Voidforged - Upgrade to Myth" or "Ascendant Voidforged"
     elseif tierChecked then
         action = upgradeAction or ""
+    elseif catalystItem then
+        action = upgradeAction or "Catalyst Item"
     elseif craftedItem then
         action = "Crafted Item"
-    elseif voidforgedItem then
-        action = "Ascendant Voidforged"
-    elseif voidforgeAvailable then
-        action = "Ascendant Voidforge Available"
     elseif upgradeAction then
         action = upgradeAction
     elseif target then
@@ -261,6 +289,9 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
     if tierNeeded then
         guidanceSources = TierSources(specID, slotName, season)
         sourceLabel = "Tier Sources:"
+    elseif not isMythTrack and (tierChecked or catalystItem) then
+        guidanceSources = TierSources(specID, slotName, season)
+        sourceLabel = "Upgrade Sources:"
     elseif not tierChecked and not craftedItem and not isMythTrack and target then
         guidanceSources = target.sourcesForDashboard or {}
         sourceLabel = #guidanceSources == 1 and "Target Source:" or "Target Sources:"
@@ -282,13 +313,15 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
         tierEligible = tierEligible,
         tierChecked = tierChecked,
         tierNeeded = tierNeeded,
-        tierBadge = tierChecked and "Tier" or (tierNeeded and "Need Tier" or ""),
+        tierBadge = tierChecked and "Tier" or (tierNeeded and "Need Tier" or (catalystItem and "Catalyst" or "")),
         target = target,
         targetEquipped = targetEquipped,
         masterDatabaseItem = masterDatabaseItem,
         craftedItem = craftedItem,
+        catalystItem = catalystItem,
         voidforgedItem = voidforgedItem,
         voidforgeAvailable = voidforgeAvailable,
+        nebulousAvailable = nebulousAvailable,
         isMythTrack = isMythTrack,
         sourceLabel = sourceLabel,
         guidanceSources = guidanceSources,
@@ -351,6 +384,7 @@ local function BuildDashboardState()
     local specID, specName = CurrentSpec()
     local season = CurrentSeason()
     local tierState = TierDB().GetState and TierDB().GetState(season) or { slots = {}, count = 0, complete = false }
+    local resources = GetUpgradeResources()
     local slotsByName = GetEquippedSlots()
     local mainHand = slotsByName["Main Hand"] or EmptySlot("Main Hand")
     local mainHandBlocksOffHand = Capture().IsTwoHandOrRangedWeapon and Capture().IsTwoHandOrRangedWeapon(mainHand)
@@ -365,7 +399,8 @@ local function BuildDashboardState()
             tierState,
             specID,
             season,
-            slotName == "Off Hand" and mainHandBlocksOffHand
+            slotName == "Off Hand" and mainHandBlocksOffHand,
+            resources
         )
     end
 
@@ -380,6 +415,7 @@ local function BuildDashboardState()
         plansBySlot = plansBySlot,
         slotStates = plansBySlot,
         tier = tierState,
+        resources = resources,
         alternatives = BuildAlternatives(specID),
         progress = BuildProgress(specID, slotsByName),
     }
@@ -410,8 +446,9 @@ function Analysis.GetLogicSummary()
     return {
         "The dashboard uses equipped gear, saved Targets, saved Alternatives, and the manual Tier Set checklist.",
         "Tier guidance has source priority until four manually selected Tier slots are complete.",
-        "Checked Tier slots show only their remaining track upgrade, without Target or Catalyst source guidance.",
-        "Items outside the Master Item Database are treated as crafted and do not receive track-upgrade guidance.",
+        "Hero-track Tier and Catalyst items keep their Dungeon and Raid upgrade-source guidance until they reach Myth.",
+        "Items outside the Master Item Database with an upgrade track are treated as Catalyst items; items without a track are crafted.",
+        "Nebulous and Ascendant availability appears only when the required currency or bag item is owned.",
         "Ascendant Voidforged weapons and trinkets retain their Hero or Myth base track at the upgraded item level.",
         "Saved Target sources are shown after Tier guidance is complete or not relevant, and are hidden once the equipped item is Myth track.",
         "No item scoring, priority-slot scoring, polish reminders, or overall gear score is calculated.",
@@ -447,8 +484,10 @@ function Analysis.PrintGearDebug()
             tierBadge = row.tierBadge,
             action = row.actionText,
             craftedItem = row.craftedItem,
+            catalystItem = row.catalystItem,
             voidforgedItem = row.voidforgedItem,
             voidforgeAvailable = row.voidforgeAvailable,
+            nebulousAvailable = row.nebulousAvailable,
             sourceCount = #(row.guidanceSources or {}),
         })
     end

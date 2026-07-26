@@ -1255,7 +1255,7 @@ local function BuildReachability(positions, initialStats, actualStats, finalStat
         if belowReach then
             table.insert(messages, string.format("The available items can reach up to %.1f%% %s, below your %.1f%% goal.", maximum, STAT_LABELS[key], goal))
             if #availabilityByStat[key].available == 0 then
-                table.insert(messages, string.format("None of the available items for your open slots provide %s.", STAT_LABELS[key]))
+                table.insert(messages, string.format("None of the available items for your unequipped slots provide %s.", STAT_LABELS[key]))
             end
         elseif aboveFloor then
             table.insert(messages, string.format("Your locked gear keeps %s at or above %.1f%%, which is already above your %.1f%% goal.", STAT_LABELS[key], minimum, goal))
@@ -1447,7 +1447,7 @@ local function RunJob(job)
     end
     if job.cancelled then return { ok = false, cancelled = true, message = "Matcher cancelled." } end
     local result = BuildResult(specID, job.itemType, job.itemSource, ownedRecords, best, goals, projection, estimate, mode, positions, unmatchedSlots, snapshot)
-    if not result then return { ok = false, message = "KeyLab could not find a valid item combination for the open slots." } end
+    if not result then return { ok = false, message = "KeyLab could not find a valid item combination for the unequipped slots." } end
     return { ok = true, result = result }
 end
 

@@ -176,11 +176,55 @@ local function GetMetricRanks(encounter)
     return encounter and encounter.metricRanks or {}
 end
 
+local function GetCurrentSpecIdentity()
+    if not GetSpecialization or not GetSpecializationInfo then
+        return nil, nil
+    end
+
+    local specializationIndex = GetSpecialization()
+    if not specializationIndex then return nil, nil end
+    local specID, specName = GetSpecializationInfo(specializationIndex)
+    return tonumber(specID), specName
+end
+
+local function EncounterMatchesCurrentSpec(encounter)
+    local currentSpecID, currentSpecName = GetCurrentSpecIdentity()
+    if not currentSpecID and (not currentSpecName or currentSpecName == "") then
+        return true
+    end
+
+    local player = GetPlayer(encounter)
+    local savedSpecID = tonumber(player and player.specID)
+    local savedSpecName = player and (player.spec or player.specName)
+
+    if currentSpecID and savedSpecID then
+        return currentSpecID == savedSpecID
+    end
+    if currentSpecName and currentSpecName ~= "" and savedSpecName and savedSpecName ~= "" then
+        return tostring(currentSpecName):lower() == tostring(savedSpecName):lower()
+    end
+    return false
+end
+
+local function EncounterKey(encounter)
+    if type(encounter) ~= "table" then return nil end
+    return encounter.id
+        or encounter.encounterID
+        or table.concat({
+            tostring(encounter.timestamp or 0),
+            tostring((GetChallenge(encounter) or {}).mapID or ""),
+            tostring((GetChallenge(encounter) or {}).keyLevel or ""),
+        }, ":")
+end
+
 local function FindLatestEncounter()
     local latest = nil
 
     for _, encounter in ipairs(GetAllEncounters() or {}) do
-        if EncounterMatchesCurrentCharacter(encounter) and IsDisplayableLastRun(encounter) then
+        if EncounterMatchesCurrentCharacter(encounter)
+            and EncounterMatchesCurrentSpec(encounter)
+            and IsDisplayableLastRun(encounter)
+        then
             if not latest or (tonumber(encounter.timestamp) or 0) > (tonumber(latest.timestamp) or 0) then
                 latest = encounter
             end
@@ -194,8 +238,42 @@ function Analysis.GetLatestRun()
     return FindLatestEncounter()
 end
 
-function Analysis.BuildState()
-    local encounter = FindLatestEncounter()
+function Analysis.GetRunKey(encounter)
+    return EncounterKey(encounter)
+end
+
+function Analysis.GetRecentRuns(days)
+    local now = time and time() or 0
+    local cutoff = now - ((tonumber(days) or 7) * 86400)
+    local recent = {}
+
+    for _, encounter in ipairs(GetAllEncounters() or {}) do
+        local timestamp = tonumber(encounter and encounter.timestamp) or 0
+        if timestamp >= cutoff
+            and EncounterMatchesCurrentCharacter(encounter)
+            and EncounterMatchesCurrentSpec(encounter)
+            and IsDisplayableLastRun(encounter)
+        then
+            table.insert(recent, encounter)
+        end
+    end
+
+    table.sort(recent, function(a, b)
+        return (tonumber(a and a.timestamp) or 0) > (tonumber(b and b.timestamp) or 0)
+    end)
+    return recent
+end
+
+function Analysis.FindRecentRunByKey(key, days)
+    if not key then return nil end
+    for _, encounter in ipairs(Analysis.GetRecentRuns(days)) do
+        if EncounterKey(encounter) == key then return encounter end
+    end
+    return nil
+end
+
+function Analysis.BuildState(selectedEncounter)
+    local encounter = selectedEncounter or FindLatestEncounter()
     if not encounter then
         return { hasRun = false }
     end
