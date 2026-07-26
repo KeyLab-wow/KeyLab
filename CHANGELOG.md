@@ -1,5 +1,186 @@
 # KeyLab Changelog
 
+## Version 1.8.86 - Seven-Day Run History
+
+Released July 26, 2026
+
+- Added a seven-day history selector to M+ Last Run and Last Raid.
+- Saved entries are limited to the current character's active specialization and listed newest first.
+- Added a Return to Latest button while reviewing an older run or raid session.
+- Older saved records remain safely stored and are not changed by the new read-only history views.
+
+## Version 1.8.85 - Empty Bag Slot Repair
+
+Released July 26, 2026
+
+- Fixed the saved gear shopping list stopping before it opened when Blizzard returned no item value for an empty bag slot.
+- Bag-owned Hero and Myth Target notes now safely skip empty slots and continue building the popup.
+- Added an empty-bag-slot runtime regression test for the Premade Group window.
+
+## Version 1.8.84 - Reliable Premade Group Popup
+
+Released July 26, 2026
+
+- Removed the obsolete requirement for Blizzard to provide a specific group-result number before opening the shopping list.
+- The saved gear shopping list now opens directly from Premade Group result hovers and result-list updates.
+- Added a search-panel fallback so Midnight Dungeon and Raid browsing can open the list even when Blizzard skips a hover argument.
+
+## Version 1.8.83 - Saved Gear Shopping List
+
+Released July 26, 2026
+
+- Replaced the hover-specific dungeon section with one centered saved gear shopping list.
+- Targets are grouped by their saved Dungeon, Raid, or other source and displayed as Slot - Item Name.
+- Added a limited selection of saved Alternatives without crowding out the main Targets.
+- Hero- and Myth-track Targets found in bags now show their bag status on the same item line.
+- Equipped Myth-track Targets remain safely saved but are left off the shopping list.
+
+## Version 1.8.82 - Accurate Premade Group Matching
+
+Released July 26, 2026
+
+- Premade Group popups now trust Blizzard's official primary activity name before any additional listing information.
+- Player-written group titles and tooltip text can no longer replace a valid dungeon or raid match.
+- Removed the broad result-list refresh hook that could mistake an unrelated number for a group result.
+- Equipped Myth-track Targets remain safely saved but are excluded from dungeon and raid browsing recommendations.
+
+## Version 1.8.81 - Catalyst and Voidcore Guidance
+
+Released July 26, 2026
+
+- Items outside the master database now show as Catalyst items when they have an upgrade track, while items without a track remain Crafted.
+- Nebulous and Ascendant Voidcore availability now appears only when the player owns the required currency or bag item and the equipped item is eligible.
+- Hero items without an available Voidcore continue to show Upgrade to Myth because Raid and weekly Vault rewards remain valid upgrade paths.
+- Added Dungeon and Raid slot guidance for Hero Tier and Catalyst items, plus Tier options in Premade Group popups until the 4-piece set is complete.
+- Equipped Myth-track Targets are hidden from dungeon and raid browsing popups, while the full saved Target collection remains unchanged.
+- Added the bag-only Ascendant Voidcore count to the Gear Dashboard currency card.
+
+## Version 1.8.80 - Dungeon and Raid Target Popup
+
+Released July 26, 2026
+
+- Added saved Gear Targets to Premade Group raid listings as well as dungeon listings.
+- Updated the popup to use the same current slot assignments counted by the Gear Dashboard.
+- Separated Dungeon, Raid, and Other Saved Targets so owned bag items and other non-group sources are still included in the total.
+- Existing Targets, Alternatives, and legacy backup records remain unchanged.
+
+## Version 1.8.79 - Clearer Macro Sequencer Hover
+
+Released July 26, 2026
+
+- Made Macro Sequencer buttons easier to identify while hovering with a gold border, gold text, and brighter background.
+- Improved hover feedback for Sequencer dropdowns and Information section headings.
+- Pixel-aligned and joined Information card borders to remove uneven lower-edge shadows.
+- Macro execution, sequence advancement, bindings, versions, and saved records remain unchanged.
+
+## Version 1.8.78 - Gear Dashboard Currency Card
+
+Released July 26, 2026
+
+- Replaced the Gear Dashboard legend with a Crests & Seasonal Currency card.
+- Added live balances for Adventurer, Veteran, Champion, Hero, and Myth Dawncrests.
+- Added live balances for Nebulous Voidcore and Dawnlight Manaflux.
+- Equipped gear, Tier progress, Targets, and Alternatives remain unchanged.
+
+## Version 1.8.77 - Clearer Gear Target Filters
+
+Released July 26, 2026
+
+- Clarified how Stamina and primary-stat filters can be combined, and placed Stamina first.
+- Improved Stat Goal Guidance wording and now calls empty gear positions unequipped slots.
+- Added a Sort label to every item-table column and improved filter and button spacing.
+- Gear matching, saved Targets, and saved Alternatives remain unchanged.
+
+## Version 1.8.76 - Clearer Practice Comparisons
+
+Released July 26, 2026
+
+- Added friendly Macro Sequence version guidance so rotations can be tracked with saved Practice sessions.
+- Replaced the Practice specialization filter with the character's current specialization and renamed Outcome to Performance Metric.
+- Added Baseline, Testing, Candidate, Current Best, Needs Test, Archived, and Exclude session statuses.
+- Older Practice statuses remain safely stored and continue under the closest matching new status.
+
+## Version 1.8.75 - Clearer Raid Trends Metric Filter
+
+Released July 26, 2026
+
+- Renamed the Metric filter heading to Performance Metric in Raid Trends.
+- The selected metric and Raid Trends calculations remain unchanged.
+- All saved raid records remain safely stored.
+
+## Version 1.8.74 - Current-Spec M+ Trends
+
+Released July 26, 2026
+
+- Replaced the specialization filter in M+ Trends with the character's current specialization.
+- Available dungeon choices and trend calculations now stay focused on the specialization currently being played.
+- Trends saved under other specializations remain safely stored and appear again when that specialization is active.
+
+## Version 1.8.73 - Gear Profile Filter Spacing
+
+Released July 26, 2026
+
+- Increased the spacing between filter headings and dropdowns in both M+ and Raid Gear Profiles.
+- Aligned the Current Spec heading and specialization name with the same spacing used in other analysis tabs.
+- This is a layout-only update; all filters and saved Gear Profile records remain unchanged.
+
+## Version 1.8.72 - Clearer Gear Profile Metric Filter
+
+Released July 26, 2026
+
+- Renamed the Outcome filter heading to Performance Metric in both M+ and Raid Gear Profiles.
+- The selected metric and Gear Profile ranking behavior remain unchanged.
+- All saved Gear Profile records remain safely stored.
+
+## Version 1.8.71 - Gear Profile Item Level Cards
+
+Released July 26, 2026
+
+- Replaced the two-trinket summary on M+ and Raid Gear Profile list cards with Average Item Level.
+- The selected profile details continue to show the complete equipped item list.
+- This is a display-only update; all saved Gear Profile records remain unchanged.
+
+## Version 1.8.70 - Current-Spec Gear Profiles
+
+Released July 26, 2026
+
+- Replaced the specialization filter in both M+ and Raid Gear Profiles with the character's current specialization.
+- Available dungeon, boss, key, and difficulty filters now stay focused on the specialization currently being played.
+- Gear Profiles saved under other specializations remain safely stored and appear again when that specialization is active.
+
+## Version 1.8.69 - Public Release Cleanup
+
+Released July 26, 2026
+
+- Removed the temporary Author Access tab after screenshot work was completed.
+- Author-only screenshot controls are no longer available in the player interface.
+- No saved player records were changed or removed.
+
+## Version 1.8.68 - Protected Screenshot Data
+
+Released July 25, 2026
+
+- Restored the passcode-protected Author Access tab for adding realistic M+ and Raid screenshot data.
+- Removed Preview wording from generated dungeon, boss, pull, gear, talent, and status text.
+- Generated records now carry a private marker and matching ID prefix.
+- Remove buttons delete only records carrying both exact markers, leaving all normal saved data unchanged.
+
+## Version 1.8.67 - Clearer Stat Profile Metric Filter
+
+Released July 25, 2026
+
+- Renamed the Outcome filter heading to Performance Metric in both M+ and Raid Stat Profiles.
+- The selected metric and all filtering behavior remain unchanged.
+- All saved Stat Profile records remain safely stored.
+
+## Version 1.8.66 - Raid Stat Detail Colors
+
+Released July 25, 2026
+
+- Added distinct colors for Crit, Haste, Mastery, and Versatility in Raid Stat Profile details.
+- Other captured stats keep the standard text color for a cleaner, easier-to-scan list.
+- This is a display-only update; all saved raid records remain unchanged.
+
 ## Version 1.8.65 - M+ Stat Profile Dungeon and Key Filters
 
 Released July 25, 2026
