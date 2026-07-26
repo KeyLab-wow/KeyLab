@@ -252,6 +252,32 @@ local function CountEncounters()
     return count
 end
 
+local function CountRaidBossPulls()
+    if KeyLab.RaidAnalysis and type(KeyLab.RaidAnalysis.GetEncounters) == "function" then
+        local encounters = KeyLab.RaidAnalysis.GetEncounters()
+        return type(encounters) == "table" and #encounters or 0
+    end
+
+    local encounters = KeyLab.DB
+        and KeyLab.DB.Raids
+        and KeyLab.DB.Raids.GetEncounters
+        and KeyLab.DB.Raids.GetEncounters()
+        or {}
+    local count = 0
+
+    for _, encounter in ipairs(encounters) do
+        if EncounterMatchesCurrentCharacter(encounter)
+            and encounter.contentType == "raid"
+            and type(encounter.raid) == "table"
+            and encounter.raid.encounterID
+        then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
 local function GetTrackingSinceText()
     if KeyLab.DB and KeyLab.DB.GetTrackingSince then
         return KeyLab.DB.GetTrackingSince()
@@ -328,7 +354,15 @@ function HOME:Create(parent)
 
     local runsValue = MakeText(hero, "0", 15, COLORS.accent, "LEFT")
     runsValue:SetPoint("TOPLEFT", runsLabel, "BOTTOMLEFT", 0, -4)
-    runsValue:SetSize(180, 22)
+    runsValue:SetSize(120, 22)
+
+    local raidPullsLabel = MakeText(hero, "Raid Boss Pulls", 11, COLORS.muted, "LEFT")
+    raidPullsLabel:SetPoint("TOPLEFT", hero, "TOPLEFT", 760, -78)
+    raidPullsLabel:SetSize(104, 16)
+
+    local raidPullsValue = MakeText(hero, "0", 15, COLORS.accent, "LEFT")
+    raidPullsValue:SetPoint("TOPLEFT", raidPullsLabel, "BOTTOMLEFT", 0, -4)
+    raidPullsValue:SetSize(104, 22)
 
     y = y - 150 - gap
 
@@ -379,14 +413,15 @@ function HOME:Create(parent)
     local releaseNoteHeight = 132
     local releaseNote = MakePanel(frame, CFG.x, y, width, releaseNoteHeight, false)
 
-    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8", 14, COLORS.title, "LEFT")
+    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.65", 14, COLORS.title, "LEFT")
     releaseTitle:SetPoint("TOPLEFT", releaseNote, "TOPLEFT", 14, -12)
     releaseTitle:SetSize(280, 18)
 
     local releaseBody = MakeText(
         releaseNote,
-        "Build and bind your own Macro Sequences, then save the active version with your Practice Session results.\n\n" ..
-        "The improved Stat Goal Matcher now plans complete gear sets, projects your final stats, warns about reduced stat efficiency, and explains the closest match it found.",
+        "Released July 25, 2026\n\n" ..
+        "- Added Dungeon / Zone and Key Level filters to M+ Stat Profiles.\n" ..
+        "- Compare stat priorities from all runs or narrow them to the content you choose.",
         11,
         COLORS.muted,
         "LEFT"
@@ -435,6 +470,7 @@ function HOME:Create(parent)
 
     frame.summarySince = trackingValue
     frame.summaryRuns = runsValue
+    frame.summaryRaidPulls = raidPullsValue
     frame.latestDungeon = latestDungeon
     frame.latestKey = latestKey
     frame.latestResult = latestResult
@@ -443,6 +479,7 @@ function HOME:Create(parent)
     function frame:Refresh()
         self.summarySince:SetText(GetTrackingSinceText())
         self.summaryRuns:SetText(tostring(CountEncounters()))
+        self.summaryRaidPulls:SetText(tostring(CountRaidBossPulls()))
 
         local state = GetLatestRunState()
         if state and state.hasRun then

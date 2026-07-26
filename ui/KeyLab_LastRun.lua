@@ -863,6 +863,19 @@ local function BuildPullGraph(parent, state, profile, yOffset)
         label:SetPoint("TOP", card, "TOPLEFT", x, graphBottomY - 10)
         label:SetSize(pullLabelWidth, 12)
 
+        local hasMissingMetric = false
+        for _, metricKey in ipairs(metricKeys) do
+            if SessionMetric(session, metricKey) == nil then
+                hasMissingMetric = true
+                break
+            end
+        end
+        if hasMissingMetric then
+            local missingLabel = MakeText(card, "M", "GameFontDisableSmall", 9, COLORS.warning, "CENTER")
+            missingLabel:SetPoint("TOP", card, "TOPLEFT", x, graphBottomY - 21)
+            missingLabel:SetSize(12, 10)
+        end
+
         local deathMarkerCount = MarkerCountForSession(session, markerMetricKeys)
         if IsBossSession(session) then
             MakePullIconMarker(card, "boss", x, bossMarkerY)
@@ -888,6 +901,10 @@ local function BuildPullGraph(parent, state, profile, yOffset)
                     scaleMax = 1
                 end
                 local y = graphBottomY + ((value / scaleMax) * graphHeight)
+                if value == 0 then
+                    -- Keep a real zero visible instead of drawing it directly over the graph border.
+                    y = graphBottomY + 3
+                end
                 if metricIndex == 1 and drawStems then
                     DrawLine(card, x, graphBottomY, x, y, stemColor, 2)
                 end
@@ -898,6 +915,9 @@ local function BuildPullGraph(parent, state, profile, yOffset)
                     DrawDot(card, x, y, metric.color)
                 end
                 lastX, lastY = x, y
+            else
+                -- A missing Blizzard metric is a gap, not a zero or a bridge between pulls.
+                lastX, lastY = nil, nil
             end
         end
     end
@@ -936,6 +956,7 @@ local function BuildPullGraph(parent, state, profile, yOffset)
     end
 
     AddLine(card, "Pull #", graphX, footerY, 80, COLORS.muted, "GameFontDisableSmall")
+    AddLine(card, "M = Metric data not returned", graphX + 270, footerY, 220, COLORS.warning, "GameFontDisableSmall")
 
     return card
 end
@@ -970,12 +991,12 @@ function LastRun:Create(parent)
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", HEADER.x, HEADER.titleY)
     title:SetSize(900, 24)
 
-    local subtitle = MakeText(frame, "See your latest Mythic+ run, including the timer, group, totals, pulls, and role results.", "GameFontHighlightSmall", nil, COLORS.muted)
+    local subtitle = MakeText(frame, "See your latest Mythic+ run, including the timer, group, totals, pulls, and role results. Blizzard's Damage Meter may sometimes leave a pull metric blank.", "GameFontHighlightSmall", nil, COLORS.muted)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-    subtitle:SetSize(900, 20)
+    subtitle:SetSize(900, 32)
 
     local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -72)
+    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -84)
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
 
     local content = CreateFrame("Frame", nil, scrollFrame)

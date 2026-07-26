@@ -723,7 +723,7 @@ function RaidSummary:Create(parent)
 
     local title = Text(frame, "Last Raid", "GameFontNormalLarge", HEADER.titleSize, Color("gold"))
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", HEADER.x, HEADER.titleY)
-    local subtitle = Text(frame, "Review your latest raid night and see how each boss pull went.", "GameFontHighlightSmall", nil, Color("muted"))
+    local subtitle = Text(frame, "Review your latest raid session and see how each boss pull went.", "GameFontHighlightSmall", nil, Color("muted"))
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -7)
     subtitle:SetSize(850, 20)
     self.context = Text(frame, "", "GameFontDisableSmall", nil, Color("muted"))
@@ -737,7 +737,7 @@ function RaidSummary:Create(parent)
     self.content:SetSize(888, 650)
     self.scroll:SetScrollChild(self.content)
 
-    self.empty = Text(frame, "Your latest raid night will appear here after you leave a raid with saved boss pulls.", "GameFontHighlight", 14, Color("muted"), "CENTER")
+    self.empty = Text(frame, "Your latest raid session will appear here after you leave a raid with saved boss pulls.", "GameFontHighlight", 14, Color("muted"), "CENTER")
     self.empty:SetPoint("CENTER", frame, "CENTER", 0, 10)
     self.empty:SetSize(760, 30)
 

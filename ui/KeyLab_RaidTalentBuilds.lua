@@ -15,6 +15,7 @@ local HEADER = KeyLab.UI and KeyLab.UI.Theme and KeyLab.UI.Theme.tabHeader or { 
 
 local RaidAnalysis = KeyLab.RaidAnalysis or {}
 local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
+local TalentCapture = KeyLab.Capture and KeyLab.Capture.Talents or {}
 
 local CFG = {
     pageSize = 5,
@@ -32,6 +33,10 @@ local CFG = {
         soft = { 0.780, 0.830, 0.900, 1.0 },
         gold = { 0.820, 0.760, 0.580, 1.0 },
         divider = { 0.440, 0.580, 0.780, 0.32 },
+        crit = { 0.840, 0.440, 0.420, 0.95 },
+        haste = { 0.840, 0.720, 0.420, 0.95 },
+        mastery = { 0.500, 0.680, 0.940, 0.95 },
+        versatility = { 0.460, 0.780, 0.500, 0.95 },
         barBg = { 0.012, 0.020, 0.044, 0.90 },
         barBorder = { 0.185, 0.300, 0.500, 0.50 },
         barFill = { 0.500, 0.680, 0.940, 0.95 },
@@ -193,8 +198,42 @@ local function Spec(encounter)
     return player.spec or player.specName or "Unknown Spec"
 end
 
+local function SpecID(encounter)
+    local player = encounter and encounter.player or {}
+    return tonumber(player.specID or encounter and encounter.specID)
+end
+
+local function GetCurrentSpecIdentity()
+    local specIndex = GetSpecialization and GetSpecialization()
+    if specIndex and GetSpecializationInfo then
+        local specID, specName = GetSpecializationInfo(specIndex)
+        if specName and specName ~= "" then
+            return tonumber(specID), specName
+        end
+    end
+    return nil, nil
+end
+
+local function MatchesCurrentSpec(encounter, currentSpecID, currentSpecName)
+    local encounterSpecID = SpecID(encounter)
+    if currentSpecID and encounterSpecID then
+        return encounterSpecID == currentSpecID
+    end
+    if currentSpecName then
+        return Spec(encounter) == currentSpecName
+    end
+    return true
+end
+
 local function TalentString(encounter)
     return encounter and encounter.talents and encounter.talents.talentString or ""
+end
+
+local function TalentLoadoutName(encounter)
+    local name = encounter and encounter.talents and encounter.talents.loadoutName
+    if type(name) ~= "string" then return nil end
+    name = name:match("^%s*(.-)%s*$")
+    return name ~= "" and name or nil
 end
 
 local function MetricValue(encounter, metricKey)
@@ -229,8 +268,7 @@ end
 local function BuildOptions(encounters, selectedBoss, selectedDifficulty)
     local bosses = { { value = nil, text = "All Bosses" } }
     local difficulties = { { value = nil, text = "All Difficulties" } }
-    local specs = { { value = nil, text = "All Specs" } }
-    local bossSeen, difficultySeen, specSeen = {}, {}, {}
+    local bossSeen, difficultySeen = {}, {}
 
     for _, encounter in ipairs(encounters or {}) do
         local raid = Raid(encounter)
@@ -244,13 +282,6 @@ local function BuildOptions(encounters, selectedBoss, selectedDifficulty)
                 difficultySeen[difficultyID] = true
                 table.insert(difficulties, { value = difficultyID, text = raid.difficultyName or ("Difficulty " .. difficultyID) })
             end
-            if not selectedDifficulty or difficultyID == selectedDifficulty then
-                local spec = Spec(encounter)
-                if spec ~= "Unknown Spec" and not specSeen[spec] then
-                    specSeen[spec] = true
-                    table.insert(specs, { value = spec, text = spec })
-                end
-            end
         end
     end
 
@@ -261,8 +292,8 @@ local function BuildOptions(encounters, selectedBoss, selectedDifficulty)
             return tostring(a.text) < tostring(b.text)
         end)
     end
-    Sort(bosses); Sort(difficulties); Sort(specs)
-    return bosses, difficulties, specs
+    Sort(bosses); Sort(difficulties)
+    return bosses, difficulties
 end
 
 local function HasOption(options, value)
@@ -279,7 +310,7 @@ local function MatchesFilters(encounter)
     local raid = Raid(encounter)
     if RaidTalentBuilds.selectedEncounterID and SafeNumber(raid.encounterID) ~= RaidTalentBuilds.selectedEncounterID then return false end
     if RaidTalentBuilds.selectedDifficultyID and SafeNumber(raid.difficultyID) ~= RaidTalentBuilds.selectedDifficultyID then return false end
-    if RaidTalentBuilds.selectedSpec and Spec(encounter) ~= RaidTalentBuilds.selectedSpec then return false end
+    if not MatchesCurrentSpec(encounter, RaidTalentBuilds.selectedSpecID, RaidTalentBuilds.selectedSpec) then return false end
     if TalentString(encounter) == "" then return false end
     return MetricValue(encounter, RaidTalentBuilds.selectedMetricKey) ~= nil
 end
@@ -325,6 +356,10 @@ local function AddDetailRow(parent, label, value, x, y, width)
     return y - 35
 end
 
+local function GetStatColor(statKey)
+    return CFG.colors[statKey] or CFG.colors.text
+end
+
 local function AddStatRows(parent, encounter, x, y, width)
     local stats = encounter and encounter.stats or {}
     local shown, hidden = 0, 0
@@ -334,7 +369,7 @@ local function AddStatRows(parent, encounter, x, y, width)
         if info and info.store == true and value and value > 0 then
             if shown < 13 then
                 local row = AddFont(parent, (info.label or statKey) .. ": " .. FormatStat(statKey, value), "GameFontHighlightSmall", x, y, width)
-                ApplyColor(row, CFG.colors.text)
+                ApplyColor(row, GetStatColor(statKey))
                 y, shown = y - CFG.details.rowHeight, shown + 1
             else
                 hidden = hidden + 1
@@ -371,7 +406,32 @@ local function AddOutcomeRows(parent, encounter, x, y, width)
 end
 
 local function VariantTitle(cardData, number)
-    return "Raid " .. Spec(cardData and cardData.bestEncounter) .. " - Talent Variant " .. tostring(number or 1)
+    local encounter = cardData and cardData.bestEncounter
+    local loadoutName
+    local latestTimestamp = -1
+
+    local savedEncounters = cardData and cardData.group and cardData.group.encounters
+        or cardData and cardData.encounters
+        or {}
+    for _, savedEncounter in ipairs(savedEncounters) do
+        local savedName = TalentLoadoutName(savedEncounter)
+        local timestamp = tonumber(savedEncounter and savedEncounter.timestamp) or 0
+        if savedName and timestamp >= latestTimestamp then
+            loadoutName = savedName
+            latestTimestamp = timestamp
+        end
+    end
+
+    if not loadoutName then
+        loadoutName = TalentLoadoutName(encounter)
+    end
+    if not loadoutName and cardData and cardData.talentString then
+        loadoutName = RaidTalentBuilds.loadoutNamesByTalentString
+            and RaidTalentBuilds.loadoutNamesByTalentString[cardData.talentString]
+    end
+
+    local buildName = loadoutName or ("Talent Variant " .. tostring(number or 1))
+    return "Raid " .. (RaidTalentBuilds.currentSpecName or Spec(encounter)) .. " - " .. buildName
 end
 
 local function BuildDetails(panel, cardData, variantNumber)
@@ -470,15 +530,25 @@ end
 
 function RaidTalentBuilds:RefreshOptions()
     self.allEncounters = Encounters()
-    self.bossOptions, self.difficultyOptions, self.specOptions = BuildOptions(self.allEncounters, self.selectedEncounterID, self.selectedDifficultyID)
+    self.currentSpecID, self.currentSpecName = GetCurrentSpecIdentity()
+    self.selectedSpecID = self.currentSpecID
+    self.selectedSpec = self.currentSpecName
+    self.loadoutNamesByTalentString = TalentCapture.GetLoadoutNameMap and TalentCapture.GetLoadoutNameMap() or {}
+    self.currentSpecEncounters = {}
+
+    for _, encounter in ipairs(self.allEncounters or {}) do
+        if MatchesCurrentSpec(encounter, self.currentSpecID, self.currentSpecName) then
+            table.insert(self.currentSpecEncounters, encounter)
+        end
+    end
+
+    self.bossOptions, self.difficultyOptions = BuildOptions(self.currentSpecEncounters, self.selectedEncounterID, self.selectedDifficultyID)
     if not HasOption(self.bossOptions, self.selectedEncounterID) then
-        self.selectedEncounterID, self.selectedDifficultyID, self.selectedSpec = nil, nil, nil
-        self.bossOptions, self.difficultyOptions, self.specOptions = BuildOptions(self.allEncounters, nil, nil)
+        self.selectedEncounterID, self.selectedDifficultyID = nil, nil
+        self.bossOptions, self.difficultyOptions = BuildOptions(self.currentSpecEncounters, nil, nil)
     elseif not HasOption(self.difficultyOptions, self.selectedDifficultyID) then
-        self.selectedDifficultyID, self.selectedSpec = nil, nil
-        self.bossOptions, self.difficultyOptions, self.specOptions = BuildOptions(self.allEncounters, self.selectedEncounterID, nil)
-    elseif not HasOption(self.specOptions, self.selectedSpec) then
-        self.selectedSpec = nil
+        self.selectedDifficultyID = nil
+        self.bossOptions, self.difficultyOptions = BuildOptions(self.currentSpecEncounters, self.selectedEncounterID, nil)
     end
 
     self.metricOptions = MetricOptions()
@@ -491,7 +561,7 @@ function RaidTalentBuilds:RefreshOptions()
 
     SetDropdownText(self.bossDropdown, OptionText(self.bossOptions, self.selectedEncounterID, "All Bosses"))
     SetDropdownText(self.difficultyDropdown, OptionText(self.difficultyOptions, self.selectedDifficultyID, "All Difficulties"))
-    SetDropdownText(self.specDropdown, OptionText(self.specOptions, self.selectedSpec, "All Specs"))
+    self.specValue:SetText(self.currentSpecName or "No Specialization")
     SetDropdownText(self.outcomeDropdown, MetricLabel(self.selectedMetricKey))
 end
 
@@ -526,7 +596,7 @@ function RaidTalentBuilds:Refresh()
     if #cards == 0 then
         self.summaryText:SetText("No matching raid talent build data found.")
         self.emptyText:Show()
-        self.emptyText:SetText("No saved talent builds match these raid filters yet.\n\nComplete more pulls with these filters to add results here.")
+        self.emptyText:SetText("No saved talent builds match these raid filters yet.")
         self.selectedCardData, self.selectedIndex = nil, nil
         self:RefreshSelection()
         return
@@ -579,7 +649,7 @@ function RaidTalentBuilds:Create(parent)
             local info = UIDropDownMenu_CreateInfo()
             info.text, info.checked = option.text, value == RaidTalentBuilds.selectedEncounterID
             info.func = function()
-                RaidTalentBuilds.selectedEncounterID, RaidTalentBuilds.selectedDifficultyID, RaidTalentBuilds.selectedSpec = value, nil, nil
+                RaidTalentBuilds.selectedEncounterID, RaidTalentBuilds.selectedDifficultyID = value, nil
                 RaidTalentBuilds.selectedCardData, RaidTalentBuilds.selectedIndex = nil, nil
                 RaidTalentBuilds:Refresh()
             end
@@ -592,26 +662,18 @@ function RaidTalentBuilds:Create(parent)
             local info = UIDropDownMenu_CreateInfo()
             info.text, info.checked = option.text, value == RaidTalentBuilds.selectedDifficultyID
             info.func = function()
-                RaidTalentBuilds.selectedDifficultyID, RaidTalentBuilds.selectedSpec = value, nil
+                RaidTalentBuilds.selectedDifficultyID = value
                 RaidTalentBuilds.selectedCardData, RaidTalentBuilds.selectedIndex = nil, nil
                 RaidTalentBuilds:Refresh()
             end
             UIDropDownMenu_AddButton(info, level)
         end
     end)
-    self.specDropdown = MakeDropdown(controls, CFG.controls.specWidth, CFG.controls.specX, CFG.controls.labelY, "Spec", function(_, level)
-        for _, option in ipairs(RaidTalentBuilds.specOptions or {}) do
-            local value = option.value
-            local info = UIDropDownMenu_CreateInfo()
-            info.text, info.checked = option.text, value == RaidTalentBuilds.selectedSpec
-            info.func = function()
-                RaidTalentBuilds.selectedSpec, RaidTalentBuilds.selectedCardData, RaidTalentBuilds.selectedIndex = value, nil, nil
-                RaidTalentBuilds:Refresh()
-            end
-            UIDropDownMenu_AddButton(info, level)
-        end
-    end)
-    self.outcomeDropdown = MakeDropdown(controls, CFG.controls.outcomeWidth, CFG.controls.outcomeX, CFG.controls.labelY, "Outcome", function(_, level)
+    local specLabel = AddFont(controls, "Current Spec", "GameFontDisableSmall", CFG.controls.specX, CFG.controls.labelY, CFG.controls.specWidth)
+    ApplyColor(specLabel, CFG.colors.muted)
+    self.specValue = AddFont(controls, "Loading...", "GameFontHighlightSmall", CFG.controls.specX, CFG.controls.labelY - 26, CFG.controls.specWidth)
+    ApplyColor(self.specValue, CFG.colors.gold)
+    self.outcomeDropdown = MakeDropdown(controls, CFG.controls.outcomeWidth, CFG.controls.outcomeX, CFG.controls.labelY, "Performance Metric", function(_, level)
         for _, option in ipairs(RaidTalentBuilds.metricOptions or {}) do
             local value = option.value
             local info = UIDropDownMenu_CreateInfo()

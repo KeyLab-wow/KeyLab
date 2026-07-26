@@ -86,10 +86,14 @@ local CFG = {
         width = 928,
         height = 74,
 
-        specX = 18,
-        outcomeX = 255,
+        dungeonX = 18,
+        keyX = 255,
+        specX = 390,
+        outcomeX = 610,
         labelY = -12,
 
+        dungeonWidth = 185,
+        keyWidth = 90,
         specWidth = 170,
         outcomeWidth = 180,
     },
@@ -534,6 +538,10 @@ local function GetTalents(encounter)
     return encounter and encounter.talents or {}
 end
 
+local function GetMapID(encounter)
+    return GetChallenge(encounter).mapID or encounter.mapID
+end
+
 local function GetDungeonName(encounter)
     local challenge = GetChallenge(encounter)
     return challenge.dungeonName
@@ -549,6 +557,33 @@ end
 
 local function GetSpecName(encounter)
     return GetPlayer(encounter).spec or encounter.spec or encounter.specName or "Unknown Spec"
+end
+
+local function GetSpecID(encounter)
+    local player = GetPlayer(encounter)
+    return tonumber(player.specID or encounter and encounter.specID)
+end
+
+local function GetCurrentSpecIdentity()
+    local specIndex = GetSpecialization and GetSpecialization()
+    if specIndex and GetSpecializationInfo then
+        local specID, specName = GetSpecializationInfo(specIndex)
+        if specName and specName ~= "" then
+            return tonumber(specID), specName
+        end
+    end
+    return nil, nil
+end
+
+local function MatchesCurrentSpec(encounter, currentSpecID, currentSpecName)
+    local encounterSpecID = GetSpecID(encounter)
+    if currentSpecID and encounterSpecID then
+        return encounterSpecID == currentSpecID
+    end
+    if currentSpecName then
+        return GetSpecName(encounter) == currentSpecName
+    end
+    return true
 end
 
 local function GetTalentString(encounter)
@@ -630,46 +665,77 @@ local function GetMetricOptions()
     return list
 end
 
-local function GetStatLabel(statKey)
-    local info = KeyLab.Mapping and KeyLab.Mapping.Stats and KeyLab.Mapping.Stats[statKey]
-    return info and info.label or statKey
-end
-
-local function GetSpecOptions(encounters)
+local function GetDungeonOptions(encounters)
     local seen = {}
     local list = {
-        { text = "All Specs", value = nil },
+        { text = "All Dungeons", value = nil },
     }
 
     for _, encounter in ipairs(encounters or {}) do
-        local spec = GetSpecName(encounter)
-        if spec and spec ~= "" and spec ~= "Unknown Spec" and not seen[spec] then
-            seen[spec] = true
+        local mapID = GetMapID(encounter)
+        local name = GetDungeonName(encounter)
+        local key = mapID or name
+        if key and not seen[key] then
+            seen[key] = true
             table.insert(list, {
-                text = spec,
-                value = spec,
+                text = name,
+                value = mapID,
             })
         end
     end
 
     table.sort(list, function(a, b)
-        if a.text == "All Specs" then return true end
-        if b.text == "All Specs" then return false end
+        if a.text == "All Dungeons" then return true end
+        if b.text == "All Dungeons" then return false end
         return tostring(a.text) < tostring(b.text)
     end)
 
     return list
 end
 
-local function GetSpecText(value)
-    return value or "All Specs"
-end
+local function GetKeyOptions(encounters, selectedMapID)
+    local seen = {}
+    local list = {
+        { text = "All Keys", value = nil },
+    }
 
-local function MatchesFilters(encounter, selectedSpec)
-    if selectedSpec and GetSpecName(encounter) ~= selectedSpec then
-        return false
+    for _, encounter in ipairs(encounters or {}) do
+        if (not selectedMapID) or GetMapID(encounter) == selectedMapID then
+            local keyLevel = tonumber(GetKeyLevel(encounter))
+            if keyLevel and keyLevel > 0 and not seen[keyLevel] then
+                seen[keyLevel] = true
+                table.insert(list, {
+                    text = "+" .. tostring(keyLevel),
+                    value = keyLevel,
+                })
+            end
+        end
     end
 
+    table.sort(list, function(a, b)
+        if a.text == "All Keys" then return true end
+        if b.text == "All Keys" then return false end
+        return tonumber(a.value) > tonumber(b.value)
+    end)
+
+    return list
+end
+
+local function GetStatLabel(statKey)
+    local info = KeyLab.Mapping and KeyLab.Mapping.Stats and KeyLab.Mapping.Stats[statKey]
+    return info and info.label or statKey
+end
+
+local function MatchesFilters(encounter, selectedSpecID, selectedSpec, selectedMapID, selectedKeyLevel)
+    if not MatchesCurrentSpec(encounter, selectedSpecID, selectedSpec) then
+        return false
+    end
+    if selectedMapID and GetMapID(encounter) ~= selectedMapID then
+        return false
+    end
+    if selectedKeyLevel and tonumber(GetKeyLevel(encounter) or 0) ~= tonumber(selectedKeyLevel) then
+        return false
+    end
     return true
 end
 
@@ -733,8 +799,8 @@ local function AddEncounterToPriorityGroup(groups, encounter, metricKey, metricV
     local priorityKey = GetPriorityKey(priority)
     if not priorityKey then return end
 
-    -- Keep different specs separate when the Spec filter is set to All Specs.
-    -- Shadow and Discipline can share the same stat order but represent different profiles.
+    -- Keep the specialization in the group key so old records remain distinct
+    -- even though the view now follows the character's current specialization.
     local groupKey = tostring(GetSpecName(encounter) or "Unknown Spec") .. "|" .. priorityKey
 
     local group = groups[groupKey]
@@ -792,7 +858,7 @@ local function GetProfileCards(self)
     local groups = {}
 
     for _, encounter in ipairs(self.allEncounters or {}) do
-        if MatchesFilters(encounter, self.selectedSpec) then
+        if MatchesFilters(encounter, self.selectedSpecID, self.selectedSpec, self.selectedMapID, self.selectedKeyLevel) then
             local metricValue = SafeNumber(GetMetricValue(encounter, self.selectedMetricKey))
             if metricValue ~= nil then
                 AddEncounterToPriorityGroup(groups, encounter, self.selectedMetricKey, metricValue, lowerIsBetter)
@@ -1134,22 +1200,49 @@ end
 
 function StatProfiles:RefreshDropdowns()
     self.allEncounters = GetEncounterList()
+    self.currentSpecID, self.currentSpecName = GetCurrentSpecIdentity()
+    self.selectedSpecID = self.currentSpecID
+    self.selectedSpec = self.currentSpecName
+    self.currentSpecEncounters = {}
+    for _, encounter in ipairs(self.allEncounters or {}) do
+        if MatchesCurrentSpec(encounter, self.currentSpecID, self.currentSpecName) then
+            table.insert(self.currentSpecEncounters, encounter)
+        end
+    end
+    self.specValue:SetText(self.currentSpecName or "No Specialization")
 
-    local specOptions = GetSpecOptions(self.allEncounters)
-    local hasSelectedSpec = false
-
-    for _, option in ipairs(specOptions) do
-        if option.value == self.selectedSpec then
-            hasSelectedSpec = true
+    local dungeonOptions = GetDungeonOptions(self.currentSpecEncounters)
+    local hasSelectedDungeon = false
+    for _, option in ipairs(dungeonOptions) do
+        if option.value == self.selectedMapID then
+            hasSelectedDungeon = true
             break
         end
     end
-
-    if not hasSelectedSpec then
-        self.selectedSpec = nil
+    if not hasSelectedDungeon then
+        self.selectedMapID = nil
     end
+    local dungeonText = "All Dungeons"
+    for _, option in ipairs(dungeonOptions) do
+        if option.value == self.selectedMapID then
+            dungeonText = option.text
+            break
+        end
+    end
+    SetDropdownText(self.dungeonDropdown, dungeonText)
 
-    SetDropdownText(self.specDropdown, GetSpecText(self.selectedSpec))
+    local keyOptions = GetKeyOptions(self.currentSpecEncounters, self.selectedMapID)
+    local hasSelectedKey = false
+    for _, option in ipairs(keyOptions) do
+        if option.value == self.selectedKeyLevel then
+            hasSelectedKey = true
+            break
+        end
+    end
+    if not hasSelectedKey then
+        self.selectedKeyLevel = nil
+    end
+    SetDropdownText(self.keyDropdown, self.selectedKeyLevel and ("+" .. tostring(self.selectedKeyLevel)) or "All Keys")
 
     local metricOptions = GetMetricOptions()
     if (not self.selectedMetricKey) and #metricOptions > 0 then
@@ -1227,7 +1320,7 @@ function StatProfiles:Refresh()
 
     if total == 0 then
         self.emptyText:Show()
-        self.emptyText:SetText("No saved stat setups match these filters yet.\n\nComplete more Mythic+ runs with these filters to add results here.")
+        self.emptyText:SetText("No saved stat setups match these filters yet.")
         self.summaryText:SetText("No matching stat priority data found.")
         self.selectedProfile = nil
         self.selectedIndex = nil
@@ -1313,14 +1406,47 @@ function StatProfiles:Create(parent)
     controls:SetSize(CFG.controls.width, CFG.controls.height)
     StylePanel(controls, CFG.colors.controlBg, CFG.colors.cardBorder)
 
-    self.specDropdown = MakeDropdown(controls, CFG.controls.specWidth, CFG.controls.specX, CFG.controls.labelY, "Spec", function(_, level)
-        local options = GetSpecOptions(StatProfiles.allEncounters or GetEncounterList())
+    self.dungeonDropdown = MakeDropdown(controls, CFG.controls.dungeonWidth, CFG.controls.dungeonX, CFG.controls.labelY, "Dungeon / Zone", function(_, level)
+        local options = GetDungeonOptions(StatProfiles.currentSpecEncounters or {})
 
         for _, option in ipairs(options) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.text
+            info.checked = option.value == StatProfiles.selectedMapID
             info.func = function()
-                StatProfiles.selectedSpec = option.value
+                StatProfiles.selectedMapID = option.value
+                StatProfiles.selectedKeyLevel = nil
+                StatProfiles.selectedProfile = nil
+                StatProfiles.selectedIndex = nil
+                StatProfiles:Refresh()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+
+    local specLabel = controls:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    specLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", CFG.controls.specX, CFG.controls.labelY)
+    specLabel:SetWidth(CFG.controls.specWidth)
+    specLabel:SetJustifyH("LEFT")
+    specLabel:SetText("Current Spec")
+    ApplyColor(specLabel, CFG.colors.muted)
+
+    self.specValue = controls:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    self.specValue:SetPoint("TOPLEFT", controls, "TOPLEFT", CFG.controls.specX, CFG.controls.labelY - 26)
+    self.specValue:SetWidth(CFG.controls.specWidth)
+    self.specValue:SetJustifyH("LEFT")
+    self.specValue:SetText("Loading...")
+    ApplyColor(self.specValue, CFG.colors.gold)
+
+    self.keyDropdown = MakeDropdown(controls, CFG.controls.keyWidth, CFG.controls.keyX, CFG.controls.labelY, "Key Level", function(_, level)
+        local options = GetKeyOptions(StatProfiles.currentSpecEncounters or {}, StatProfiles.selectedMapID)
+
+        for _, option in ipairs(options) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = option.text
+            info.checked = option.value == StatProfiles.selectedKeyLevel
+            info.func = function()
+                StatProfiles.selectedKeyLevel = option.value
                 StatProfiles.selectedProfile = nil
                 StatProfiles.selectedIndex = nil
                 StatProfiles:Refresh()

@@ -197,6 +197,33 @@ local function Spec(encounter)
     return player.spec or player.specName or "Unknown Spec"
 end
 
+local function SpecID(encounter)
+    local player = encounter and encounter.player or {}
+    return tonumber(player.specID or encounter and encounter.specID)
+end
+
+local function GetCurrentSpecIdentity()
+    local specIndex = GetSpecialization and GetSpecialization()
+    if specIndex and GetSpecializationInfo then
+        local specID, specName = GetSpecializationInfo(specIndex)
+        if specName and specName ~= "" then
+            return tonumber(specID), specName
+        end
+    end
+    return nil, nil
+end
+
+local function MatchesCurrentSpec(encounter, currentSpecID, currentSpecName)
+    local encounterSpecID = SpecID(encounter)
+    if currentSpecID and encounterSpecID then
+        return encounterSpecID == currentSpecID
+    end
+    if currentSpecName then
+        return Spec(encounter) == currentSpecName
+    end
+    return true
+end
+
 local function TalentString(encounter)
     return encounter and encounter.talents and encounter.talents.talentString or ""
 end
@@ -236,8 +263,7 @@ end
 local function BuildOptions(encounters, selectedBoss, selectedDifficulty)
     local bosses = { { value = nil, text = "All Bosses" } }
     local difficulties = { { value = nil, text = "All Difficulties" } }
-    local specs = { { value = nil, text = "All Specs" } }
-    local bossSeen, difficultySeen, specSeen = {}, {}, {}
+    local bossSeen, difficultySeen = {}, {}
     for _, encounter in ipairs(encounters or {}) do
         local raid = Raid(encounter)
         local bossID, difficultyID = SafeNumber(raid.encounterID), SafeNumber(raid.difficultyID)
@@ -250,13 +276,6 @@ local function BuildOptions(encounters, selectedBoss, selectedDifficulty)
                 difficultySeen[difficultyID] = true
                 table.insert(difficulties, { value = difficultyID, text = raid.difficultyName or ("Difficulty " .. difficultyID) })
             end
-            if not selectedDifficulty or difficultyID == selectedDifficulty then
-                local spec = Spec(encounter)
-                if spec ~= "Unknown Spec" and not specSeen[spec] then
-                    specSeen[spec] = true
-                    table.insert(specs, { value = spec, text = spec })
-                end
-            end
         end
     end
     local function Sort(options)
@@ -266,8 +285,8 @@ local function BuildOptions(encounters, selectedBoss, selectedDifficulty)
             return tostring(a.text) < tostring(b.text)
         end)
     end
-    Sort(bosses); Sort(difficulties); Sort(specs)
-    return bosses, difficulties, specs
+    Sort(bosses); Sort(difficulties)
+    return bosses, difficulties
 end
 
 local function HasOption(options, value)
@@ -316,8 +335,7 @@ local function MatchesFilters(encounter)
     local raid = Raid(encounter)
     if RaidStatProfiles.selectedEncounterID and SafeNumber(raid.encounterID) ~= RaidStatProfiles.selectedEncounterID then return false end
     if RaidStatProfiles.selectedDifficultyID and SafeNumber(raid.difficultyID) ~= RaidStatProfiles.selectedDifficultyID then return false end
-    if RaidStatProfiles.selectedSpec and Spec(encounter) ~= RaidStatProfiles.selectedSpec then return false end
-    return true
+    return MatchesCurrentSpec(encounter, RaidStatProfiles.selectedSpecID, RaidStatProfiles.selectedSpec)
 end
 
 local function BuildProfiles()
@@ -516,14 +534,23 @@ end
 
 function RaidStatProfiles:RefreshOptions()
     self.allEncounters = Encounters()
-    self.bossOptions, self.difficultyOptions, self.specOptions = BuildOptions(self.allEncounters, self.selectedEncounterID, self.selectedDifficultyID)
+    self.currentSpecID, self.currentSpecName = GetCurrentSpecIdentity()
+    self.selectedSpecID = self.currentSpecID
+    self.selectedSpec = self.currentSpecName
+    self.currentSpecEncounters = {}
+    for _, encounter in ipairs(self.allEncounters or {}) do
+        if MatchesCurrentSpec(encounter, self.currentSpecID, self.currentSpecName) then
+            table.insert(self.currentSpecEncounters, encounter)
+        end
+    end
+    self.bossOptions, self.difficultyOptions = BuildOptions(self.currentSpecEncounters, self.selectedEncounterID, self.selectedDifficultyID)
     if not HasOption(self.bossOptions, self.selectedEncounterID) then
-        self.selectedEncounterID, self.selectedDifficultyID, self.selectedSpec = nil, nil, nil
-        self.bossOptions, self.difficultyOptions, self.specOptions = BuildOptions(self.allEncounters, nil, nil)
+        self.selectedEncounterID, self.selectedDifficultyID = nil, nil
+        self.bossOptions, self.difficultyOptions = BuildOptions(self.currentSpecEncounters, nil, nil)
     elseif not HasOption(self.difficultyOptions, self.selectedDifficultyID) then
-        self.selectedDifficultyID, self.selectedSpec = nil, nil
-        self.bossOptions, self.difficultyOptions, self.specOptions = BuildOptions(self.allEncounters, self.selectedEncounterID, nil)
-    elseif not HasOption(self.specOptions, self.selectedSpec) then self.selectedSpec = nil end
+        self.selectedDifficultyID = nil
+        self.bossOptions, self.difficultyOptions = BuildOptions(self.currentSpecEncounters, self.selectedEncounterID, nil)
+    end
     self.metricOptions = MetricOptions()
     KeyLabDB = type(KeyLabDB) == "table" and KeyLabDB or {}
     KeyLabDB.settings = type(KeyLabDB.settings) == "table" and KeyLabDB.settings or {}
@@ -533,7 +560,7 @@ function RaidStatProfiles:RefreshOptions()
     KeyLabDB.settings.raidStatMetric = self.selectedMetricKey
     SetDropdownText(self.bossDropdown, OptionText(self.bossOptions, self.selectedEncounterID, "All Bosses"))
     SetDropdownText(self.difficultyDropdown, OptionText(self.difficultyOptions, self.selectedDifficultyID, "All Difficulties"))
-    SetDropdownText(self.specDropdown, OptionText(self.specOptions, self.selectedSpec, "All Specs"))
+    self.specValue:SetText(self.currentSpecName or "No Specialization")
     SetDropdownText(self.outcomeDropdown, MetricLabel(self.selectedMetricKey))
 end
 
@@ -565,7 +592,7 @@ function RaidStatProfiles:Refresh()
     local direction = info and info.higherIsBetter == false and "lowest" or "highest"
     if total == 0 then
         self.emptyText:Show()
-        self.emptyText:SetText("No saved stat setups match these raid filters yet.\n\nComplete more pulls with these filters to add results here.")
+        self.emptyText:SetText("No saved stat setups match these raid filters yet.")
         self.summaryText:SetText("No matching raid stat priority data found.")
         self.selectedProfile, self.selectedIndex = nil, nil
         self:RefreshSelection()
@@ -613,7 +640,7 @@ function RaidStatProfiles:Create(parent)
             local value = option.value
             local info = UIDropDownMenu_CreateInfo(); info.text, info.checked = option.text, value == RaidStatProfiles.selectedEncounterID
             info.func = function()
-                RaidStatProfiles.selectedEncounterID, RaidStatProfiles.selectedDifficultyID, RaidStatProfiles.selectedSpec = value, nil, nil
+                RaidStatProfiles.selectedEncounterID, RaidStatProfiles.selectedDifficultyID = value, nil
                 RaidStatProfiles.selectedProfile, RaidStatProfiles.selectedIndex = nil, nil
                 RaidStatProfiles:Refresh()
             end
@@ -625,24 +652,17 @@ function RaidStatProfiles:Create(parent)
             local value = option.value
             local info = UIDropDownMenu_CreateInfo(); info.text, info.checked = option.text, value == RaidStatProfiles.selectedDifficultyID
             info.func = function()
-                RaidStatProfiles.selectedDifficultyID, RaidStatProfiles.selectedSpec = value, nil
+                RaidStatProfiles.selectedDifficultyID = value
                 RaidStatProfiles.selectedProfile, RaidStatProfiles.selectedIndex = nil, nil
                 RaidStatProfiles:Refresh()
             end
             UIDropDownMenu_AddButton(info, level)
         end
     end)
-    self.specDropdown = MakeDropdown(controls, CFG.controls.specWidth, CFG.controls.specX, CFG.controls.labelY, "Spec", function(_, level)
-        for _, option in ipairs(RaidStatProfiles.specOptions or {}) do
-            local value = option.value
-            local info = UIDropDownMenu_CreateInfo(); info.text, info.checked = option.text, value == RaidStatProfiles.selectedSpec
-            info.func = function()
-                RaidStatProfiles.selectedSpec, RaidStatProfiles.selectedProfile, RaidStatProfiles.selectedIndex = value, nil, nil
-                RaidStatProfiles:Refresh()
-            end
-            UIDropDownMenu_AddButton(info, level)
-        end
-    end)
+    local specLabel = AddFont(controls, "Current Spec", "GameFontDisableSmall", CFG.controls.specX, CFG.controls.labelY, CFG.controls.specWidth)
+    ApplyColor(specLabel, CFG.colors.muted)
+    self.specValue = AddFont(controls, "Loading...", "GameFontHighlightSmall", CFG.controls.specX, CFG.controls.labelY - 26, CFG.controls.specWidth)
+    ApplyColor(self.specValue, CFG.colors.gold)
     self.outcomeDropdown = MakeDropdown(controls, CFG.controls.outcomeWidth, CFG.controls.outcomeX, CFG.controls.labelY, "Outcome", function(_, level)
         for _, option in ipairs(RaidStatProfiles.metricOptions or {}) do
             local value = option.value

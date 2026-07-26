@@ -30,6 +30,7 @@ local TalentStatBuild = {}
 KeyLab.Tabs.TalentStatBuild = TalentStatBuild
 KeyLab.Tabs.TalentBuilds = TalentStatBuild
 local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
+local TalentCapture = KeyLab.Capture and KeyLab.Capture.Talents or {}
 local SPACING = KeyLab.UI.Theme and KeyLab.UI.Theme.spacing or { compactCard = 8, section = 18 }
 local HEADER = KeyLab.UI.Theme and KeyLab.UI.Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16, analysisControlsY = -86, analysisContentY = -172 }
 
@@ -65,6 +66,10 @@ local CFG = {
         blue = {0.500, 0.680, 0.940, 1.0},
         warning = {0.840, 0.440, 0.420, 1.0},
         divider = {0.440, 0.580, 0.780, 0.32},
+        crit = {0.840, 0.440, 0.420, 0.95},
+        haste = {0.840, 0.720, 0.420, 0.95},
+        mastery = {0.500, 0.680, 0.940, 0.95},
+        versatility = {0.460, 0.780, 0.500, 0.95},
 
         barBg = {0.012, 0.020, 0.044, 0.90},
         barBorder = {0.185, 0.300, 0.500, 0.50},
@@ -543,12 +548,47 @@ local function GetSpecName(encounter)
     return GetPlayer(encounter).spec or encounter.spec or encounter.specName or "Unknown Spec"
 end
 
+local function GetSpecID(encounter)
+    local player = GetPlayer(encounter)
+    return tonumber(player.specID or encounter and encounter.specID)
+end
+
+local function GetCurrentSpecIdentity()
+    local specIndex = GetSpecialization and GetSpecialization()
+    if specIndex and GetSpecializationInfo then
+        local specID, specName = GetSpecializationInfo(specIndex)
+        if specName and specName ~= "" then
+            return tonumber(specID), specName
+        end
+    end
+    return nil, nil
+end
+
+local function MatchesCurrentSpec(encounter, currentSpecID, currentSpecName)
+    local encounterSpecID = GetSpecID(encounter)
+    if currentSpecID and encounterSpecID then
+        return encounterSpecID == currentSpecID
+    end
+    if currentSpecName then
+        return GetSpecName(encounter) == currentSpecName
+    end
+    return true
+end
+
 local function GetClassName(encounter)
     return GetPlayer(encounter).class or encounter.class or encounter.className or "Unknown Class"
 end
 
 local function GetTalentString(encounter)
     return GetTalents(encounter).talentString or encounter.talentString or ""
+end
+
+local function GetTalentLoadoutName(encounter)
+    local talents = GetTalents(encounter)
+    local name = talents and talents.loadoutName
+    if type(name) ~= "string" then return nil end
+    name = name:match("^%s*(.-)%s*$")
+    return name ~= "" and name or nil
 end
 
 local function GetResultText(encounter)
@@ -766,7 +806,7 @@ local function GetCardBestEncounterForSpec(cardData, metricKey, selectedSpec, hi
     return bestEncounter, bestValue
 end
 
-local function MatchesBuildFilters(encounter, selectedMapID, selectedKeyLevel, selectedSpec, selectedMetricKey)
+local function MatchesBuildFilters(encounter, selectedMapID, selectedKeyLevel, selectedSpecID, selectedSpec, selectedMetricKey)
     if selectedMapID and GetMapID(encounter) ~= selectedMapID then
         return false
     end
@@ -775,7 +815,7 @@ local function MatchesBuildFilters(encounter, selectedMapID, selectedKeyLevel, s
         return false
     end
 
-    if selectedSpec and GetSpecName(encounter) ~= selectedSpec then
+    if not MatchesCurrentSpec(encounter, selectedSpecID, selectedSpec) then
         return false
     end
 
@@ -801,7 +841,7 @@ local function GetBuildCards(self)
     local groups = {}
 
     for _, encounter in ipairs(self.allEncounters or GetEncounterList()) do
-        if MatchesBuildFilters(encounter, self.selectedMapID, self.selectedKeyLevel, self.selectedSpec, self.selectedMetricKey) then
+        if MatchesBuildFilters(encounter, self.selectedMapID, self.selectedKeyLevel, self.selectedSpecID, self.selectedSpec, self.selectedMetricKey) then
             local talentString = GetTalentString(encounter)
             local group = groups[talentString]
 
@@ -897,6 +937,10 @@ local function AddDetailRow(parent, label, value, x, y, width)
     return y - 35
 end
 
+local function GetStatColor(statKey)
+    return CFG.colors[statKey] or CFG.colors.text
+end
+
 local function AddStatRows(parent, encounter, x, y, width)
     local stats = GetStats(encounter)
     local order = KeyLab.Mapping and KeyLab.Mapping.StatOrder or {}
@@ -915,7 +959,7 @@ local function AddStatRows(parent, encounter, x, y, width)
                 local label = info.label or statKey
                 local text = label .. ": " .. FormatStat(statKey, value)
                 local row = AddFont(parent, text, "GameFontHighlightSmall", x, y, width)
-                ApplyColor(row, CFG.colors.text)
+                ApplyColor(row, GetStatColor(statKey))
                 y = y - CFG.details.rowHeight
                 shown = shown + 1
             else
@@ -971,8 +1015,29 @@ end
 
 local function GetVariantTitle(cardData, variantNumber)
     local encounter = cardData and cardData.bestEncounter
-    local spec = GetSpecName(encounter)
-    return "Mythic+ " .. spec .. " - Talent Variant " .. tostring(variantNumber or 1)
+    local spec = TalentStatBuild.currentSpecName or GetSpecName(encounter)
+    local loadoutName
+    local latestTimestamp = -1
+
+    for _, savedEncounter in ipairs(cardData and cardData.group and cardData.group.encounters or {}) do
+        local savedName = GetTalentLoadoutName(savedEncounter)
+        local timestamp = tonumber(savedEncounter and savedEncounter.timestamp) or 0
+        if savedName and timestamp >= latestTimestamp then
+            loadoutName = savedName
+            latestTimestamp = timestamp
+        end
+    end
+
+    if not loadoutName then
+        loadoutName = GetTalentLoadoutName(encounter)
+    end
+    if not loadoutName and cardData and cardData.talentString then
+        loadoutName = TalentStatBuild.loadoutNamesByTalentString
+            and TalentStatBuild.loadoutNamesByTalentString[cardData.talentString]
+    end
+
+    local buildName = loadoutName or ("Talent Variant " .. tostring(variantNumber or 1))
+    return "Mythic+ " .. spec .. " - " .. buildName
 end
 
 local function BuildDetails(panel, cardData, variantNumber)
@@ -1156,8 +1221,19 @@ end
 
 function TalentStatBuild:RefreshDropdowns()
     self.allEncounters = GetEncounterList()
+    self.currentSpecID, self.currentSpecName = GetCurrentSpecIdentity()
+    self.selectedSpecID = self.currentSpecID
+    self.selectedSpec = self.currentSpecName
+    self.loadoutNamesByTalentString = TalentCapture.GetLoadoutNameMap and TalentCapture.GetLoadoutNameMap() or {}
+    self.currentSpecEncounters = {}
 
-    local dungeonOptions = GetDungeonOptions(self.allEncounters)
+    for _, encounter in ipairs(self.allEncounters or {}) do
+        if MatchesCurrentSpec(encounter, self.currentSpecID, self.currentSpecName) then
+            table.insert(self.currentSpecEncounters, encounter)
+        end
+    end
+
+    local dungeonOptions = GetDungeonOptions(self.currentSpecEncounters)
     local hasSelectedDungeon = false
 
     for _, option in ipairs(dungeonOptions) do
@@ -1180,7 +1256,7 @@ function TalentStatBuild:RefreshDropdowns()
     end
     SetDropdownText(self.dungeonDropdown, dungeonText)
 
-    local keyOptions = GetKeyOptions(self.allEncounters, self.selectedMapID)
+    local keyOptions = GetKeyOptions(self.currentSpecEncounters, self.selectedMapID)
     local hasSelectedKey = false
 
     for _, option in ipairs(keyOptions) do
@@ -1196,21 +1272,7 @@ function TalentStatBuild:RefreshDropdowns()
 
     SetDropdownText(self.keyDropdown, self.selectedKeyLevel and ("+" .. tostring(self.selectedKeyLevel)) or "All Keys")
 
-    local specOptions = GetSpecOptions(self.allEncounters, self.selectedMapID, self.selectedKeyLevel)
-    local hasSelectedSpec = false
-
-    for _, option in ipairs(specOptions) do
-        if option.value == self.selectedSpec then
-            hasSelectedSpec = true
-            break
-        end
-    end
-
-    if not hasSelectedSpec then
-        self.selectedSpec = nil
-    end
-
-    SetDropdownText(self.specDropdown, GetSpecText(self.selectedSpec))
+    self.specValue:SetText(self.currentSpecName or "No Specialization")
 
     local metricOptions = GetMetricOptions()
     if (not self.selectedMetricKey) and #metricOptions > 0 then
@@ -1295,7 +1357,7 @@ function TalentStatBuild:Refresh()
 
     if #cards == 0 then
         self.emptyText:Show()
-        self.emptyText:SetText("No saved talent builds match these filters yet.\n\nComplete more Mythic+ runs with these filters to add results here.")
+        self.emptyText:SetText("No saved talent builds match these filters yet.")
         self.selectedCardData = nil
         self.selectedIndex = nil
         self:RefreshSelection()
@@ -1377,7 +1439,7 @@ function TalentStatBuild:Create(parent)
     StylePanel(controls, CFG.colors.controlBg, CFG.colors.cardBorder)
 
     self.dungeonDropdown = MakeDropdown(controls, CFG.controls.dungeonWidth, CFG.controls.dungeonX, CFG.controls.labelY, "Dungeon / Zone", function(_, level)
-        local options = GetDungeonOptions(TalentStatBuild.allEncounters or GetEncounterList())
+        local options = GetDungeonOptions(TalentStatBuild.currentSpecEncounters or TalentStatBuild.allEncounters or GetEncounterList())
 
         for _, option in ipairs(options) do
             local info = UIDropDownMenu_CreateInfo()
@@ -1385,7 +1447,6 @@ function TalentStatBuild:Create(parent)
             info.func = function()
                 TalentStatBuild.selectedMapID = option.value
                 TalentStatBuild.selectedKeyLevel = nil
-                TalentStatBuild.selectedSpec = nil
                 TalentStatBuild.selectedCardData = nil
                 TalentStatBuild.selectedIndex = nil
                 TalentStatBuild:Refresh()
@@ -1395,14 +1456,13 @@ function TalentStatBuild:Create(parent)
     end)
 
     self.keyDropdown = MakeDropdown(controls, CFG.controls.keyWidth, CFG.controls.keyX, CFG.controls.labelY, "Key Level", function(_, level)
-        local options = GetKeyOptions(TalentStatBuild.allEncounters or GetEncounterList(), TalentStatBuild.selectedMapID)
+        local options = GetKeyOptions(TalentStatBuild.currentSpecEncounters or TalentStatBuild.allEncounters or GetEncounterList(), TalentStatBuild.selectedMapID)
 
         for _, option in ipairs(options) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.text
             info.func = function()
                 TalentStatBuild.selectedKeyLevel = option.value
-                TalentStatBuild.selectedSpec = nil
                 TalentStatBuild.selectedCardData = nil
                 TalentStatBuild.selectedIndex = nil
                 TalentStatBuild:Refresh()
@@ -1411,23 +1471,21 @@ function TalentStatBuild:Create(parent)
         end
     end)
 
-    self.specDropdown = MakeDropdown(controls, CFG.controls.specWidth, CFG.controls.specX, CFG.controls.labelY, "Spec", function(_, level)
-        local options = GetSpecOptions(TalentStatBuild.allEncounters or GetEncounterList(), TalentStatBuild.selectedMapID, TalentStatBuild.selectedKeyLevel)
+    local specLabel = controls:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    specLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", CFG.controls.specX, CFG.controls.labelY)
+    specLabel:SetWidth(CFG.controls.specWidth)
+    specLabel:SetJustifyH("LEFT")
+    specLabel:SetText("Current Spec")
+    ApplyColor(specLabel, CFG.colors.muted)
 
-        for _, option in ipairs(options) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = option.text
-            info.func = function()
-                TalentStatBuild.selectedSpec = option.value
-                TalentStatBuild.selectedCardData = nil
-                TalentStatBuild.selectedIndex = nil
-                TalentStatBuild:Refresh()
-            end
-            UIDropDownMenu_AddButton(info, level)
-        end
-    end)
+    self.specValue = controls:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    self.specValue:SetPoint("TOPLEFT", controls, "TOPLEFT", CFG.controls.specX, CFG.controls.labelY - 26)
+    self.specValue:SetWidth(CFG.controls.specWidth)
+    self.specValue:SetJustifyH("LEFT")
+    self.specValue:SetText("Loading...")
+    ApplyColor(self.specValue, CFG.colors.gold)
 
-    self.outcomeDropdown = MakeDropdown(controls, CFG.controls.outcomeWidth, CFG.controls.outcomeX, CFG.controls.labelY, "Outcome", function(_, level)
+    self.outcomeDropdown = MakeDropdown(controls, CFG.controls.outcomeWidth, CFG.controls.outcomeX, CFG.controls.labelY, "Performance Metric", function(_, level)
         local options = GetMetricOptions()
 
         for _, option in ipairs(options) do

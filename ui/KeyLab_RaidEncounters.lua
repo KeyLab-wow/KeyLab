@@ -32,12 +32,16 @@ local CFG = {
         green = { 0.430, 0.820, 0.520, 1.0 },
         red = { 0.900, 0.430, 0.430, 1.0 },
         divider = { 0.440, 0.580, 0.780, 0.32 },
+        crit = { 0.840, 0.440, 0.420, 0.95 },
+        haste = { 0.840, 0.720, 0.420, 0.95 },
+        mastery = { 0.500, 0.680, 0.940, 0.95 },
+        versatility = { 0.460, 0.780, 0.500, 0.95 },
     },
     controls = {
         x = 12, y = HEADER.analysisControlsY, width = 928, height = 74,
         bossX = 18, bossWidth = 210,
         difficultyX = 270, difficultyWidth = 130,
-        specX = 460, specWidth = 150,
+        currentSpecX = 460, currentSpecWidth = 150,
         dateX = 670, dateWidth = 150,
         labelY = -12,
     },
@@ -172,6 +176,17 @@ local function GetSpec(encounter)
     return player.spec or player.specName or "Unknown Spec"
 end
 
+local function GetCurrentSpecName()
+    local specIndex = GetSpecialization and GetSpecialization()
+    if specIndex and GetSpecializationInfo then
+        local _, specName = GetSpecializationInfo(specIndex)
+        if specName and specName ~= "" then
+            return specName
+        end
+    end
+    return nil
+end
+
 local function GetClass(encounter)
     local player = type(encounter) == "table" and encounter.player or {}
     return player.class or player.className or ""
@@ -193,8 +208,7 @@ end
 local function Options(encounters, selectedBoss, selectedDifficulty)
     local bosses = { { value = nil, text = "All Bosses" } }
     local difficulties = { { value = nil, text = "All Difficulties" } }
-    local specs = { { value = nil, text = "All Specs" } }
-    local bossSeen, difficultySeen, specSeen = {}, {}, {}
+    local bossSeen, difficultySeen = {}, {}
 
     for _, encounter in ipairs(encounters or {}) do
         local raid = GetRaid(encounter)
@@ -209,13 +223,6 @@ local function Options(encounters, selectedBoss, selectedDifficulty)
                 difficultySeen[difficultyID] = true
                 table.insert(difficulties, { value = difficultyID, text = raid.difficultyName or ("Difficulty " .. difficultyID) })
             end
-            if not selectedDifficulty or difficultyID == selectedDifficulty then
-                local spec = GetSpec(encounter)
-                if spec ~= "Unknown Spec" and not specSeen[spec] then
-                    specSeen[spec] = true
-                    table.insert(specs, { value = spec, text = spec })
-                end
-            end
         end
     end
 
@@ -226,8 +233,8 @@ local function Options(encounters, selectedBoss, selectedDifficulty)
             return tostring(a.text) < tostring(b.text)
         end)
     end
-    Sort(bosses); Sort(difficulties); Sort(specs)
-    return bosses, difficulties, specs
+    Sort(bosses); Sort(difficulties)
+    return bosses, difficulties
 end
 
 local DATE_OPTIONS = {
@@ -264,7 +271,7 @@ local function FilterEncounters(encounters)
         local raid = GetRaid(encounter)
         local include = not RaidEncounters.selectedEncounterID or SafeNumber(raid.encounterID) == RaidEncounters.selectedEncounterID
         if include and RaidEncounters.selectedDifficultyID then include = SafeNumber(raid.difficultyID) == RaidEncounters.selectedDifficultyID end
-        if include and RaidEncounters.selectedSpec then include = GetSpec(encounter) == RaidEncounters.selectedSpec end
+        if include and RaidEncounters.currentSpecName then include = GetSpec(encounter) == RaidEncounters.currentSpecName end
         if include then include = MatchesDate(encounter, RaidEncounters.selectedDateFilter) end
         if include then table.insert(filtered, encounter) end
     end
@@ -290,6 +297,10 @@ local function AddDetailRow(parent, label, value, x, y, width)
     return y - 35
 end
 
+local function GetStatColor(statKey)
+    return CFG.colors[statKey] or CFG.colors.text
+end
+
 local function AddStatRows(parent, encounter, x, y, width)
     local stats = type(encounter.stats) == "table" and encounter.stats or {}
     local shown = 0
@@ -298,7 +309,7 @@ local function AddStatRows(parent, encounter, x, y, width)
         local value = SafeNumber(stats[statKey])
         if info and info.store == true and value and value > 0 and shown < 13 then
             local row = AddFont(parent, (info.label or statKey) .. ": " .. FormatStat(statKey, value), "GameFontHighlightSmall", x, y, width)
-            ApplyColor(row, CFG.colors.text)
+            ApplyColor(row, GetStatColor(statKey))
             y, shown = y - CFG.details.rowHeight, shown + 1
         end
     end
@@ -430,19 +441,26 @@ end
 
 function RaidEncounters:RefreshOptions()
     self.allEncounters = AllEncounters()
-    self.bossOptions, self.difficultyOptions, self.specOptions = Options(self.allEncounters, self.selectedEncounterID, self.selectedDifficultyID)
+    self.currentSpecName = GetCurrentSpecName()
+
+    local currentSpecEncounters = {}
+    for _, encounter in ipairs(self.allEncounters or {}) do
+        if not self.currentSpecName or GetSpec(encounter) == self.currentSpecName then
+            table.insert(currentSpecEncounters, encounter)
+        end
+    end
+
+    self.bossOptions, self.difficultyOptions = Options(currentSpecEncounters, self.selectedEncounterID, self.selectedDifficultyID)
     if not HasOption(self.bossOptions, self.selectedEncounterID) then
-        self.selectedEncounterID, self.selectedDifficultyID, self.selectedSpec = nil, nil, nil
-        self.bossOptions, self.difficultyOptions, self.specOptions = Options(self.allEncounters, nil, nil)
+        self.selectedEncounterID, self.selectedDifficultyID = nil, nil
+        self.bossOptions, self.difficultyOptions = Options(currentSpecEncounters, nil, nil)
     elseif not HasOption(self.difficultyOptions, self.selectedDifficultyID) then
-        self.selectedDifficultyID, self.selectedSpec = nil, nil
-        self.bossOptions, self.difficultyOptions, self.specOptions = Options(self.allEncounters, self.selectedEncounterID, nil)
-    elseif not HasOption(self.specOptions, self.selectedSpec) then
-        self.selectedSpec = nil
+        self.selectedDifficultyID = nil
+        self.bossOptions, self.difficultyOptions = Options(currentSpecEncounters, self.selectedEncounterID, nil)
     end
     SetDropdownText(self.bossDropdown, OptionText(self.bossOptions, self.selectedEncounterID, "All Bosses"))
     SetDropdownText(self.difficultyDropdown, OptionText(self.difficultyOptions, self.selectedDifficultyID, "All Difficulties"))
-    SetDropdownText(self.specDropdown, OptionText(self.specOptions, self.selectedSpec, "All Specs"))
+    self.specValue:SetText(self.currentSpecName or "No Specialization")
     SetDropdownText(self.dateDropdown, DateText(self.selectedDateFilter))
 end
 
@@ -457,7 +475,7 @@ function RaidEncounters:Refresh()
 
     if total == 0 then
         self.emptyText:Show()
-        self.summaryText:SetText("No raid boss pulls found for these filters.")
+        self.summaryText:SetText("No raid boss pulls found for this specialization and these filters.")
         self.pageText:SetText("Page 0 / 0")
         self.prevButton:Disable(); self.nextButton:Disable()
         self.selectedEncounter = nil
@@ -512,7 +530,7 @@ function RaidEncounters:Create(parent)
             local info = UIDropDownMenu_CreateInfo()
             info.text, info.checked = option.text, value == RaidEncounters.selectedEncounterID
             info.func = function()
-                RaidEncounters.selectedEncounterID, RaidEncounters.selectedDifficultyID, RaidEncounters.selectedSpec = value, nil, nil
+                RaidEncounters.selectedEncounterID, RaidEncounters.selectedDifficultyID = value, nil
                 RaidEncounters.currentPage, RaidEncounters.selectedEncounter = 1, nil
                 RaidEncounters:Refresh()
             end
@@ -525,25 +543,17 @@ function RaidEncounters:Create(parent)
             local info = UIDropDownMenu_CreateInfo()
             info.text, info.checked = option.text, value == RaidEncounters.selectedDifficultyID
             info.func = function()
-                RaidEncounters.selectedDifficultyID, RaidEncounters.selectedSpec = value, nil
+                RaidEncounters.selectedDifficultyID = value
                 RaidEncounters.currentPage, RaidEncounters.selectedEncounter = 1, nil
                 RaidEncounters:Refresh()
             end
             UIDropDownMenu_AddButton(info, level)
         end
     end)
-    self.specDropdown = MakeDropdown(controls, CFG.controls.specWidth, CFG.controls.specX, CFG.controls.labelY, "Spec", function(_, level)
-        for _, option in ipairs(RaidEncounters.specOptions or {}) do
-            local value = option.value
-            local info = UIDropDownMenu_CreateInfo()
-            info.text, info.checked = option.text, value == RaidEncounters.selectedSpec
-            info.func = function()
-                RaidEncounters.selectedSpec, RaidEncounters.currentPage, RaidEncounters.selectedEncounter = value, 1, nil
-                RaidEncounters:Refresh()
-            end
-            UIDropDownMenu_AddButton(info, level)
-        end
-    end)
+    local specLabel = AddFont(controls, "Current Spec", "GameFontDisableSmall", CFG.controls.currentSpecX, CFG.controls.labelY, CFG.controls.currentSpecWidth)
+    ApplyColor(specLabel, CFG.colors.muted)
+    self.specValue = AddFont(controls, "Loading...", "GameFontHighlightSmall", CFG.controls.currentSpecX, CFG.controls.labelY - 26, CFG.controls.currentSpecWidth)
+    ApplyColor(self.specValue, CFG.colors.gold)
     self.dateDropdown = MakeDropdown(controls, CFG.controls.dateWidth, CFG.controls.dateX, CFG.controls.labelY, "Date", function(_, level)
         for _, option in ipairs(DATE_OPTIONS) do
             local value = option.value

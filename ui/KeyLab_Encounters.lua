@@ -58,6 +58,10 @@ local CFG = {
         blue = {0.500, 0.680, 0.940, 1.0},
         warning = {0.840, 0.440, 0.420, 1.0},
         divider = {0.440, 0.580, 0.780, 0.32},
+        crit = {0.840, 0.440, 0.420, 0.95},
+        haste = {0.840, 0.720, 0.420, 0.95},
+        mastery = {0.500, 0.680, 0.940, 0.95},
+        versatility = {0.460, 0.780, 0.500, 0.95},
     },
 
     header = {
@@ -74,13 +78,13 @@ local CFG = {
 
         dungeonX = 18,
         keyX = 255,
-        specX = 390,
+        currentSpecX = 390,
         dateX = 610,
         labelY = -12,
 
         dungeonWidth = 185,
         keyWidth = 90,
-        specWidth = 170,
+        currentSpecWidth = 170,
         dateWidth = 150,
     },
 
@@ -505,6 +509,17 @@ local function GetSpecName(encounter)
     return GetPlayer(encounter).spec or encounter.spec or encounter.specName or "Unknown Spec"
 end
 
+local function GetCurrentSpecName()
+    local specIndex = GetSpecialization and GetSpecialization()
+    if specIndex and GetSpecializationInfo then
+        local _, specName = GetSpecializationInfo(specIndex)
+        if specName and specName ~= "" then
+            return specName
+        end
+    end
+    return nil
+end
+
 local function GetClassName(encounter)
     return GetPlayer(encounter).class or encounter.class or encounter.className or "Unknown Class"
 end
@@ -639,36 +654,6 @@ local function GetKeyOptions(encounters, selectedMapID)
     return list
 end
 
-local function GetSpecOptions(encounters)
-    local seen = {}
-    local list = {
-        { text = "All Specs", value = nil },
-    }
-
-    for _, encounter in ipairs(encounters or {}) do
-        local spec = GetSpecName(encounter)
-        if spec and spec ~= "" and spec ~= "Unknown Spec" and not seen[spec] then
-            seen[spec] = true
-            table.insert(list, {
-                text = spec,
-                value = spec,
-            })
-        end
-    end
-
-    table.sort(list, function(a, b)
-        if a.text == "All Specs" then return true end
-        if b.text == "All Specs" then return false end
-        return tostring(a.text) < tostring(b.text)
-    end)
-
-    return list
-end
-
-local function GetSpecText(value)
-    return value or "All Specs"
-end
-
 local function GetStartOfToday()
     local now = time()
     local d = date("*t", now)
@@ -765,6 +750,10 @@ local function AddDetailRow(parent, label, value, x, y, width)
     return y - 35
 end
 
+local function GetStatColor(statKey)
+    return CFG.colors[statKey] or CFG.colors.text
+end
+
 local function AddStatRows(parent, encounter, x, y, width)
     local stats = GetStats(encounter)
     local order = KeyLab.Mapping and KeyLab.Mapping.StatOrder or {}
@@ -783,7 +772,7 @@ local function AddStatRows(parent, encounter, x, y, width)
                 local label = info.label or statKey
                 local text = label .. ": " .. FormatStat(statKey, value)
                 local row = AddFont(parent, text, "GameFontHighlightSmall", x, y, width)
-                ApplyColor(row, CFG.colors.text)
+                ApplyColor(row, GetStatColor(statKey))
                 y = y - CFG.details.rowHeight
                 shown = shown + 1
             else
@@ -1014,8 +1003,16 @@ end
 
 function Encounters:RefreshDropdowns()
     self.allEncounters = GetEncounterList()
+    self.currentSpecName = GetCurrentSpecName()
 
-    local dungeonOptions = GetDungeonOptions(self.allEncounters)
+    local currentSpecEncounters = {}
+    for _, encounter in ipairs(self.allEncounters or {}) do
+        if not self.currentSpecName or GetSpecName(encounter) == self.currentSpecName then
+            table.insert(currentSpecEncounters, encounter)
+        end
+    end
+
+    local dungeonOptions = GetDungeonOptions(currentSpecEncounters)
     local hasSelectedDungeon = false
 
     for _, option in ipairs(dungeonOptions) do
@@ -1038,7 +1035,7 @@ function Encounters:RefreshDropdowns()
     end
     SetDropdownText(self.dungeonDropdown, dungeonText)
 
-    local keyOptions = GetKeyOptions(self.allEncounters, self.selectedMapID)
+    local keyOptions = GetKeyOptions(currentSpecEncounters, self.selectedMapID)
     local hasSelectedKey = false
 
     for _, option in ipairs(keyOptions) do
@@ -1054,21 +1051,7 @@ function Encounters:RefreshDropdowns()
 
     SetDropdownText(self.keyDropdown, self.selectedKeyLevel and ("+" .. tostring(self.selectedKeyLevel)) or "All")
 
-    local specOptions = GetSpecOptions(self.allEncounters)
-    local hasSelectedSpec = false
-
-    for _, option in ipairs(specOptions) do
-        if option.value == self.selectedSpec then
-            hasSelectedSpec = true
-            break
-        end
-    end
-
-    if not hasSelectedSpec then
-        self.selectedSpec = nil
-    end
-
-    SetDropdownText(self.specDropdown, GetSpecText(self.selectedSpec))
+    self.specValue:SetText(self.currentSpecName or "No Specialization")
     SetDropdownText(self.dateDropdown, GetDateText(self.selectedDateFilter))
 end
 
@@ -1118,7 +1101,7 @@ function Encounters:Refresh()
 
     self:RefreshDropdowns()
 
-    local filtered = FilterEncounters(self.allEncounters or {}, self.selectedMapID, self.selectedKeyLevel, self.selectedSpec, self.selectedDateFilter)
+    local filtered = FilterEncounters(self.allEncounters or {}, self.selectedMapID, self.selectedKeyLevel, self.currentSpecName, self.selectedDateFilter)
     self.filteredEncounters = filtered
 
     local total = #filtered
@@ -1127,7 +1110,7 @@ function Encounters:Refresh()
 
     if total == 0 then
         self.emptyText:Show()
-        self.summaryText:SetText("No encounters found for this filter.")
+        self.summaryText:SetText("No encounters found for this specialization and filter.")
         self.pageText:SetText("Page 0 / 0")
         self.prevButton:Disable()
         self.nextButton:Disable()
@@ -1161,7 +1144,7 @@ function Encounters:Refresh()
         table.insert(self.cards, card)
     end
 
-    if not self.selectedEncounter or not MatchesFilters(self.selectedEncounter, self.selectedMapID, self.selectedKeyLevel, self.selectedSpec, self.selectedDateFilter) then
+    if not self.selectedEncounter or not MatchesFilters(self.selectedEncounter, self.selectedMapID, self.selectedKeyLevel, self.currentSpecName, self.selectedDateFilter) then
         self.selectedEncounter = filtered[startIndex]
     end
 
@@ -1237,21 +1220,19 @@ function Encounters:Create(parent)
         end
     end)
 
-    self.specDropdown = MakeDropdown(controls, CFG.controls.specWidth, CFG.controls.specX, CFG.controls.labelY, "Spec", function(_, level)
-        local options = GetSpecOptions(Encounters.allEncounters or GetEncounterList())
+    local specLabel = controls:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    specLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", CFG.controls.currentSpecX, CFG.controls.labelY)
+    specLabel:SetWidth(CFG.controls.currentSpecWidth)
+    specLabel:SetJustifyH("LEFT")
+    specLabel:SetText("Current Spec")
+    ApplyColor(specLabel, CFG.colors.muted)
 
-        for _, option in ipairs(options) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = option.text
-            info.func = function()
-                Encounters.selectedSpec = option.value
-                Encounters.currentPage = 1
-                Encounters.selectedEncounter = nil
-                Encounters:Refresh()
-            end
-            UIDropDownMenu_AddButton(info, level)
-        end
-    end)
+    self.specValue = controls:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    self.specValue:SetPoint("TOPLEFT", controls, "TOPLEFT", CFG.controls.currentSpecX, CFG.controls.labelY - 26)
+    self.specValue:SetWidth(CFG.controls.currentSpecWidth)
+    self.specValue:SetJustifyH("LEFT")
+    self.specValue:SetText("Loading...")
+    ApplyColor(self.specValue, CFG.colors.gold)
 
     self.dateDropdown = MakeDropdown(controls, CFG.controls.dateWidth, CFG.controls.dateX, CFG.controls.labelY, "Date", function(_, level)
         local options = GetDateOptions()
