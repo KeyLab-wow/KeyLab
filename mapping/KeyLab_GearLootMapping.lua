@@ -15,7 +15,10 @@ KeyLab.GearLootMapping = Mapping
 
 local SECONDARY_STATS = { Crit = true, Haste = true, Mastery = true, Vers = true }
 local PRIMARY_STATS = { Agi = true, Int = true, Str = true, Stam = true }
-local TIER_SLOT_BASES = { Head = true, Shoulders = true, Chest = true, Hands = true, Legs = true }
+local CATALYST_SLOT_BASES = {
+    Head = true, Shoulders = true, Back = true, Chest = true, Wrist = true,
+    Hands = true, Waist = true, Legs = true, Feet = true,
+}
 
 local function DB()
     return KeyLab and KeyLab.GearLootDatabase or nil
@@ -681,10 +684,12 @@ function Mapping.GetCatalystSourcesForSlot(specID, slotInstance, season)
     specID = tonumber(specID)
     season = tonumber(season or (db and (db.mnSeason or db.season)))
     local baseSlot = Mapping.GetBaseSlotName(slotInstance)
-    if not db or not specID or not TIER_SLOT_BASES[baseSlot] then return {} end
+    if not db or not specID or not CATALYST_SLOT_BASES[baseSlot] then return {} end
     local wantedSlot = baseSlot == "Shoulders" and "Shoulders" or baseSlot
     local out, seen = {}, {}
-    for _, source in ipairs(Mapping.GetSourceListForSpec(specID, "Dungeon")) do
+    -- Dungeon items can become Tier through the Catalyst, while Raid items
+    -- can provide direct Hero/Myth replacements. Keep both visible.
+    for _, source in ipairs(Mapping.GetSourceListForSpec(specID)) do
         for _, item in ipairs(Mapping.GetItemsForSpecSource(specID, source.sourceID)) do
             if Mapping.NormalizeSlotName(item.slot) == wantedSlot and Mapping.IsCurrentSeasonItem(item, season) then
                 if not seen[source.sourceID] then
