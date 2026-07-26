@@ -53,6 +53,32 @@ function Accordion.Create(content, options)
     local headerHeight = tonumber(options.headerHeight) or 42
     local gap = tonumber(options.gap) or THEME_SPACING.compactCard or 8
     local minHeight = tonumber(options.minHeight) or 420
+    local pixelSnap = options.pixelSnap == true
+    local joinBody = options.joinBody == true
+
+    local function Point(region, ...)
+        if pixelSnap and PixelUtil and PixelUtil.SetPoint then
+            PixelUtil.SetPoint(region, ...)
+        else
+            region:SetPoint(...)
+        end
+    end
+
+    local function Size(region, widthValue, heightValue)
+        if pixelSnap and PixelUtil and PixelUtil.SetSize then
+            PixelUtil.SetSize(region, widthValue, heightValue)
+        else
+            region:SetSize(widthValue, heightValue)
+        end
+    end
+
+    local function Height(region, value)
+        if pixelSnap and PixelUtil and PixelUtil.SetHeight then
+            PixelUtil.SetHeight(region, value)
+        else
+            region:SetHeight(value)
+        end
+    end
 
     local controller = {
         content = content,
@@ -63,7 +89,7 @@ function Accordion.Create(content, options)
     for index, definition in ipairs(options.sections or {}) do
         local section = { definition = definition }
         local header = CreateFrame("Button", nil, content, "BackdropTemplate")
-        header:SetSize(width, headerHeight)
+        Size(header, width, headerHeight)
         SetBackdrop(header, Color(colors, "panel"), Color(colors, "border"))
 
         local indicator = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -110,10 +136,14 @@ function Accordion.Create(content, options)
         end)
         header:SetScript("OnEnter", function(self)
             self:SetBackdropBorderColor(unpack(Color(colors, "hover")))
+            if colors.hoverBg then self:SetBackdropColor(unpack(colors.hoverBg)) end
+            title:SetTextColor(unpack(Color(colors, "gold")))
         end)
         header:SetScript("OnLeave", function(self)
             local active = controller.openIndex == index
+            self:SetBackdropColor(unpack(Color(colors, "panel")))
             self:SetBackdropBorderColor(unpack(active and Color(colors, "gold") or Color(colors, "border")))
+            title:SetTextColor(unpack(active and Color(colors, "gold") or Color(colors, "text")))
         end)
     end
 
@@ -122,7 +152,7 @@ function Accordion.Create(content, options)
         for index, section in ipairs(self.sections) do
             local expanded = self.openIndex == index
             section.header:ClearAllPoints()
-            section.header:SetPoint("TOPLEFT", self.content, "TOPLEFT", left, y)
+            Point(section.header, "TOPLEFT", self.content, "TOPLEFT", left, y)
             section.indicator:SetText(expanded and "-" or "+")
             section.title:SetTextColor(unpack(expanded and Color(colors, "gold") or Color(colors, "text")))
             section.header:SetBackdropBorderColor(unpack(expanded and Color(colors, "gold") or Color(colors, "border")))
@@ -132,17 +162,18 @@ function Accordion.Create(content, options)
             if expanded then
                 section.bodyText:SetWidth(width - 32)
                 local height = BodyHeight(section.bodyText, section.definition.body)
-                section.body:SetHeight(height)
-                section.body:SetPoint("TOPLEFT", self.content, "TOPLEFT", left, y)
-                section.bodyText:SetHeight(height - 28)
+                Height(section.body, height)
+                local bodyY = joinBody and (y + 1) or y
+                Point(section.body, "TOPLEFT", self.content, "TOPLEFT", left, bodyY)
+                Height(section.bodyText, height - 28)
                 section.body:Show()
-                y = y - height
+                y = bodyY - height
             else
                 section.body:Hide()
             end
             y = y - gap
         end
-        self.content:SetHeight(math.max(minHeight, math.abs(y) + 12))
+        Height(self.content, math.max(minHeight, math.abs(y) + 12))
     end
 
     controller:Layout()

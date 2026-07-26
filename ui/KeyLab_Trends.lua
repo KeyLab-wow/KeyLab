@@ -77,10 +77,10 @@ local CFG = {
         width = 928,
         height = 62,
 
-        specX = 18,
+        currentSpecX = 18,
         dungeonX = 250,
         labelY = -12,
-        specWidth = 190,
+        currentSpecWidth = 190,
         dungeonWidth = 260,
     },
 
@@ -480,6 +480,27 @@ local function GetSpecName(encounter)
     return GetPlayer(encounter).spec or encounter.spec or encounter.specName or "Unknown Spec"
 end
 
+local function GetSpecID(encounter)
+    local player = GetPlayer(encounter)
+    return tonumber(player.specID or encounter and encounter.specID)
+end
+
+local function GetCurrentSpecIdentity()
+    local specIndex = GetSpecialization and GetSpecialization()
+    if specIndex and GetSpecializationInfo then
+        local specID, specName = GetSpecializationInfo(specIndex)
+        if specName and specName ~= "" then return tonumber(specID), specName end
+    end
+    return nil, nil
+end
+
+local function MatchesCurrentSpec(encounter, currentSpecID, currentSpecName)
+    local encounterSpecID = GetSpecID(encounter)
+    if currentSpecID and encounterSpecID then return encounterSpecID == currentSpecID end
+    if currentSpecName then return GetSpecName(encounter) == currentSpecName end
+    return true
+end
+
 local function GetTalentString(encounter)
     return GetTalents(encounter).talentString or encounter.talentString or ""
 end
@@ -544,41 +565,6 @@ local function GetMetricList()
     end
 
     return list
-end
-
-local function GetSpecOptions(encounters)
-    local seen = {}
-    local list = {
-        { text = "All Specs", value = nil },
-    }
-
-    for _, encounter in ipairs(encounters or {}) do
-        local spec = GetSpecName(encounter)
-        if spec and spec ~= "" and spec ~= "Unknown Spec" and not seen[spec] then
-            seen[spec] = true
-            table.insert(list, {
-                text = spec,
-                value = spec,
-            })
-        end
-    end
-
-    table.sort(list, function(a, b)
-        if a.text == "All Specs" then return true end
-        if b.text == "All Specs" then return false end
-        return tostring(a.text) < tostring(b.text)
-    end)
-
-    return list
-end
-
-local function GetSpecText(spec)
-    return spec or "All Specs"
-end
-
-local function MatchesSelectedSpec(encounter, selectedSpec)
-    if not selectedSpec then return true end
-    return GetSpecName(encounter) == selectedSpec
 end
 
 local function GetStatLabel(statKey)
@@ -655,11 +641,11 @@ local function NewCountGroup()
     }
 end
 
-local function BuildMostUsedStatPriority(encounters, selectedSpec)
+local function BuildMostUsedStatPriority(encounters, currentSpecID, currentSpecName)
     local groups = {}
 
     for _, encounter in ipairs(encounters or {}) do
-        if MatchesSelectedSpec(encounter, selectedSpec) then
+        if MatchesCurrentSpec(encounter, currentSpecID, currentSpecName) then
             local priority = GetStatPriority(encounter)
             local key = GetPriorityKey(priority)
 
@@ -683,11 +669,11 @@ local function BuildMostUsedStatPriority(encounters, selectedSpec)
     return best
 end
 
-local function BuildMostUsedTalent(encounters, selectedSpec)
+local function BuildMostUsedTalent(encounters, currentSpecID, currentSpecName)
     local groups = {}
 
     for _, encounter in ipairs(encounters or {}) do
-        if MatchesSelectedSpec(encounter, selectedSpec) then
+        if MatchesCurrentSpec(encounter, currentSpecID, currentSpecName) then
             local talentString = GetTalentString(encounter)
 
             if talentString and talentString ~= "" then
@@ -716,7 +702,7 @@ local function BuildMostUsedTalent(encounters, selectedSpec)
     return best
 end
 
-local function BuildMetricBest(encounters, selectedSpec, metricInfo)
+local function BuildMetricBest(encounters, currentSpecID, currentSpecName, metricInfo)
     if not metricInfo or not metricInfo.keylabKey then return nil end
 
     local key = metricInfo.keylabKey
@@ -725,7 +711,7 @@ local function BuildMetricBest(encounters, selectedSpec, metricInfo)
     local bestValue = nil
 
     for _, encounter in ipairs(encounters or {}) do
-        if MatchesSelectedSpec(encounter, selectedSpec) then
+        if MatchesCurrentSpec(encounter, currentSpecID, currentSpecName) then
             local value = GetMetricValue(encounter, key)
             if type(value) == "number" then
                 if type(bestValue) ~= "number" then
@@ -760,11 +746,11 @@ local function BuildMetricBest(encounters, selectedSpec, metricInfo)
     }
 end
 
-local function CountUsableRuns(encounters, selectedSpec)
+local function CountUsableRuns(encounters, currentSpecID, currentSpecName)
     local count = 0
 
     for _, encounter in ipairs(encounters or {}) do
-        if MatchesSelectedSpec(encounter, selectedSpec) then
+        if MatchesCurrentSpec(encounter, currentSpecID, currentSpecName) then
             count = count + 1
         end
     end
@@ -921,13 +907,13 @@ local function AddTrendIcon(parent, trend, x, y, size)
     return icon
 end
 
-local function BuildMetricDirection(encounters, selectedSpec, metricKey)
+local function BuildMetricDirection(encounters, currentSpecID, currentSpecName, metricKey)
     local metricInfo = GetMetricInfoByKey(metricKey)
     if not metricInfo then return nil end
 
     local values = {}
     for _, encounter in ipairs(encounters or {}) do
-        if MatchesSelectedSpec(encounter, selectedSpec) then
+        if MatchesCurrentSpec(encounter, currentSpecID, currentSpecName) then
             local value = GetMetricValue(encounter, metricKey)
             if type(value) == "number" then
                 table.insert(values, {
@@ -1050,14 +1036,14 @@ local function BuildTrendTile(parent, x, y, trend)
     return panel
 end
 
-local function GetDungeonOptions(encounters, selectedSpec)
+local function GetDungeonOptions(encounters, currentSpecID, currentSpecName)
     local seen = {}
     local list = {
         { text = "All Dungeons", value = nil },
     }
 
     for _, encounter in ipairs(encounters or {}) do
-        if MatchesSelectedSpec(encounter, selectedSpec) then
+        if MatchesCurrentSpec(encounter, currentSpecID, currentSpecName) then
             local dungeonName = GetDungeonName(encounter)
             if dungeonName and dungeonName ~= "" and dungeonName ~= "Unknown Dungeon" and not seen[dungeonName] then
                 seen[dungeonName] = true
@@ -1087,11 +1073,11 @@ local function MatchesSelectedDungeon(encounter, selectedDungeon)
     return GetDungeonName(encounter) == selectedDungeon
 end
 
-local function FilterTrendEncounters(encounters, selectedSpec, selectedDungeon)
+local function FilterTrendEncounters(encounters, currentSpecID, currentSpecName, selectedDungeon)
     local list = {}
 
     for _, encounter in ipairs(encounters or {}) do
-        if MatchesSelectedSpec(encounter, selectedSpec) and MatchesSelectedDungeon(encounter, selectedDungeon) then
+        if MatchesCurrentSpec(encounter, currentSpecID, currentSpecName) and MatchesSelectedDungeon(encounter, selectedDungeon) then
             table.insert(list, encounter)
         end
     end
@@ -1103,11 +1089,11 @@ local function FilterTrendEncounters(encounters, selectedSpec, selectedDungeon)
     return list
 end
 
-local function CountTrendRuns(encounters, selectedSpec, selectedDungeon)
+local function CountTrendRuns(encounters, currentSpecID, currentSpecName, selectedDungeon)
     local count = 0
 
     for _, encounter in ipairs(encounters or {}) do
-        if MatchesSelectedSpec(encounter, selectedSpec) and MatchesSelectedDungeon(encounter, selectedDungeon) then
+        if MatchesCurrentSpec(encounter, currentSpecID, currentSpecName) and MatchesSelectedDungeon(encounter, selectedDungeon) then
             count = count + 1
         end
     end
@@ -1486,22 +1472,16 @@ end
 
 function Trends:RefreshDropdowns()
     self.allEncounters = GetEncounterList()
-
-    local specOptions = GetSpecOptions(self.allEncounters)
-    local hasSelectedSpec = false
-
-    for _, option in ipairs(specOptions) do
-        if option.value == self.selectedSpec then
-            hasSelectedSpec = true
-            break
+    self.currentSpecID, self.currentSpecName = GetCurrentSpecIdentity()
+    self.currentSpecEncounters = {}
+    for _, encounter in ipairs(self.allEncounters or {}) do
+        if MatchesCurrentSpec(encounter, self.currentSpecID, self.currentSpecName) then
+            table.insert(self.currentSpecEncounters, encounter)
         end
     end
+    self.specValue:SetText(self.currentSpecName or "No Specialization")
 
-    if not hasSelectedSpec then
-        self.selectedSpec = nil
-    end
-
-    local dungeonOptions = GetDungeonOptions(self.allEncounters, self.selectedSpec)
+    local dungeonOptions = GetDungeonOptions(self.currentSpecEncounters, self.currentSpecID, self.currentSpecName)
     local hasSelectedDungeon = false
 
     for _, option in ipairs(dungeonOptions) do
@@ -1515,7 +1495,6 @@ function Trends:RefreshDropdowns()
         self.selectedDungeon = nil
     end
 
-    SetDropdownText(self.specDropdown, GetSpecText(self.selectedSpec))
     SetDropdownText(self.dungeonDropdown, GetDungeonText(self.selectedDungeon))
 end
 
@@ -1523,7 +1502,7 @@ function Trends:RefreshContent()
     ClearChildren(self.content)
 
     local encounters = self.allEncounters or GetEncounterList()
-    local filtered = FilterTrendEncounters(encounters, self.selectedSpec, self.selectedDungeon)
+    local filtered = FilterTrendEncounters(encounters, self.currentSpecID, self.currentSpecName, self.selectedDungeon)
     local usableCount = #filtered
 
     if self.summaryText then
@@ -1617,23 +1596,26 @@ function Trends:Create(parent)
     controls:SetSize(CFG.controls.width, CFG.controls.height)
     StylePanel(controls, CFG.colors.controlBg, CFG.colors.cardBorder)
 
-    self.specDropdown = MakeDropdown(controls, CFG.controls.specWidth, CFG.controls.specX, CFG.controls.labelY, "Spec", function(_, level)
-        local options = GetSpecOptions(Trends.allEncounters or GetEncounterList())
+    local specLabel = controls:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    specLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", CFG.controls.currentSpecX, CFG.controls.labelY)
+    specLabel:SetWidth(CFG.controls.currentSpecWidth)
+    specLabel:SetJustifyH("LEFT")
+    specLabel:SetText("Current Spec")
+    ApplyColor(specLabel, CFG.colors.muted)
 
-        for _, option in ipairs(options) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = option.text
-            info.func = function()
-                Trends.selectedSpec = option.value
-                Trends.selectedDungeon = nil
-                Trends:Refresh()
-            end
-            UIDropDownMenu_AddButton(info, level)
-        end
-    end)
+    self.specValue = controls:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    self.specValue:SetPoint("TOPLEFT", controls, "TOPLEFT", CFG.controls.currentSpecX, CFG.controls.labelY - 26)
+    self.specValue:SetWidth(CFG.controls.currentSpecWidth)
+    self.specValue:SetJustifyH("LEFT")
+    self.specValue:SetText("Loading...")
+    ApplyColor(self.specValue, CFG.colors.gold)
 
     self.dungeonDropdown = MakeDropdown(controls, CFG.controls.dungeonWidth, CFG.controls.dungeonX, CFG.controls.labelY, "Dungeon", function(_, level)
-        local options = GetDungeonOptions(Trends.allEncounters or GetEncounterList(), Trends.selectedSpec)
+        local options = GetDungeonOptions(
+            Trends.currentSpecEncounters or Trends.allEncounters or GetEncounterList(),
+            Trends.currentSpecID,
+            Trends.currentSpecName
+        )
 
         for _, option in ipairs(options) do
             local info = UIDropDownMenu_CreateInfo()

@@ -390,7 +390,11 @@ local function AddStatRows(parent, encounter, x, y, width)
         if info and info.store == true and value and value > 0 then
             if shown < 13 then
                 local row = AddFont(parent, (info.label or statKey) .. ": " .. FormatStat(statKey, value), "GameFontHighlightSmall", x, y, width)
-                ApplyColor(row, StatColor(statKey))
+                if statKey == "crit" or statKey == "haste" or statKey == "mastery" or statKey == "versatility" then
+                    ApplyColor(row, StatColor(statKey))
+                else
+                    ApplyColor(row, CFG.colors.text)
+                end
                 y, shown = y - CFG.details.rowHeight, shown + 1
             else hidden = hidden + 1 end
         end
@@ -663,7 +667,7 @@ function RaidStatProfiles:Create(parent)
     ApplyColor(specLabel, CFG.colors.muted)
     self.specValue = AddFont(controls, "Loading...", "GameFontHighlightSmall", CFG.controls.specX, CFG.controls.labelY - 26, CFG.controls.specWidth)
     ApplyColor(self.specValue, CFG.colors.gold)
-    self.outcomeDropdown = MakeDropdown(controls, CFG.controls.outcomeWidth, CFG.controls.outcomeX, CFG.controls.labelY, "Outcome", function(_, level)
+    self.outcomeDropdown = MakeDropdown(controls, CFG.controls.outcomeWidth, CFG.controls.outcomeX, CFG.controls.labelY, "Performance Metric", function(_, level)
         for _, option in ipairs(RaidStatProfiles.metricOptions or {}) do
             local value = option.value
             local info = UIDropDownMenu_CreateInfo(); info.text, info.checked = option.text, value == RaidStatProfiles.selectedMetricKey

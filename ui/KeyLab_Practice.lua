@@ -64,7 +64,6 @@ local TALENT_BUILD_COLORS = {
 
 local STATUS_FILTER_OPTIONS = {
     { value = "all", label = "All Status" },
-    { value = "unmarked", label = "Unmarked" },
 }
 
 local function ApplyColor(fs, color)
@@ -292,6 +291,19 @@ local function MetricLabel(metricKey)
     return metricKey or "Outcome"
 end
 
+local function CurrentSpecName()
+    if GetSpecialization and GetSpecializationInfo then
+        local specIndex = GetSpecialization()
+        if specIndex then
+            local _, specName = GetSpecializationInfo(specIndex)
+            if specName and specName ~= "" then
+                return specName
+            end
+        end
+    end
+    return "No Specialization"
+end
+
 local function MetricValue(session, metricKey)
     if Analysis.GetMetricValue then
         return Analysis.GetMetricValue(session, metricKey)
@@ -305,7 +317,7 @@ end
 
 local function GetSequenceVersionOptions()
     local options = {
-        { sequenceID = nil, versionID = nil, label = "Auto-detect KeyLab use (optional)" },
+        { sequenceID = nil, versionID = nil, label = "Choose a Macro Sequence Version (Optional)" },
     }
     local library = KeyLab.SequencerLibrary or {}
     if not library.GetCollectionSnapshot then return options end
@@ -476,24 +488,40 @@ local function TalentBuildInfo(session)
     return info or { label = "Not captured", color = COLORS.muted }
 end
 
+local function NormalizeStatus(status)
+    if PracticeDB().NormalizeStatus then
+        return PracticeDB().NormalizeStatus(status)
+    end
+    if status == "favorite" then return "current_best" end
+    if status == "review" then return "needs_test" end
+    if status == "ignore" then return "exclude" end
+    if status == nil or status == "" then return "needs_test" end
+    return status
+end
+
 local function StatusLabel(status)
     if PracticeDB().GetStatusLabel then
         return PracticeDB().GetStatusLabel(status)
     end
+    status = NormalizeStatus(status)
     if status == "baseline" then return "Baseline" end
-    if status == "favorite" then return "Favorite" end
-    if status == "review" then return "Review" end
-    if status == "ignore" then return "Ignore" end
-    return "Unmarked"
+    if status == "testing" then return "Testing" end
+    if status == "candidate" then return "Candidate" end
+    if status == "current_best" then return "Current Best" end
+    if status == "archived" then return "Archived" end
+    if status == "exclude" then return "Exclude" end
+    return "Needs Test"
 end
 
 local function StatusOptions()
     return PracticeDB().GetStatusOptions and PracticeDB().GetStatusOptions() or {
-        { value = nil, label = "Unmarked" },
         { value = "baseline", label = "Baseline" },
-        { value = "favorite", label = "Favorite" },
-        { value = "review", label = "Review" },
-        { value = "ignore", label = "Ignore" },
+        { value = "testing", label = "Testing" },
+        { value = "candidate", label = "Candidate" },
+        { value = "current_best", label = "Current Best" },
+        { value = "needs_test", label = "Needs Test" },
+        { value = "archived", label = "Archived" },
+        { value = "exclude", label = "Exclude" },
     }
 end
 
@@ -580,6 +608,7 @@ local function OpenStatusMenu(anchor, sessionID, currentStatus)
         return
     end
 
+    currentStatus = NormalizeStatus(currentStatus)
     local menu = GetStatusMenuFrame()
     UIDropDownMenu_Initialize(menu, function(_, level)
         for _, option in ipairs(StatusOptions()) do
@@ -676,7 +705,6 @@ local function EnsureMonitor()
             frame.stopRetryElapsed = 0
             frame:Hide()
             Practice.selectedSessionID = resultOrError.id
-            Practice.selectedSpec = nil
             Practice.selectedTypeFilter = nil
             Practice.selectedDurationFilter = resultOrError.targetDurationSeconds or "manual"
             Practice.selectedStatusFilter = "all"
@@ -797,14 +825,14 @@ function Practice:RefreshDropdowns(baseSessions)
     SetDropdownText(self.startTypeDropdown, FindOptionLabel(TestTypeOptions(), self.selectedStartType or "ST", "ST"))
     SetDropdownText(self.startDurationDropdown, FindOptionLabel(DurationOptions(false), self.selectedStartDuration or 60, "60 Seconds"))
 
-    local sequenceText = "Auto-detect KeyLab use (optional)"
+    local sequenceText = "Choose a Macro Sequence Version (Optional)"
     local selectedUsage = GetSelectedSequenceUsage()
     if selectedUsage then sequenceText = SequenceUsageLabel(selectedUsage) end
     SetDropdownText(self.startSequenceDropdown, sequenceText)
 
-    local specText = "All Specs"
-    if self.selectedSpec then specText = self.selectedSpec end
-    SetDropdownText(self.specDropdown, specText)
+    if self.currentSpecValue then
+        self.currentSpecValue:SetText(CurrentSpecName())
+    end
 
     SetDropdownText(self.typeFilterDropdown, self.selectedTypeFilter and FindOptionLabel(TestTypeOptions(), self.selectedTypeFilter, "All Types") or "All Types")
     SetDropdownText(self.durationFilterDropdown, self.selectedDurationFilter and FindOptionLabel(DurationOptions(true), self.selectedDurationFilter, "All Lengths") or "All Lengths")
@@ -863,7 +891,7 @@ function Practice:BuildNewSession(parent)
         end
     end)
 
-    self.startSequenceDropdown = MakeDropdown(panel, 390, 276, -36, "Sequence / Active Version", function(_, level)
+    self.startSequenceDropdown = MakeDropdown(panel, 390, 276, -36, "Macro Sequence Version", function(_, level)
         for _, option in ipairs(GetSequenceVersionOptions()) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.label
@@ -901,20 +929,8 @@ end
 function Practice:BuildFilters(parent, baseSessions)
     local panel = MakePanel(parent, 0, LAYOUT.filtersY, 908, 78, "Filters")
 
-    self.specDropdown = MakeDropdown(panel, 120, 16, -34, "Spec", function(_, level)
-        local options = Analysis.GetSpecOptions and Analysis.GetSpecOptions(baseSessions) or { { value = nil, text = "All Specs" } }
-        for _, option in ipairs(options) do
-            local info = UIDropDownMenu_CreateInfo()
-            info.text = option.text
-            info.func = function()
-                Practice.selectedSpec = option.value
-                Practice.selectedSessionID = nil
-                Practice.currentPage = 1
-                Practice:Refresh()
-            end
-            UIDropDownMenu_AddButton(info, level)
-        end
-    end)
+    AddLine(panel, "Current Spec", 18, -34, 140, COLORS.muted, "GameFontDisableSmall")
+    self.currentSpecValue = AddLine(panel, CurrentSpecName(), 18, -58, 140, COLORS.gold, "GameFontHighlightSmall")
 
     self.typeFilterDropdown = MakeDropdown(panel, 115, 174, -34, "Session Type", function(_, level)
         local all = UIDropDownMenu_CreateInfo()
@@ -955,7 +971,7 @@ function Practice:BuildFilters(parent, baseSessions)
         end
     end)
 
-    self.outcomeDropdown = MakeDropdown(panel, 120, 462, -34, "Outcome", function(_, level)
+    self.outcomeDropdown = MakeDropdown(panel, 120, 462, -34, "Performance Metric", function(_, level)
         for _, option in ipairs(MetricOptions()) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.label
@@ -1166,7 +1182,7 @@ function Practice:Refresh()
     title:SetPoint("TOPLEFT", self.content, "TOPLEFT", HEADER.x, HEADER.titleY)
     title:SetSize(880, 24)
 
-    local subtitle = MakeText(self.content, "Test your setup at a training dummy and compare the results you save.", "GameFontHighlightSmall", nil, COLORS.muted)
+    local subtitle = MakeText(self.content, "Test your setup at a training dummy and compare saved results. Choose a Macro Sequence version to track the rotation used.", "GameFontHighlightSmall", nil, COLORS.muted)
     subtitle:SetPoint("TOPLEFT", self.content, "TOPLEFT", 18, -44)
     subtitle:SetSize(860, 16)
 
@@ -1176,7 +1192,6 @@ function Practice:Refresh()
     self:BuildFilters(self.content, baseSessions)
 
     local filtered = Analysis.FilterSessions and Analysis.FilterSessions(baseSessions, {
-        spec = self.selectedSpec,
         testType = self.selectedTypeFilter,
         duration = self.selectedDurationFilter,
         status = self.selectedStatusFilter,

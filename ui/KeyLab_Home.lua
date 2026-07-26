@@ -413,15 +413,15 @@ function HOME:Create(parent)
     local releaseNoteHeight = 132
     local releaseNote = MakePanel(frame, CFG.x, y, width, releaseNoteHeight, false)
 
-    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.65", 14, COLORS.title, "LEFT")
+    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.86", 14, COLORS.title, "LEFT")
     releaseTitle:SetPoint("TOPLEFT", releaseNote, "TOPLEFT", 14, -12)
     releaseTitle:SetSize(280, 18)
 
     local releaseBody = MakeText(
         releaseNote,
-        "Released July 25, 2026\n\n" ..
-        "- Added Dungeon / Zone and Key Level filters to M+ Stat Profiles.\n" ..
-        "- Compare stat priorities from all runs or narrow them to the content you choose.",
+        "Released July 26, 2026\n\n" ..
+        "- Added seven-day history selectors to M+ Last Run and Last Raid.\n" ..
+        "- Review older current-spec results, then return to the latest with one click.",
         11,
         COLORS.muted,
         "LEFT"

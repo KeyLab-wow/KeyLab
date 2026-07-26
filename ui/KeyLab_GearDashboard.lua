@@ -53,6 +53,17 @@ local TRACK_COLORS = {
     Myth = COLORS.purple,
 }
 
+local DASHBOARD_CURRENCIES = {
+    { name = "Adventurer Dawncrest", currencyID = 3383 },
+    { name = "Veteran Dawncrest", currencyID = 3341 },
+    { name = "Champion Dawncrest", currencyID = 3343 },
+    { name = "Hero Dawncrest", currencyID = 3345 },
+    { name = "Myth Dawncrest", currencyID = 3347 },
+    { name = "Nebulous Voidcore", currencyID = 3418 },
+    { name = "Dawnlight Manaflux", currencyID = 3378 },
+    { name = "Ascendant Voidcore", itemID = 268552 },
+}
+
 local function Analysis()
     return KeyLab and KeyLab.GearingAnalysis or {}
 end
@@ -157,6 +168,44 @@ local function FormatItemLevel(value)
     return string.format("%.1f", value)
 end
 
+local function GetCurrencyQuantity(currencyID)
+    if C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo then
+        local ok, info = pcall(C_CurrencyInfo.GetCurrencyInfo, currencyID)
+        if ok and type(info) == "table" then
+            return tonumber(info.quantity) or 0
+        end
+    end
+    if GetCurrencyInfo then
+        local ok, _, quantity = pcall(GetCurrencyInfo, currencyID)
+        if ok then return tonumber(quantity) or 0 end
+    end
+    return nil
+end
+
+local function GetBagItemQuantity(itemID)
+    if Capture().GetBagItemCount then return Capture().GetBagItemCount(itemID) end
+    if C_Item and C_Item.GetItemCount then
+        local ok, count = pcall(C_Item.GetItemCount, itemID, false, false, false)
+        if ok then return tonumber(count) or 0 end
+    end
+    if GetItemCount then
+        local ok, count = pcall(GetItemCount, itemID, false, false, false)
+        if ok then return tonumber(count) or 0 end
+    end
+    return nil
+end
+
+local function FormatCurrencyQuantity(value)
+    value = tonumber(value)
+    if value == nil then return "-" end
+    value = math.max(0, math.floor(value + 0.5))
+    if BreakUpLargeNumbers then
+        local ok, formatted = pcall(BreakUpLargeNumbers, value)
+        if ok and formatted then return tostring(formatted) end
+    end
+    return tostring(value)
+end
+
 local function ShortText(value, maxLength)
     value = tostring(value or "")
     maxLength = tonumber(maxLength) or 20
@@ -239,21 +288,26 @@ local function MakeProgressBar(parent, x, y, width, height)
     return bar
 end
 
-function GearDashboard:BuildLegend(parent)
-    local items = {
-        { label = "Tier", color = COLORS.green },
-        { label = "Need Tier", color = COLORS.yellow },
-        { label = "Dungeon", color = COLORS.blue },
-        { label = "Raid (Weekly)", color = COLORS.purple },
-    }
-    for index, item in ipairs(items) do
+function GearDashboard:BuildCurrencyCard(parent)
+    self.currencyRows = {}
+    for index, currency in ipairs(DASHBOARD_CURRENCIES) do
         local column = (index - 1) % 2
         local row = math.floor((index - 1) / 2)
-        local dot = MakeFrame(parent, 14 + (column * 150), -31 - (row * 21), 14, 14, Dimmed(item.color), item.color)
-        local label = MakeText(parent, item.label, "GameFontDisableSmall", 9, COLORS.muted)
-        label:SetPoint("LEFT", dot, "RIGHT", 6, 0)
-        label:SetSize(125, 14)
+        local x = 10 + (column * 150)
+        local y = -23 - (row * 13)
+        local label = MakeText(parent, currency.name, "GameFontDisableSmall", 8, COLORS.muted)
+        label:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+        label:SetSize(110, 12)
         label:SetWordWrap(false)
+        local value = MakeText(parent, "-", "GameFontDisableSmall", 8, COLORS.gold, "RIGHT")
+        value:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 112, y)
+        value:SetSize(28, 12)
+        table.insert(self.currencyRows, {
+            currencyID = currency.currencyID,
+            itemID = currency.itemID,
+            label = label,
+            value = value,
+        })
     end
 end
 
@@ -389,9 +443,11 @@ function GearDashboard:Build()
     self:BuildAlternativesCard(self.alternativesCard)
 
     local footerY = topY - (7 * (SLOT_HEIGHT + SLOT_GAP)) - SLOT_HEIGHT - CARD_GAP
-    self.legendCard = MakeCard(self.frame, leftX, footerY, SLOT_WIDTH, 78, "Status Legend")
-    self.legendCard.title:SetPoint("TOP", self.legendCard, "TOP", 0, -7)
-    self:BuildLegend(self.legendCard)
+    self.currencyCard = MakeCard(self.frame, leftX, footerY, SLOT_WIDTH, 78, "Crests & Seasonal Currency")
+    self.currencyCard.title:ClearAllPoints()
+    self.currencyCard.title:SetPoint("TOP", self.currencyCard, "TOP", 0, -5)
+    self.currencyCard.title:SetSize(SLOT_WIDTH - 20, 14)
+    self:BuildCurrencyCard(self.currencyCard)
 
     self.progressCard = MakeCard(self.frame, rightX, footerY, SLOT_WIDTH, 78, "Gear Target Progress")
     self.progressCard.title:SetPoint("TOP", self.progressCard, "TOP", 0, -7)
@@ -443,11 +499,12 @@ function GearDashboard:RefreshSlotRow(row, plan)
     row.itemLink = plan.itemLink
     row.itemName = plan.target and plan.target.name or plan.displayName
 
-    SetBadge(row.tierBadge, plan.tierBadge, plan.tierChecked and COLORS.green or COLORS.yellow)
+    SetBadge(row.tierBadge, plan.tierBadge,
+        plan.tierChecked and COLORS.green or (plan.catalystItem and COLORS.blue or COLORS.yellow))
     SetBadge(row.trackBadge, plan.trackLabel, TrackColor(plan.trackName))
     SetBadge(row.rankBadge, plan.rankText, TrackColor(plan.trackName))
     row.action:SetText(plan.actionText or "")
-    if plan.targetEquipped or plan.tierChecked then
+    if plan.targetEquipped or plan.tierChecked or plan.nebulousAvailable or plan.voidforgeAvailable then
         row.action:SetTextColor(unpack(COLORS.green))
     elseif plan.tierNeeded then
         row.action:SetTextColor(unpack(COLORS.yellow))
@@ -501,6 +558,13 @@ function GearDashboard:RefreshProgress(state)
     self.progressPercent:SetText(total > 0 and (math.floor((pct * 100) + 0.5) .. "%") or "-")
 end
 
+function GearDashboard:RefreshCurrencies()
+    for _, row in ipairs(self.currencyRows or {}) do
+        local quantity = row.itemID and GetBagItemQuantity(row.itemID) or GetCurrencyQuantity(row.currencyID)
+        row.value:SetText(FormatCurrencyQuantity(quantity))
+    end
+end
+
 local function RefreshDashboard(self)
     if not IsVisible(self.frame) then return end
     self.refreshQueued = false
@@ -512,6 +576,7 @@ local function RefreshDashboard(self)
     self:RefreshTier(state)
     self:RefreshAlternatives(state)
     self:RefreshProgress(state)
+    self:RefreshCurrencies()
 end
 
 function GearDashboard:Refresh()
@@ -553,6 +618,8 @@ function GearDashboard:Create(parent)
     frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
     frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
     frame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
+    frame:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
+    frame:RegisterEvent("BAG_UPDATE_DELAYED")
     frame:SetScript("OnEvent", function(_, event, slotID)
         if event == "PLAYER_EQUIPMENT_CHANGED" and Capture().MarkSlotChanged then
             Capture().MarkSlotChanged(slotID)

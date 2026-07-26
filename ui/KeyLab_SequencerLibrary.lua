@@ -57,22 +57,37 @@ local function Style(frame, bg, border)
         frame:SetBackdropColor(unpack(bg or COLORS.buttonBg)); frame:SetBackdropBorderColor(unpack(border or COLORS.buttonBorder))
     end
 end
+local BUTTON_HOVER_BG=COLORS.buttonSelectedBg or {0.040,0.068,0.120,0.96}
+local function ApplyButtonRestingStyle(button)
+    if not button then return end
+    if button.SetBackdropColor then button:SetBackdropColor(unpack(button.defaultBg or COLORS.buttonBg)) end
+    if button.SetBackdropBorderColor then button:SetBackdropBorderColor(unpack(button.defaultBorder or COLORS.buttonBorder or COLORS.border)) end
+    Color(button.label,button.defaultText or COLORS.text)
+end
+local function ApplyButtonHoverStyle(button)
+    if not button then return end
+    if button.SetBackdropColor then button:SetBackdropColor(unpack(BUTTON_HOVER_BG)) end
+    if button.SetBackdropBorderColor then button:SetBackdropBorderColor(unpack(COLORS.gold)) end
+    Color(button.label,COLORS.gold)
+end
 local function Button(parent, label, width, onClick, height)
     local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
     button:SetSize(width or 90, height or 24); Style(button)
     button.defaultBorder=COLORS.buttonBorder or COLORS.border
+    button.defaultBg=COLORS.buttonBg
+    button.defaultText=COLORS.text
     button.label = Text(button,label,"GameFontHighlightSmall",nil,COLORS.text,"CENTER")
     button.label:SetAllPoints(); button.label:SetJustifyV("MIDDLE")
     button:SetScript("OnClick",onClick)
-    button:SetScript("OnEnter",function(self) if self.SetBackdropBorderColor then self:SetBackdropBorderColor(unpack(COLORS.buttonHover or COLORS.gold)) end end)
-    button:SetScript("OnLeave",function(self) if self.SetBackdropBorderColor then self:SetBackdropBorderColor(unpack(self.defaultBorder or COLORS.buttonBorder or COLORS.border)) end end)
+    button:SetScript("OnEnter",ApplyButtonHoverStyle)
+    button:SetScript("OnLeave",ApplyButtonRestingStyle)
     return button
 end
 local function ButtonAccent(button,border,textColor)
     if not button then return end
     button.defaultBorder=border or COLORS.buttonBorder or COLORS.border
-    if button.SetBackdropBorderColor then button:SetBackdropBorderColor(unpack(button.defaultBorder)) end
-    Color(button.label,textColor or COLORS.text)
+    button.defaultText=textColor or COLORS.text
+    ApplyButtonRestingStyle(button)
 end
 local function EditBox(parent, width)
     local box=CreateFrame("EditBox",nil,parent,"BackdropTemplate")
@@ -87,6 +102,7 @@ local function Dropdown(parent,width,optionsProvider,getValue,setValue)
     width=width or 150
     local dropdown=CreateFrame("Button",nil,parent,"BackdropTemplate")
     dropdown:SetSize(width,24); Style(dropdown,COLORS.controlBg or COLORS.buttonBg,COLORS.softBorder or COLORS.border)
+    dropdown.defaultBg=COLORS.controlBg or COLORS.buttonBg; dropdown.defaultBorder=COLORS.softBorder or COLORS.border; dropdown.defaultText=COLORS.text
     dropdown.label=Text(dropdown,"None","GameFontHighlightSmall",11,COLORS.text); dropdown.label:SetPoint("LEFT",8,0); dropdown.label:SetPoint("RIGHT",-24,0); dropdown.label:SetHeight(22); dropdown.label:SetJustifyV("MIDDLE")
     dropdown.arrow=Text(dropdown,"v","GameFontNormal",12,COLORS.gold,"CENTER"); dropdown.arrow:SetPoint("RIGHT",-5,0); dropdown.arrow:SetSize(16,20); dropdown.arrow:SetJustifyV("MIDDLE")
     dropdown.optionsProvider=optionsProvider; dropdown.getValue=getValue; dropdown.setValue=setValue
@@ -100,6 +116,7 @@ local function Dropdown(parent,width,optionsProvider,getValue,setValue)
             local row=dropdown.menu.rows[rowIndex]
             if not row then
                 row=CreateFrame("Button",nil,dropdown.menu,"BackdropTemplate"); row:SetHeight(22); Style(row,COLORS.card or COLORS.panel,COLORS.softBorder or COLORS.border)
+                row.defaultBg=COLORS.card or COLORS.panel; row.defaultBorder=COLORS.softBorder or COLORS.border; row.defaultText=COLORS.text
                 row.label=Text(row,"","GameFontHighlightSmall",11,COLORS.text); row.label:SetPoint("LEFT",7,0); row.label:SetPoint("RIGHT",-5,0); row.label:SetHeight(20); row.label:SetJustifyV("MIDDLE")
                 row:SetScript("OnClick",function()
                     local option=row.option; if not option then return end
@@ -107,14 +124,17 @@ local function Dropdown(parent,width,optionsProvider,getValue,setValue)
                     dropdown.menu:Hide(); if activeDropdown==dropdown then activeDropdown=nil end
                     if accepted~=false then dropdown:RefreshText() end
                 end)
+                row:SetScript("OnEnter",ApplyButtonHoverStyle)
+                row:SetScript("OnLeave",ApplyButtonRestingStyle)
                 dropdown.menu.rows[rowIndex]=row
             end
             local option=options[dropdown.menu.offset+rowIndex-1]; row.option=option; row:SetShown(option~=nil)
             if option then
                 row:ClearAllPoints(); row:SetPoint("TOPLEFT",2,-2-((rowIndex-1)*24)); row:SetPoint("TOPRIGHT",-2,-2-((rowIndex-1)*24)); row.label:SetText(option.label)
                 local selected=getValue and getValue()==option.value
-                Color(row.label,selected and COLORS.gold or COLORS.text)
-                if row.SetBackdropBorderColor then row:SetBackdropBorderColor(unpack(selected and COLORS.gold or (COLORS.softBorder or COLORS.border))) end
+                row.defaultBorder=selected and COLORS.gold or (COLORS.softBorder or COLORS.border)
+                row.defaultText=selected and COLORS.gold or COLORS.text
+                ApplyButtonRestingStyle(row)
             end
         end
     end
@@ -128,8 +148,8 @@ local function Dropdown(parent,width,optionsProvider,getValue,setValue)
         activeDropdown=dropdown; dropdown.menu.offset=1; dropdown.menu:ClearAllPoints(); dropdown.menu:SetPoint("TOPLEFT",dropdown,"BOTTOMLEFT",0,-2); PopulateMenu(); dropdown.menu:Show()
     end)
     dropdown:SetScript("OnHide",function() dropdown.menu:Hide(); if activeDropdown==dropdown then activeDropdown=nil end end)
-    dropdown:SetScript("OnEnter",function(self) if self.SetBackdropBorderColor then self:SetBackdropBorderColor(unpack(COLORS.buttonHover or COLORS.gold)) end end)
-    dropdown:SetScript("OnLeave",function(self) if self.SetBackdropBorderColor then self:SetBackdropBorderColor(unpack(COLORS.softBorder or COLORS.border)) end end)
+    dropdown:SetScript("OnEnter",ApplyButtonHoverStyle)
+    dropdown:SetScript("OnLeave",ApplyButtonRestingStyle)
     dropdown.RefreshText=function(self)
         local options=type(self.optionsProvider)=="function" and self.optionsProvider() or self.optionsProvider or {}
         local current=self.getValue and self.getValue() or nil
@@ -741,8 +761,7 @@ function Sequencer:SetView(view)
     for key,panel in pairs(self.views or {}) do panel:SetShown(key==self.selectedView) end
     for key,button in pairs(self.viewButtons or {}) do
         local active=key==self.selectedView
-        if button.SetBackdropBorderColor then button:SetBackdropBorderColor(unpack(active and COLORS.gold or (COLORS.buttonBorder or COLORS.border))) end
-        Color(button.label,active and COLORS.gold or COLORS.text)
+        ButtonAccent(button,active and COLORS.gold or (COLORS.buttonBorder or COLORS.border),active and COLORS.gold or COLORS.text)
     end
     self:RefreshStatusLabels()
     if self.selectedView=="binding" then self:RefreshBindingList() elseif self.selectedView=="recycle" then self:RefreshRecycleBin() elseif self.selectedView=="editor" then self:RefreshEditor() end
@@ -1037,7 +1056,8 @@ function Sequencer:BuildInformation(frame)
         panel=COLORS.panel,
         body=COLORS.card or COLORS.buttonBg or COLORS.panel,
         border=COLORS.border,
-        hover=COLORS.buttonHover or COLORS.gold,
+        hover=COLORS.gold,
+        hoverBg=BUTTON_HOVER_BG,
         gold=COLORS.gold,
         text=COLORS.text,
     }
@@ -1047,6 +1067,8 @@ function Sequencer:BuildInformation(frame)
         width=830,
         left=4,
         minHeight=520,
+        pixelSnap=true,
+        joinBody=true,
     })
     self.informationContent=content
 end

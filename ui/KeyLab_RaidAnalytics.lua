@@ -744,7 +744,8 @@ local function NewTab(key, title, subtitle, metricSetting, buildContent, metricO
             end)
         end
         local metricX = self.lockCurrentSpec and 442 or 632
-        self.metricDropdown = Dropdown(controls, "Metric", metricX, 170, function() return tab.metricOptions or {} end, function() return tab.selectedMetricKey end, function(value)
+        local metricFilterLabel = self.key == "RaidTrends" and "Performance Metric" or "Metric"
+        self.metricDropdown = Dropdown(controls, metricFilterLabel, metricX, 170, function() return tab.metricOptions or {} end, function() return tab.selectedMetricKey end, function(value)
             tab.selectedMetricKey = value; KeyLabDB.settings[tab.metricSetting] = value; tab.selectedKey = nil; tab:Refresh()
         end)
 

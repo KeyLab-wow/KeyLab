@@ -1455,7 +1455,7 @@ function StatProfiles:Create(parent)
         end
     end)
 
-    self.outcomeDropdown = MakeDropdown(controls, CFG.controls.outcomeWidth, CFG.controls.outcomeX, CFG.controls.labelY, "Outcome", function(_, level)
+    self.outcomeDropdown = MakeDropdown(controls, CFG.controls.outcomeWidth, CFG.controls.outcomeX, CFG.controls.labelY, "Performance Metric", function(_, level)
         local options = GetMetricOptions()
 
         for _, option in ipairs(options) do

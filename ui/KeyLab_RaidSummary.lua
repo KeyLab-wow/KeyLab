@@ -104,6 +104,45 @@ local function ClearContent()
     for _, region in ipairs({ RaidSummary.content:GetRegions() }) do region:Hide() end
 end
 
+local function FormatHistoryDate(timestamp)
+    timestamp = tonumber(timestamp)
+    if not timestamp then return "Unknown time" end
+    if date then return date("%b %d %I:%M %p", timestamp) end
+    return tostring(timestamp)
+end
+
+local function RaidHistoryLabel(night, isLatest)
+    local prefix = isLatest and "Latest - " or ""
+    return string.format(
+        "%s%s - %s - %s",
+        prefix,
+        tostring(night and night.instanceName or "Unknown Raid"),
+        tostring(night and (night.difficultyName or night.difficultyID) or "Unknown Difficulty"),
+        FormatHistoryDate(night and (night.endTime or night.startTime))
+    )
+end
+
+local function CreateActionButton(parent, label, width, height)
+    local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    button:SetSize(width or 132, height or 24)
+    Style(button, Color("cardBg"), Color("cardBorder"))
+    button.label = Text(button, label, "GameFontNormal", nil, Color("text"), "CENTER")
+    button.label:SetPoint("CENTER", button, "CENTER", 0, 0)
+    button.label:SetSize((width or 132) - 12, (height or 24) - 4)
+    button:SetScript("OnEnter", function(self)
+        local gold = Color("gold")
+        self:SetBackdropBorderColor(gold[1], gold[2], gold[3], gold[4] or 1)
+        self.label:SetTextColor(gold[1], gold[2], gold[3], gold[4] or 1)
+    end)
+    button:SetScript("OnLeave", function(self)
+        local border = Color("cardBorder")
+        local textColor = Color("text")
+        self:SetBackdropBorderColor(border[1], border[2], border[3], border[4] or 1)
+        self.label:SetTextColor(textColor[1], textColor[2], textColor[3], textColor[4] or 1)
+    end)
+    return button
+end
+
 local function FormatNumber(value)
     if KeyLab.Formatters and KeyLab.Formatters.Number then return KeyLab.Formatters.Number(value) end
     value = tonumber(value)
@@ -320,13 +359,25 @@ local function AverageRankLabel(pulls, metricKey)
     return averageText .. " avg"
 end
 
-local function GetLatest()
+local function GetLatest(selectedNightID)
     local raids = KeyLab.DB and KeyLab.DB.Raids
     if not raids or not raids.GetLatestNight then return nil, {} end
     local night
-    if raids.GetLatestNightForCurrentCharacter then
+
+    if selectedNightID and raids.GetRecentNightsForCurrentCharacter then
+        for _, candidate in ipairs(raids.GetRecentNightsForCurrentCharacter(7)) do
+            if candidate.id == selectedNightID then
+                night = candidate
+                break
+            end
+        end
+    end
+
+    if not night and raids.GetLatestNightForCurrentCharacterAndSpec then
+        night = raids.GetLatestNightForCurrentCharacterAndSpec()
+    elseif not night and raids.GetLatestNightForCurrentCharacter then
         night = raids.GetLatestNightForCurrentCharacter()
-    else
+    elseif not night then
         night = raids.GetLatestNight()
     end
     return night, night and raids.GetNightEncounters(night) or {}
@@ -666,7 +717,26 @@ end
 
 function RaidSummary:Refresh()
     if not self.frame then return end
-    local night, pulls = GetLatest()
+    local raids = KeyLab.DB and KeyLab.DB.Raids
+    local selectedNight
+    if self.selectedNightID and raids and raids.GetRecentNightsForCurrentCharacter then
+        for _, candidate in ipairs(raids.GetRecentNightsForCurrentCharacter(7)) do
+            if candidate.id == self.selectedNightID then selectedNight = candidate break end
+        end
+        if not selectedNight then self.selectedNightID = nil end
+    end
+
+    local night, pulls = GetLatest(self.selectedNightID)
+    if self.historyDropdown then
+        UIDropDownMenu_SetText(
+            self.historyDropdown,
+            night and RaidHistoryLabel(night, self.selectedNightID == nil) or "No saved raid sessions for this specialization"
+        )
+    end
+    if self.returnLatestButton then
+        self.returnLatestButton:SetShown(self.selectedNightID ~= nil and night ~= nil)
+    end
+
     local preservedScroll = self.preserveScrollPosition
     self.preserveScrollPosition = nil
 
@@ -726,12 +796,62 @@ function RaidSummary:Create(parent)
     local subtitle = Text(frame, "Review your latest raid session and see how each boss pull went.", "GameFontHighlightSmall", nil, Color("muted"))
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -7)
     subtitle:SetSize(850, 20)
+
+    local historyLabel = Text(frame, "View boss pulls from the past 7 days", "GameFontDisableSmall", nil, Color("muted"))
+    historyLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -65)
+    historyLabel:SetSize(280, 18)
+
+    self.historyDropdown = CreateFrame("Frame", "KeyLabLastRaidHistoryDropdown", frame, "UIDropDownMenuTemplate")
+    self.historyDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -80)
+    UIDropDownMenu_SetWidth(self.historyDropdown, 420)
+    UIDropDownMenu_Initialize(self.historyDropdown, function(_, level)
+        if level ~= 1 then return end
+        local raids = KeyLab.DB and KeyLab.DB.Raids
+        local latest = raids and raids.GetLatestNightForCurrentCharacterAndSpec
+            and raids.GetLatestNightForCurrentCharacterAndSpec()
+            or nil
+
+        local info = UIDropDownMenu_CreateInfo()
+        info.text = latest and RaidHistoryLabel(latest, true) or "No saved raid sessions for this specialization"
+        info.checked = RaidSummary.selectedNightID == nil
+        info.disabled = latest == nil
+        info.func = function()
+            RaidSummary.selectedNightID = nil
+            RaidSummary.renderFingerprint = nil
+            RaidSummary:Refresh()
+        end
+        UIDropDownMenu_AddButton(info, level)
+
+        for _, night in ipairs(raids and raids.GetRecentNightsForCurrentCharacter and raids.GetRecentNightsForCurrentCharacter(7) or {}) do
+            if night.id and (not latest or night.id ~= latest.id) then
+                info = UIDropDownMenu_CreateInfo()
+                info.text = RaidHistoryLabel(night, false)
+                info.checked = RaidSummary.selectedNightID == night.id
+                info.func = function()
+                    RaidSummary.selectedNightID = night.id
+                    RaidSummary.renderFingerprint = nil
+                    RaidSummary:Refresh()
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
+        end
+    end)
+
+    self.returnLatestButton = CreateActionButton(frame, "Return to Latest", 138, 26)
+    self.returnLatestButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 458, -84)
+    self.returnLatestButton:SetScript("OnClick", function()
+        RaidSummary.selectedNightID = nil
+        RaidSummary.renderFingerprint = nil
+        RaidSummary:Refresh()
+    end)
+    self.returnLatestButton:Hide()
+
     self.context = Text(frame, "", "GameFontDisableSmall", nil, Color("muted"))
-    self.context:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -68)
+    self.context:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -126)
     self.context:SetSize(650, 18)
 
     self.scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    self.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -94)
+    self.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -150)
     self.scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 18)
     self.content = CreateFrame("Frame", nil, self.scroll)
     self.content:SetSize(888, 650)

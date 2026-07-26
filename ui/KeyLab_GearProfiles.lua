@@ -207,6 +207,27 @@ local function SpecName(encounter)
     return player.spec or player.specName or "Unknown Spec"
 end
 
+local function SpecID(encounter)
+    local player = GetPlayer(encounter)
+    return tonumber(player.specID or encounter and encounter.specID)
+end
+
+local function GetCurrentSpecIdentity()
+    local specIndex = GetSpecialization and GetSpecialization()
+    if specIndex and GetSpecializationInfo then
+        local specID, specName = GetSpecializationInfo(specIndex)
+        if specName and specName ~= "" then return tonumber(specID), specName end
+    end
+    return nil, nil
+end
+
+local function MatchesCurrentSpec(encounter, currentSpecID, currentSpecName)
+    local encounterSpecID = SpecID(encounter)
+    if currentSpecID and encounterSpecID then return encounterSpecID == currentSpecID end
+    if currentSpecName then return SpecName(encounter) == currentSpecName end
+    return true
+end
+
 local function OptionLabel(options, selected, fallback)
     for _, option in ipairs(options or {}) do if option.value == selected then return option.label end end
     return fallback
@@ -218,13 +239,12 @@ local function HasOption(options, selected)
 end
 
 local function BuildOptions(tab)
-    local primary, secondary, specs = {}, {}, {}
-    local primarySeen, secondarySeen, specSeen = {}, {}, {}
+    local primary, secondary = {}, {}
+    local primarySeen, secondarySeen = {}, {}
     table.insert(primary, { value = nil, label = tab.mode == "raid" and "All Bosses" or "All Dungeons" })
     table.insert(secondary, { value = nil, label = tab.mode == "raid" and "All Difficulties" or "All Keys" })
-    table.insert(specs, { value = nil, label = "All Specs" })
 
-    for _, encounter in ipairs(tab.allEncounters or {}) do
+    for _, encounter in ipairs(tab.currentSpecEncounters or {}) do
         local primaryValue = PrimaryValue(tab.mode, encounter)
         if primaryValue and not primarySeen[primaryValue] then
             primarySeen[primaryValue] = true
@@ -235,13 +255,6 @@ local function BuildOptions(tab)
             if secondaryValue and not secondarySeen[secondaryValue] then
                 secondarySeen[secondaryValue] = true
                 table.insert(secondary, { value = secondaryValue, label = SecondaryLabel(tab.mode, encounter) })
-            end
-            if (not tab.selectedSecondary) or secondaryValue == tab.selectedSecondary then
-                local spec = SpecName(encounter)
-                if spec ~= "Unknown Spec" and not specSeen[spec] then
-                    specSeen[spec] = true
-                    table.insert(specs, { value = spec, label = spec })
-                end
             end
         end
     end
@@ -254,18 +267,14 @@ local function BuildOptions(tab)
         if tab.mode == "mplus" then return tonumber(a.value) > tonumber(b.value) end
         return tostring(a.label) < tostring(b.label)
     end)
-    table.sort(specs, function(a, b)
-        if a.value == nil or b.value == nil then return a.value == nil and b.value ~= nil end
-        return tostring(a.label) < tostring(b.label)
-    end)
-    return primary, secondary, specs
+    return primary, secondary
 end
 
 local function Matches(tab, encounter)
     if not HasGear(encounter) then return false end
+    if not MatchesCurrentSpec(encounter, tab.currentSpecID, tab.currentSpecName) then return false end
     if tab.selectedPrimary and PrimaryValue(tab.mode, encounter) ~= tab.selectedPrimary then return false end
     if tab.selectedSecondary and SecondaryValue(tab.mode, encounter) ~= tab.selectedSecondary then return false end
-    if tab.selectedSpec and SpecName(encounter) ~= tab.selectedSpec then return false end
     return true
 end
 
@@ -312,9 +321,9 @@ local function BuildProfiles(tab)
 end
 
 local function Dropdown(parent, label, x, width, optionsFunc, selectedFunc, changedFunc)
-    Place(parent, label, x, -10, width, "GameFontDisableSmall", nil, Color("muted"))
+    Place(parent, label, x, -12, width, "GameFontDisableSmall", nil, Color("muted"))
     local menu = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
-    menu:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 16, -24)
+    menu:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 16, -30)
     UIDropDownMenu_SetWidth(menu, width)
     UIDropDownMenu_Initialize(menu, function(_, level)
         for _, option in ipairs(optionsFunc() or {}) do
@@ -405,10 +414,9 @@ local function BuildDynamic(tab, profiles, lowerIsBetter)
         Place(card, "#" .. index, 12, -11, 34, "GameFontNormal", 13, Color("gold"), "CENTER")
         Place(card, "Gear Profile", 54, -11, 120, "GameFontNormal", nil, Color("text"))
         Place(card, profile.spec, 180, -11, 135, "GameFontHighlightSmall", nil, Color("muted"))
-        local trinket1 = profile.gear.slots and profile.gear.slots["Trinket 1"]
-        local trinket2 = profile.gear.slots and profile.gear.slots["Trinket 2"]
-        local trinkets = Short(ItemDisplayName(trinket1), 18) .. " + " .. Short(ItemDisplayName(trinket2), 18)
-        Place(card, trinkets, 320, -11, 280, "GameFontHighlightSmall", nil, Color("soft"))
+        local averageItemLevel = tonumber(profile.gear and profile.gear.averageItemLevel)
+        local itemLevelText = averageItemLevel and string.format("Avg Item Level: %.1f", averageItemLevel) or "Avg Item Level unavailable"
+        Place(card, itemLevelText, 320, -11, 280, "GameFontHighlightSmall", nil, averageItemLevel and Color("soft") or Color("muted"))
         Place(card, string.format("%d use%s", profile.uses, profile.uses == 1 and "" or "s"), 608, -11, 80, "GameFontDisableSmall", nil, Color("muted"), "CENTER")
         Place(card, profile.average ~= nil and ("Avg " .. FormatNumber(profile.average)) or "Outcome unavailable", 680, -11, 114, "GameFontNormal", nil, profile.average ~= nil and Color("blue") or Color("muted"), "RIGHT")
         if profile.average ~= nil then CreateComparisonBar(card, profile.average, maxValue, minValue or 0, lowerIsBetter) end
@@ -450,18 +458,24 @@ local function NewGearTab(mode)
 
     function tab:RefreshOptions()
         self.allEncounters = mode == "raid" and RaidEncounters() or MPlusEncounters()
-        self.primaryOptions, self.secondaryOptions, self.specOptions = BuildOptions(self)
+        self.currentSpecID, self.currentSpecName = GetCurrentSpecIdentity()
+        self.currentSpecEncounters = {}
+        for _, encounter in ipairs(self.allEncounters or {}) do
+            if MatchesCurrentSpec(encounter, self.currentSpecID, self.currentSpecName) then
+                table.insert(self.currentSpecEncounters, encounter)
+            end
+        end
+        self.primaryOptions, self.secondaryOptions = BuildOptions(self)
         if not HasOption(self.primaryOptions, self.selectedPrimary) then
-            self.selectedPrimary, self.selectedSecondary, self.selectedSpec = nil, nil, nil
-            self.primaryOptions, self.secondaryOptions, self.specOptions = BuildOptions(self)
+            self.selectedPrimary, self.selectedSecondary = nil, nil
+            self.primaryOptions, self.secondaryOptions = BuildOptions(self)
         end
         if not HasOption(self.secondaryOptions, self.selectedSecondary) then self.selectedSecondary = nil end
-        if not HasOption(self.specOptions, self.selectedSpec) then self.selectedSpec = nil end
         self.metricOptions = GetMetricOptions()
         if not HasOption(self.metricOptions, self.selectedMetricKey) then self.selectedMetricKey = self.metricOptions[1] and self.metricOptions[1].value or "dps" end
         self.primaryDropdown:SetDisplay(self.selectedPrimary, mode == "raid" and "All Bosses" or "All Dungeons")
         self.secondaryDropdown:SetDisplay(self.selectedSecondary, mode == "raid" and "All Difficulties" or "All Keys")
-        self.specDropdown:SetDisplay(self.selectedSpec, "All Specs")
+        self.specValue:SetText(self.currentSpecName or "No Specialization")
         self.metricDropdown:SetDisplay(self.selectedMetricKey, "Outcome")
     end
 
@@ -496,15 +510,14 @@ local function NewGearTab(mode)
 
         local controls = Panel(frame, 12, HEADER.analysisControlsY, PROFILE_WIDTH, 74, Color("softBorder"))
         self.primaryDropdown = Dropdown(controls, mode == "raid" and "Boss" or "Dungeon", 16, 190, function() return tab.primaryOptions or {} end, function() return tab.selectedPrimary end, function(value)
-            tab.selectedPrimary, tab.selectedSecondary, tab.selectedSpec, tab.selectedSignature = value, nil, nil, nil; tab:Refresh()
+            tab.selectedPrimary, tab.selectedSecondary, tab.selectedSignature = value, nil, nil; tab:Refresh()
         end)
         self.secondaryDropdown = Dropdown(controls, mode == "raid" and "Difficulty" or "Key", 252, 130, function() return tab.secondaryOptions or {} end, function() return tab.selectedSecondary end, function(value)
-            tab.selectedSecondary, tab.selectedSpec, tab.selectedSignature = value, nil, nil; tab:Refresh()
+            tab.selectedSecondary, tab.selectedSignature = value, nil; tab:Refresh()
         end)
-        self.specDropdown = Dropdown(controls, "Spec", 442, 130, function() return tab.specOptions or {} end, function() return tab.selectedSpec end, function(value)
-            tab.selectedSpec, tab.selectedSignature = value, nil; tab:Refresh()
-        end)
-        self.metricDropdown = Dropdown(controls, "Outcome", 632, 170, function() return tab.metricOptions or {} end, function() return tab.selectedMetricKey end, function(value)
+        Place(controls, "Current Spec", 442, -12, 150, "GameFontDisableSmall", nil, Color("muted"))
+        self.specValue = Place(controls, "Loading...", 442, -38, 150, "GameFontHighlightSmall", nil, Color("gold"))
+        self.metricDropdown = Dropdown(controls, "Performance Metric", 632, 170, function() return tab.metricOptions or {} end, function() return tab.selectedMetricKey end, function(value)
             tab.selectedMetricKey, tab.selectedSignature = value, nil; tab:Refresh()
         end)
 

@@ -45,10 +45,10 @@ local TABLE_COLUMNS = {
 }
 
 local PRIMARY_OPTIONS = {
-    { label = "Intellect", value = "Int", primary = true },
     { label = "Stamina", value = "Stam", stamina = true },
-    { label = "Agility", value = "Agi", primary = true },
+    { label = "Intellect", value = "Int", primary = true },
     { label = "Strength", value = "Str", primary = true },
+    { label = "Agility", value = "Agi", primary = true },
 }
 
 local SECONDARY_OPTIONS = {
@@ -519,9 +519,8 @@ function GearTargets:MakeHeaderButton(parent, key)
     button:SetPoint("LEFT", parent, "LEFT", column.x - 4, 0)
     button:SetSize(column.width, 22)
     SetBackdrop(button, CFG.colors.box, CFG.colors.border)
-    local label = column.label
-    if self.sortKey == key then label = label .. (self.sortAscending == false and " v" or " ^")
-    elseif key == "match" then label = "Match [Sort]" end
+    local label = column.label .. " [Sort]"
+    if self.sortKey == key then label = label .. (self.sortAscending == false and " v" or " ^") end
     button.label = MakeText(button, label, "GameFontDisableSmall", nil, CFG.colors.gold)
     button.label:SetPoint("LEFT", button, "LEFT", 4, 0)
     button.label:SetSize(column.width - 8, 18)
@@ -784,7 +783,7 @@ function GearTargets:RefreshMatcherCard()
         local message = string.format("Goal Match ready: %d slot(s). %s.",
             matched, tostring(result.resultStatus or "completed"))
         if unmatched > 0 then
-            message = string.format("Goal Match ready: %d slot(s). %d open slot(s) had no distinct candidate.",
+            message = string.format("Goal Match ready: %d slot(s). %d unequipped slot(s) had no distinct candidate.",
                 matched, unmatched)
         end
         ShowResultsButton(true)
@@ -1435,10 +1434,10 @@ function GearTargets:Create(parent)
     end)
 
     local searchLabel = MakeText(controls, "Search Item", "GameFontDisableSmall", nil, CFG.colors.muted)
-    searchLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", 590, -12)
-    searchLabel:SetSize(190, 16)
-    self.searchBox = MakeSearchBox(controls, 190, 22, "Enter item name")
-    self.searchBox:SetPoint("TOPLEFT", controls, "TOPLEFT", 590, -34)
+    searchLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", 600, -12)
+    searchLabel:SetSize(180, 16)
+    self.searchBox = MakeSearchBox(controls, 180, 22, "Enter item name")
+    self.searchBox:SetPoint("TOPLEFT", controls, "TOPLEFT", 600, -34)
     self.searchBox:SetScript("OnTextChanged", function(box)
         if box.placeholder then box.placeholder:SetShown(tostring(box:GetText() or "") == "") end
     end)
@@ -1459,9 +1458,9 @@ function GearTargets:Create(parent)
     self.specValue:SetPoint("TOPLEFT", controls, "TOPLEFT", 795, -38)
     self.specValue:SetSize(140, 20)
 
-    local primaryLabel = MakeText(controls, "Primary / Stamina", "GameFontDisableSmall", nil, CFG.colors.muted)
+    local primaryLabel = MakeText(controls, "Primary Stats (Choose Stamina and one of Int / Str / Agi)", "GameFontDisableSmall", nil, CFG.colors.muted)
     primaryLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", 18, -76)
-    primaryLabel:SetSize(160, 16)
+    primaryLabel:SetSize(430, 16)
     self.primaryChecks = {}
     local x = 18
     for _, option in ipairs(PRIMARY_OPTIONS) do
@@ -1518,10 +1517,12 @@ function GearTargets:Create(parent)
     matcherTitle:SetSize(230, 18)
     self.refreshStatsButton = MakeSmallButton(matcherPanel, "Refresh Current Stats", 134, 22)
     self.refreshStatsButton:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 260, -7)
+    self.refreshStatsButton.label:ClearAllPoints()
+    self.refreshStatsButton.label:SetPoint("CENTER", self.refreshStatsButton, "CENTER", 0, -1)
     self.refreshStatsButton:SetScript("OnClick", function()
         GearTargets:RefreshCurrentStats(true)
     end)
-    local matcherNote = MakeText(matcherPanel, "Enter the percentages you want to see on your Character panel. KeyLab fills the open slots and projects the finished set.", "GameFontDisableSmall", nil, CFG.colors.muted)
+    local matcherNote = MakeText(matcherPanel, "Enter your stat goal percentages. KeyLab uses your current stats, fills the unequipped slots, and projects the finished set.", "GameFontDisableSmall", nil, CFG.colors.muted)
     matcherNote:SetPoint("TOPLEFT", matcherTitle, "BOTTOMLEFT", 0, -4)
     matcherNote:SetSize(380, 28)
     matcherNote:SetWordWrap(true)

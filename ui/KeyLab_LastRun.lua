@@ -961,11 +961,71 @@ local function BuildPullGraph(parent, state, profile, yOffset)
     return card
 end
 
+local function FormatHistoryDate(timestamp)
+    timestamp = tonumber(timestamp)
+    if not timestamp then return "Unknown time" end
+    if date then return date("%b %d %I:%M %p", timestamp) end
+    return tostring(timestamp)
+end
+
+local function RunHistoryLabel(encounter, isLatest)
+    local challenge = encounter and (encounter.challenge or {}) or {}
+    local dungeon = challenge.dungeonName or (encounter and encounter.dungeonName) or "Unknown Dungeon"
+    local keyLevel = tonumber(challenge.keyLevel or (encounter and encounter.keyLevel)) or 0
+    local prefix = isLatest and "Latest - " or ""
+    return string.format("%s%s +%d - %s", prefix, tostring(dungeon), keyLevel, FormatHistoryDate(encounter and encounter.timestamp))
+end
+
+local function MakeActionButton(parent, label, width, height)
+    local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    button:SetSize(width or 132, height or 24)
+    SetBackdrop(button, COLORS.card, COLORS.border)
+    button.label = MakeText(button, label, "GameFontNormal", nil, COLORS.text, "CENTER")
+    button.label:SetPoint("CENTER", button, "CENTER", 0, 0)
+    button.label:SetSize((width or 132) - 12, (height or 24) - 4)
+    button:SetScript("OnEnter", function(self)
+        self:SetBackdropBorderColor(unpack(COLORS.gold))
+        self.label:SetTextColor(unpack(COLORS.gold))
+    end)
+    button:SetScript("OnLeave", function(self)
+        self:SetBackdropBorderColor(unpack(COLORS.border))
+        self.label:SetTextColor(unpack(COLORS.text))
+    end)
+    return button
+end
+
+function LastRun:GetSelectedEncounter()
+    local analysis = Analysis()
+    if self.selectedRunKey and analysis.FindRecentRunByKey then
+        local selected = analysis.FindRecentRunByKey(self.selectedRunKey, 7)
+        if selected then return selected end
+        self.selectedRunKey = nil
+    end
+    return analysis.GetLatestRun and analysis.GetLatestRun() or nil
+end
+
+function LastRun:RefreshHistoryControls()
+    if not self.historyDropdown then return end
+    local analysis = Analysis()
+    local selected = self:GetSelectedEncounter()
+    local latest = analysis.GetLatestRun and analysis.GetLatestRun() or nil
+    local selectedIsLatest = not self.selectedRunKey
+    UIDropDownMenu_SetText(
+        self.historyDropdown,
+        selected and RunHistoryLabel(selected, selectedIsLatest) or "No saved runs for this specialization"
+    )
+    if self.returnLatestButton then
+        self.returnLatestButton:SetShown(self.selectedRunKey ~= nil and latest ~= nil)
+    end
+end
+
 function LastRun:Refresh()
     if not self.content then return end
     ClearChildren(self.content)
 
-    local state = Analysis().BuildState and Analysis().BuildState() or { hasRun = false }
+    local selectedEncounter = self:GetSelectedEncounter()
+    self:RefreshHistoryControls()
+    local state = Analysis().BuildState and Analysis().BuildState(selectedEncounter) or { hasRun = false }
     if not state.hasRun then
         local card = MakeCard(self.content, 0, 0, CONTENT_WIDTH, 120, "M+ Last Run", COLORS.gold)
         AddLine(card, "Complete a Mythic+ run and your newest summary will appear here.", 18, -48, 820, COLORS.muted, "GameFontNormal")
@@ -995,8 +1055,56 @@ function LastRun:Create(parent)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     subtitle:SetSize(900, 32)
 
+    local historyLabel = MakeText(frame, "View a run from the past 7 days", "GameFontDisableSmall", nil, COLORS.muted)
+    historyLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -83)
+    historyLabel:SetSize(260, 18)
+
+    local historyDropdown = CreateFrame("Frame", "KeyLabLastRunHistoryDropdown", frame, "UIDropDownMenuTemplate")
+    historyDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -98)
+    UIDropDownMenu_SetWidth(historyDropdown, 420)
+    UIDropDownMenu_Initialize(historyDropdown, function(_, level)
+        if level ~= 1 then return end
+        local analysis = Analysis()
+        local latest = analysis.GetLatestRun and analysis.GetLatestRun() or nil
+        local latestKey = latest and analysis.GetRunKey and analysis.GetRunKey(latest) or nil
+
+        local info = UIDropDownMenu_CreateInfo()
+        info.text = latest and RunHistoryLabel(latest, true) or "No saved runs for this specialization"
+        info.checked = LastRun.selectedRunKey == nil
+        info.disabled = latest == nil
+        info.func = function()
+            LastRun.selectedRunKey = nil
+            LastRun:Refresh()
+        end
+        UIDropDownMenu_AddButton(info, level)
+
+        for _, encounter in ipairs(analysis.GetRecentRuns and analysis.GetRecentRuns(7) or {}) do
+            local key = analysis.GetRunKey and analysis.GetRunKey(encounter) or nil
+            if key and key ~= latestKey then
+                info = UIDropDownMenu_CreateInfo()
+                info.text = RunHistoryLabel(encounter, false)
+                info.checked = LastRun.selectedRunKey == key
+                info.func = function()
+                    LastRun.selectedRunKey = key
+                    LastRun:Refresh()
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
+        end
+    end)
+    self.historyDropdown = historyDropdown
+
+    local returnLatest = MakeActionButton(frame, "Return to Latest", 138, 26)
+    returnLatest:SetPoint("TOPLEFT", frame, "TOPLEFT", 458, -102)
+    returnLatest:SetScript("OnClick", function()
+        LastRun.selectedRunKey = nil
+        LastRun:Refresh()
+    end)
+    returnLatest:Hide()
+    self.returnLatestButton = returnLatest
+
     local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -84)
+    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -144)
     scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
 
     local content = CreateFrame("Frame", nil, scrollFrame)
