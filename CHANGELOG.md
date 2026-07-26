@@ -1,5 +1,129 @@
 # KeyLab Changelog
 
+## Version 1.8.65 - M+ Stat Profile Dungeon and Key Filters
+
+Released July 25, 2026
+
+- Added a Dungeon / Zone filter to M+ Stat Profiles.
+- Added a Key Level filter to M+ Stat Profiles.
+- Stat priority comparisons now recalculate from the selected dungeon, key level, or both.
+- Current Spec filtering remains active, and all saved records remain unchanged.
+
+## Version 1.8.64 - Current-Spec Stat Profiles
+
+Released July 25, 2026
+
+- Replaced the specialization filter in both M+ and Raid Stat Profiles with the character's current specialization.
+- Stat Profile results and available raid filters now stay focused on the specialization currently being played.
+- Profiles saved under other specializations remain safely stored and appear again when that specialization is active.
+
+## Version 1.8.63 - Cleaner Stat Profile Empty States
+
+Released July 25, 2026
+
+- Removed the repeated instruction beneath empty M+ and Raid Stat Profile results.
+- Empty Stat Profile views now show one short message without repeating how to add results.
+
+## Version 1.8.62 - Clearer Talent Build Metric Filter
+
+Released July 25, 2026
+
+- Renamed the Outcome filter heading to Performance Metric in both M+ and Raid Talent Builds.
+- The new heading more clearly describes the result used to compare and rank saved talent builds.
+
+## Version 1.8.61 - Cleaner Talent Build Empty States
+
+Released July 25, 2026
+
+- Removed the repeated instruction beneath empty M+ and Raid Talent Build results.
+- Empty Talent Build views now show one short message without repeating how to add results.
+
+## Version 1.8.60 - Saved Journal Protection
+
+Released July 25, 2026
+
+- KeyLab now saves a protected copy of the existing journal before a new release initializes or runs data migrations.
+- Each release copy is created only once, so later reloads cannot overwrite that protected starting point.
+- The newest three release copies are retained and include encounters, raid pulls, Practice sessions, sequencer libraries, gear records, settings, and other saved entries.
+- Future updates will add fields and read older records without replacing established player history.
+
+## Version 1.8.59 - Talent Build Name Safeguards
+
+Released July 25, 2026
+
+- Prevented a specialization name such as Beast Mastery from being mistaken for a player-named talent loadout.
+- M+ and Raid Talent Builds now match the current specialization by its stable specialization ID first.
+- Player-named loadouts still appear when available, with numbered Talent Variant labels kept for older builds whose names cannot be found.
+
+## Version 1.8.58 - Player-Named Talent Builds
+
+Released July 25, 2026
+
+- M+ and Raid Talent Builds now use the loadout names players created in Talents & Spellbook.
+- New runs and boss pulls save the active loadout name alongside the unchanged talent import string.
+- Existing builds can use names from talent loadouts that are still saved on the character.
+- Numbered Talent Variant labels remain as a safe fallback when an older loadout name is unavailable.
+
+## Version 1.8.57 - Talent Build Stat Colors
+
+Released July 25, 2026
+
+- Added the established Crit, Haste, Mastery, and Versatility colors to the details section in M+ Talent Builds.
+- Added the same stat colors to the details section in Raid Talent Builds.
+- Talent Build stats now match the visual language used in Stat Profiles and Encounters.
+
+## Version 1.8.56 - Current-Spec Talent Builds
+
+Released July 25, 2026
+
+- Replaced the specialization filter in both M+ Talent Builds and Raid Talent Builds with the character's current specialization.
+- Talent build results and available dungeon, key, boss, and difficulty filters now stay focused on the specialization currently being played.
+- Builds saved under other specializations remain safely stored and appear again when that specialization is active.
+
+## Version 1.8.55 - Last Raid Wording
+
+Released July 25, 2026
+
+- Replaced the player-facing "raid night" wording in Last Raid with "raid session."
+- Updated both the tab description and the message shown before a raid session has been saved.
+
+## Version 1.8.54 - Missing Metric Markers
+
+Released July 25, 2026
+
+- Pulls with missing graph data now display an M marker beneath the pull number.
+- Added an in-card key explaining that M means the metric data was not returned.
+
+## Version 1.8.53 - Clearer Missing Pull Metrics
+
+Released July 25, 2026
+
+- Zero values now stay visible on Last Run pull graphs instead of blending into the graph border.
+- Missing pull metrics now leave a clear gap instead of connecting across data Blizzard's Damage Meter did not return.
+- Added a Last Run note that Blizzard's Damage Meter may not return every metric for every pull.
+
+## Version 1.8.52 - Raid Pull Count on Home
+
+Released July 25, 2026
+
+- Added the current character's saved Raid Boss Pull count to the Home summary.
+- Completed M+ runs and raid boss pulls are now easy to see together.
+
+## Version 1.8.51 - Clearer Encounter Stats
+
+Released July 25, 2026
+
+- Added matching colors for Crit, Haste, Mastery, and Versatility in the M+ and Raid Encounter detail panels.
+- Encounter stats now use the same familiar colors shown in Stat Profiles.
+
+## Version 1.8.50 - Current-Spec Encounters
+
+Released July 25, 2026
+
+- Replaced the specialization filter on both M+ Encounters and Raid Encounters with the character's current specialization.
+- Encounter history and available filters now stay focused on the specialization currently being played.
+- Runs saved under other specializations remain safely stored and appear again when that specialization is active.
+
 ## Version 1.8.49 - Reliable Practice Stat Capture
 
 Released July 24, 2026

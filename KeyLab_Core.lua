@@ -3,7 +3,19 @@ KeyLab = KeyLab or {}
 _G.KeyLab = KeyLab
 
 KeyLab.addonName = ADDON_NAME
-KeyLab.version = KeyLab.version or "1.8.19"
+
+local function GetInstalledAddonVersion()
+    local getter = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
+    if type(getter) == "function" then
+        local ok, version = pcall(getter, ADDON_NAME, "Version")
+        if ok and type(version) == "string" and version ~= "" then
+            return version
+        end
+    end
+    return nil
+end
+
+KeyLab.version = GetInstalledAddonVersion() or KeyLab.version or "1.8.60"
 
 KeyLab.UI = KeyLab.UI or {}
 KeyLab.Tabs = KeyLab.Tabs or {}
