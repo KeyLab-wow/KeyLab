@@ -30,6 +30,13 @@ KeyLab.Mapping.MetricOrder = {
     9, -- Deaths
 }
 
+-- Talent Builds, Stat Profiles, and Gear Profiles compare complete setups.
+-- DPS and HPS are the only performance choices used by those comparison tabs.
+KeyLab.Mapping.ProfileComparisonMetricKeys = {
+    "dps",
+    "hps",
+}
+
 KeyLab.Mapping.Metrics = {
     [0] = {
         metricType = 0,
