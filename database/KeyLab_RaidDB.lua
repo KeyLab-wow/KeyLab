@@ -58,6 +58,13 @@ function Raids.AddEncounter(encounter)
     encounter.timestamp = encounter.timestamp or time()
     encounter.id = encounter.id or ("raid-encounter-" .. tostring(encounter.timestamp) .. "-" .. tostring(#encounters + 1))
     table.insert(encounters, encounter)
+    if KeyLab.DB.ActivityCounters and KeyLab.DB.ActivityCounters.RecordEncounter then
+        KeyLab.DB.ActivityCounters.RecordEncounter(encounter, "raid")
+    end
+    if KeyLab.DB.SeasonJournal then
+        KeyLab.DB.SeasonJournal.RecordEncounter(encounter, "raid")
+        KeyLab.DB.SeasonJournal.ApplyRetention()
+    end
     return true, encounter
 end
 
@@ -167,16 +174,13 @@ function Raids.GetLatestNightForCurrentCharacterAndSpec()
 end
 
 function Raids.GetRecentNightsForCurrentCharacter(days)
-    local now = time and time() or 0
-    local cutoff = now - ((tonumber(days) or 7) * 86400)
     local recent = {}
     for _, night in ipairs(Raids.GetNights()) do
-        local timestamp = tonumber(night and (night.endTime or night.startTime)) or 0
-        if timestamp >= cutoff
-            and NightMatchesCurrentCharacter(night)
+        if NightMatchesCurrentCharacter(night)
             and NightMatchesCurrentSpec(night)
         then
             table.insert(recent, night)
+            if #recent >= 10 then break end
         end
     end
     return recent

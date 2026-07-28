@@ -135,6 +135,9 @@ local function EnsureJournalDefaults(db)
     if type(db.statGoals) ~= "table" then db.statGoals = {} end
     if type(db.statGoalMatcherResults) ~= "table" then db.statGoalMatcherResults = {} end
     if type(db.practiceSessions) ~= "table" then db.practiceSessions = {} end
+    if type(db.performanceLeaderboards) ~= "table" then db.performanceLeaderboards = {} end
+    if type(db.activityCounts) ~= "table" then db.activityCounts = {} end
+    db.dataSafety = nil
     db.activePracticeSession = nil
 
     return db
@@ -263,6 +266,12 @@ local function RegisterImportConfirmPopup()
 
             KeyLabDB = EnsureJournalDefaults(DeepCopy(pendingImportDB))
             pendingImportDB = nil
+            if KeyLab.DB and KeyLab.DB.ActivityCounters and KeyLab.DB.ActivityCounters.Initialize then
+                KeyLab.DB.ActivityCounters.Initialize()
+            end
+            if KeyLab.DB and KeyLab.DB.SeasonJournal and KeyLab.DB.SeasonJournal.Initialize then
+                KeyLab.DB.SeasonJournal.Initialize()
+            end
             if KeyLab.LootTargetsDB and KeyLab.LootTargetsDB.MigrateLegacy then
                 KeyLab.LootTargetsDB.MigrateLegacy()
             end

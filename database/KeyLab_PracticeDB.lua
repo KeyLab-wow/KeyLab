@@ -77,10 +77,17 @@ function PracticeDB.AddSession(session)
         return false, "practice session was not a table"
     end
 
+    local journal = KeyLab.DB and KeyLab.DB.SeasonJournal
+    if journal and journal.CanAddPracticeSession then
+        local allowed, message = journal.CanAddPracticeSession(session)
+        if not allowed then return false, message end
+    end
+
     local sessions = GetSessionsTable()
     session.timestamp = session.timestamp or time()
     session.id = session.id or ("practice-" .. tostring(session.timestamp) .. "-" .. tostring(#sessions + 1))
     table.insert(sessions, session)
+    if journal and journal.ApplyRetention then journal.ApplyRetention() end
     return true, session
 end
 

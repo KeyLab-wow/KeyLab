@@ -151,6 +151,15 @@ function EncountersDB.AddEncounter(encounter)
 
     table.insert(encounters, encounter)
 
+    if KeyLab.DB.ActivityCounters and KeyLab.DB.ActivityCounters.RecordEncounter then
+        KeyLab.DB.ActivityCounters.RecordEncounter(encounter, "mplus")
+    end
+
+    if KeyLab.DB.SeasonJournal then
+        KeyLab.DB.SeasonJournal.RecordEncounter(encounter, "mplus")
+        KeyLab.DB.SeasonJournal.ApplyRetention()
+    end
+
     return true, encounter
 end
 
