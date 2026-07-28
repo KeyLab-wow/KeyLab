@@ -139,16 +139,53 @@ function Sessions.GetCompletionContext(baseContext)
         return KeyLab.Capture.ChallengeTimer.Complete(context)
     end
 
-    if C_ChallengeMode and C_ChallengeMode.GetCompletionInfo then
+    if C_ChallengeMode and C_ChallengeMode.GetChallengeCompletionInfo then
+        local ok, info = SafeCall(C_ChallengeMode.GetChallengeCompletionInfo)
+        if ok and type(info) == "table" then
+            context.mapID = info.mapChallengeModeID or info.mapID or context.mapID
+            context.keyLevel = info.level or context.keyLevel
+            context.durationSeconds = NormalizeSeconds(info.time or info.duration or info.durationSeconds) or context.durationSeconds
+            if context.durationSeconds then
+                context.durationSource = "challengeModeChallengeCompletionInfo"
+                context.timingSource = "challengeModeChallengeCompletionInfo"
+            end
+            if info.onTime ~= nil then
+                context.timed = info.onTime == true
+                context.timedSource = "challengeModeChallengeCompletionInfo"
+            end
+            context.keystoneUpgradeLevels = info.keystoneUpgradeLevels
+            context.keystoneUpgradeLevelsSource = "challengeModeChallengeCompletionInfo"
+            context.completionInfoSource = "challengeModeChallengeCompletionInfo"
+            context.completionInfoCaptured = info.mapChallengeModeID ~= nil
+                or info.mapID ~= nil
+                or info.level ~= nil
+                or info.time ~= nil
+                or info.duration ~= nil
+                or info.durationSeconds ~= nil
+                or info.onTime ~= nil
+            context.practiceRun = info.practiceRun == true
+        end
+    elseif C_ChallengeMode and C_ChallengeMode.GetCompletionInfo then
         local ok, mapID, level, duration, onTime, keystoneUpgradeLevels = SafeCall(C_ChallengeMode.GetCompletionInfo)
         if ok then
             context.mapID = mapID or context.mapID
             context.keyLevel = level or context.keyLevel
             context.durationSeconds = NormalizeSeconds(duration) or context.durationSeconds
+            if context.durationSeconds then
+                context.durationSource = "challengeModeCompletionInfo"
+                context.timingSource = "challengeModeCompletionInfo"
+            end
             if onTime ~= nil then
                 context.timed = onTime == true
+                context.timedSource = "challengeModeCompletionInfo"
             end
             context.keystoneUpgradeLevels = keystoneUpgradeLevels
+            context.keystoneUpgradeLevelsSource = "challengeModeCompletionInfo"
+            context.completionInfoSource = "challengeModeCompletionInfo"
+            context.completionInfoCaptured = mapID ~= nil
+                or level ~= nil
+                or duration ~= nil
+                or onTime ~= nil
         end
     end
 

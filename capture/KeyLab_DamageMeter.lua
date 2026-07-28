@@ -15,19 +15,8 @@ Purpose:
 - Uses source.isLocalPlayer == true only.
 - Stores normalized combat sessions for Run Highlights.
 - Uses Blizzard session names exactly as provided.
-- Keeps metric 10 enemy rows only as debug/future data.
+- Treats KeyLab_MetricMapping.lua as the only authority for stored metrics.
 ]]
-
-local SESSION_METRIC_ORDER = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }
-
-local ZERO_WHEN_MISSING = {
-    absorbs = true,
-    interrupts = true,
-    dispels = true,
-    damageTaken = true,
-    avoidableDamageTaken = true,
-    deaths = true,
-}
 
 local function SafeCall(func, ...)
     if type(func) ~= "function" then
@@ -435,43 +424,14 @@ local function BuildGroupMetricSnapshot(rawSession, metricInfo)
     return out
 end
 
-local function NormalizeEnemyDamage(rawSession)
-    local out = {
-        totalAmount = SafeNumber(ReadAnySourceField(rawSession, "totalAmount")) or 0,
-        sources = {},
-    }
-
-    if type(rawSession) ~= "table" or type(rawSession.combatSources) ~= "table" then
-        return out
-    end
-
-    for _, source in pairs(rawSession.combatSources) do
-        if type(source) == "table" then
-            table.insert(out.sources, {
-                creatureID = ReadAnySourceField(source, "sourceCreatureID"),
-                classification = ReadAnySourceField(source, "classification"),
-                enemyTotalAmount = SafeNumber(ReadAnySourceField(source, "totalAmount")),
-            })
-        end
-    end
-
-    return out
-end
-
 local function MetricOrderForSessions()
-    local seen = {}
     local out = {}
 
     for _, metricType in ipairs(KeyLab.Mapping and KeyLab.Mapping.MetricOrder or {}) do
-        if not seen[metricType] then
-            seen[metricType] = true
-            table.insert(out, metricType)
-        end
-    end
-
-    for _, metricType in ipairs(SESSION_METRIC_ORDER) do
-        if not seen[metricType] then
-            seen[metricType] = true
+        local info = KeyLab.Mapping
+            and KeyLab.Mapping.Metrics
+            and KeyLab.Mapping.Metrics[metricType]
+        if info and info.store == true and info.keylabKey then
             table.insert(out, metricType)
         end
     end
@@ -494,23 +454,22 @@ local function ReadMetricValue(rawSession, metricInfo, options)
         return value, options.skipSources == true and nil or NormalizeLocalSource(source)
     end
 
-    if ZERO_WHEN_MISSING[metricInfo.keylabKey] and SafeNumber(rawSession.totalAmount) == 0 then
-        return 0, nil
-    end
-
-    return nil, nil
+    -- Blizzard leaves players with a real zero out of a metric's source list.
+    -- Reaching this point means the metric table was returned successfully,
+    -- so the absent local-player row is a captured zero rather than missing data.
+    return 0, nil
 end
 
 local function ReadMetricsForSession(sessionID, options)
     local metrics = {}
     local sources = {}
     local ranks = {}
+    local metricAvailability = {}
     local groupMetrics = {}
-    local enemyDamageTaken = nil
     options = type(options) == "table" and options or {}
 
     if sessionID == nil or not C_DamageMeter or not C_DamageMeter.GetCombatSessionFromID then
-        return metrics, sources, ranks, enemyDamageTaken, groupMetrics
+        return metrics, sources, ranks, nil, groupMetrics, metricAvailability
     end
 
     local metricMap = KeyLab.Mapping and KeyLab.Mapping.Metrics or {}
@@ -520,11 +479,8 @@ local function ReadMetricsForSession(sessionID, options)
         local okRaw, rawSession = SafeCall(C_DamageMeter.GetCombatSessionFromID, sessionID, metricType)
 
         if okRaw and type(rawSession) == "table" then
-            if metricType == 10 then
-                if options.skipEnemyDamage ~= true then
-                    enemyDamageTaken = NormalizeEnemyDamage(rawSession)
-                end
-            elseif metricInfo and metricInfo.store == true and metricInfo.keylabKey then
+            if metricInfo and metricInfo.store == true and metricInfo.keylabKey then
+                metricAvailability[metricInfo.keylabKey] = true
                 local value, source = ReadMetricValue(rawSession, metricInfo, options)
                 if value ~= nil then
                     metrics[metricInfo.keylabKey] = value
@@ -552,34 +508,35 @@ local function ReadMetricsForSession(sessionID, options)
         end
     end
 
-    return metrics, sources, ranks, enemyDamageTaken, groupMetrics
+    return metrics, sources, ranks, nil, groupMetrics, metricAvailability
 end
 
 function DamageMeter.GetSnapshot(context)
     local metrics = {}
     local ranks = {}
+    local metricAvailability = {}
 
     if not C_DamageMeter or not C_DamageMeter.GetAvailableCombatSessions or not C_DamageMeter.GetCombatSessionFromID then
-        return metrics, "C_DamageMeter API unavailable"
+        return metrics, "C_DamageMeter API unavailable", ranks, metricAvailability
     end
 
     local okSessions, sessions = SafeCall(C_DamageMeter.GetAvailableCombatSessions)
 
     if not okSessions or type(sessions) ~= "table" then
-        return metrics, "GetAvailableCombatSessions did not return a table"
+        return metrics, "GetAvailableCombatSessions did not return a table", ranks, metricAvailability
     end
 
     local aggregateSessionID = FindAggregateSessionID(sessions, context)
 
     if aggregateSessionID == nil then
-        return metrics, "No aggregate combat session found"
+        return metrics, "No aggregate combat session found", ranks, metricAvailability
     end
 
     local metricOrder = KeyLab.Mapping and KeyLab.Mapping.MetricOrder
     local metricMap = KeyLab.Mapping and KeyLab.Mapping.Metrics
 
     if type(metricOrder) ~= "table" or type(metricMap) ~= "table" then
-        return metrics, "Metric mapping missing"
+        return metrics, "Metric mapping missing", ranks, metricAvailability
     end
 
     for _, metricType in ipairs(metricOrder) do
@@ -589,6 +546,7 @@ function DamageMeter.GetSnapshot(context)
             local okRaw, rawSession = SafeCall(C_DamageMeter.GetCombatSessionFromID, aggregateSessionID, metricType)
 
             if okRaw and type(rawSession) == "table" then
+                metricAvailability[info.keylabKey] = true
                 local value = ReadMetricValue(rawSession, info)
                 if value ~= nil then
                     metrics[info.keylabKey] = value
@@ -606,7 +564,7 @@ function DamageMeter.GetSnapshot(context)
         end
     end
 
-    return metrics, nil, ranks
+    return metrics, nil, ranks, metricAvailability
 end
 
 function DamageMeter.GetCombatSessionsSnapshot(context)
@@ -622,23 +580,41 @@ function DamageMeter.GetCombatSessionsSnapshot(context)
 
     local out = {}
     local aggregateSessionID, aggregateSource = FindAggregateSessionID(sessions, context)
+    if aggregateSessionID == nil then
+        return {}, "No aggregate combat session found"
+    end
 
+    local ordered = {}
     for _, sessionInfo in pairs(sessions) do
         local normalized = NormalizeSessionInfo(sessionInfo)
         if normalized.sessionID ~= nil then
-            normalized.metrics, normalized.sources, normalized.ranks, normalized.enemyDamageTaken = ReadMetricsForSession(normalized.sessionID)
-            if aggregateSessionID ~= nil and normalized.sessionID == aggregateSessionID then
-                normalized.isAggregateSession = true
-                normalized.isTrashSession = false
-                normalized.aggregateSource = aggregateSource
-            end
-            table.insert(out, normalized)
+            table.insert(ordered, normalized)
         end
     end
 
-    table.sort(out, function(a, b)
+    table.sort(ordered, function(a, b)
         return (SafeNumber(a.sessionID) or 0) < (SafeNumber(b.sessionID) or 0)
     end)
+
+    for _, normalized in ipairs(ordered) do
+        normalized.metrics, _, _, _, _, normalized.metricAvailability = ReadMetricsForSession(normalized.sessionID, {
+            skipSources = true,
+            skipRanks = true,
+        })
+        if tostring(normalized.sessionID) == tostring(aggregateSessionID) then
+            normalized.isAggregateSession = true
+            normalized.isTrashSession = false
+            normalized.aggregateSource = aggregateSource
+        end
+
+        table.insert(out, normalized)
+
+        -- Blizzard begins a new rolling session after the completed dungeon
+        -- aggregate. That session belongs to post-run activity, not this run.
+        if normalized.isAggregateSession == true then
+            break
+        end
+    end
 
     return out, nil
 end
@@ -673,8 +649,8 @@ function DamageMeter.GetRaidEncounterSnapshot(encounterName, previousSessionIDs)
     end
 
     local sessionID = GetSessionID(sessionInfo)
-    local metrics, sources, ranks, _, groupMetrics = ReadMetricsForSession(sessionID, {
-        skipEnemyDamage = true,
+    local metrics, _, ranks, _, groupMetrics = ReadMetricsForSession(sessionID, {
+        skipSources = true,
         captureGroupMetrics = true,
     })
     if type(metrics) ~= "table" or next(metrics) == nil then
@@ -685,7 +661,6 @@ function DamageMeter.GetRaidEncounterSnapshot(encounterName, previousSessionIDs)
         sessionID = sessionID,
         sessionName = GetSessionName(sessionInfo),
         durationSeconds = GetSessionDuration(sessionInfo),
-        sources = sources,
     }, groupMetrics
 end
 

@@ -165,20 +165,40 @@ local function ReadOfficialDeathCount()
 end
 
 local function ReadCompletionInfo()
-    if not C_ChallengeMode or not C_ChallengeMode.GetCompletionInfo then
+    if not C_ChallengeMode then
         return nil
     end
 
-    local ok, mapID, level, duration, onTime, upgradeLevels = SafeCall(C_ChallengeMode.GetCompletionInfo)
-    if not ok then return nil end
+    if C_ChallengeMode.GetChallengeCompletionInfo then
+        local ok, info = SafeCall(C_ChallengeMode.GetChallengeCompletionInfo)
+        if ok and type(info) == "table" then
+            return {
+                mapID = info.mapChallengeModeID or info.mapID,
+                keyLevel = info.level,
+                durationSeconds = NormalizeSeconds(info.time or info.duration or info.durationSeconds),
+                timed = info.onTime,
+                keystoneUpgradeLevels = tonumber(info.keystoneUpgradeLevels),
+                practiceRun = info.practiceRun == true,
+                source = "challengeModeChallengeCompletionInfo",
+            }
+        end
+    end
 
-    return {
-        mapID = mapID,
-        keyLevel = level,
-        durationSeconds = NormalizeSeconds(duration),
-        timed = onTime,
-        keystoneUpgradeLevels = tonumber(upgradeLevels),
-    }
+    if C_ChallengeMode.GetCompletionInfo then
+        local ok, mapID, level, duration, onTime, upgradeLevels = SafeCall(C_ChallengeMode.GetCompletionInfo)
+        if ok then
+            return {
+                mapID = mapID,
+                keyLevel = level,
+                durationSeconds = NormalizeSeconds(duration),
+                timed = onTime,
+                keystoneUpgradeLevels = tonumber(upgradeLevels),
+                source = "challengeModeCompletionInfo",
+            }
+        end
+    end
+
+    return nil
 end
 
 local function ApplyCompletionInfo(context)
@@ -187,21 +207,27 @@ local function ApplyCompletionInfo(context)
 
     context.mapID = completion.mapID or context.mapID
     context.keyLevel = completion.keyLevel or context.keyLevel
+    context.completionInfoSource = completion.source
+    context.completionInfoCaptured = completion.mapID ~= nil
+        or completion.keyLevel ~= nil
+        or completion.durationSeconds ~= nil
+        or completion.timed ~= nil
+    context.practiceRun = completion.practiceRun
 
     if completion.durationSeconds and completion.durationSeconds > 0 then
         context.durationSeconds = completion.durationSeconds
-        context.durationSource = "challengeModeCompletionInfo"
-        context.timingSource = "challengeModeCompletionInfo"
+        context.durationSource = completion.source
+        context.timingSource = completion.source
     end
 
     if completion.timed ~= nil then
         context.timed = completion.timed == true
-        context.timedSource = "challengeModeCompletionInfo"
+        context.timedSource = completion.source
     end
 
     if completion.keystoneUpgradeLevels then
         context.keystoneUpgradeLevels = math.max(0, math.floor(completion.keystoneUpgradeLevels))
-        context.keystoneUpgradeLevelsSource = "challengeModeCompletionInfo"
+        context.keystoneUpgradeLevelsSource = completion.source
     end
 
     return ApplyMapName(context)

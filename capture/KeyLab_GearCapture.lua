@@ -859,7 +859,9 @@ end
 function Capture.GetRunHistory()
     local encounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData
     local usedSharedList = false
-    local db = KeyLabDB and KeyLabDB.encounters or {}
+    local db = KeyLab.DB and KeyLab.DB.Encounters and KeyLab.DB.Encounters.GetAll
+        and KeyLab.DB.Encounters.GetAll()
+        or {}
     if encounterData and encounterData.GetEncounterList then
         db = encounterData.GetEncounterList({
             includeInterrupted = false,

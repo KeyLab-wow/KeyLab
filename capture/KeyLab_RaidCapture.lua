@@ -116,12 +116,15 @@ local function IsAllowedRaidInstance(context)
 end
 
 local function MakeNightID(context, timestamp)
+    local savedNights = KeyLab.DB and KeyLab.DB.Raids and KeyLab.DB.Raids.GetNights
+        and KeyLab.DB.Raids.GetNights()
+        or {}
     return string.format(
         "raid-night-%s-%s-%s-%s",
         date("%Y%m%d%H%M%S", timestamp),
         tostring(context.instanceID or 0),
         tostring(UnitName and UnitName("player") or "player"),
-        tostring(type(KeyLabDB) == "table" and type(KeyLabDB.raidNights) == "table" and (#KeyLabDB.raidNights + 1) or 1)
+        tostring(#savedNights + 1)
     )
 end
 

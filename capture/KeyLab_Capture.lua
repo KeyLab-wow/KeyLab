@@ -124,7 +124,7 @@ local function BuildEncounterRecord()
         return nil, contextReason
     end
 
-    local metrics, metricError, metricRanks = DamageMeter.GetSnapshot(context)
+    local metrics, metricError, metricRanks, metricAvailability = DamageMeter.GetSnapshot(context)
     if not HasPerformanceMetrics(metrics) then
         return nil, metricError or METRICS_PENDING_REASON
     end
@@ -191,6 +191,13 @@ local function BuildEncounterRecord()
             timedSource = context.timedSource,
             remainingSource = context.remainingSource,
             timeLimitSource = context.timeLimitSource,
+            completionInfoSource = context.completionInfoSource,
+            completionInfoCaptured = context.completionInfoCaptured,
+            practiceRun = context.practiceRun,
+            challengeStartedAt = context.challengeStartedAt or captureDB.startedAt,
+            challengeStartedAtText = context.challengeStartedAtText or captureDB.startedAtText,
+            challengeCompletedAt = context.challengeCompletedAt or captureDB.completedAt,
+            challengeCompletedAtText = context.challengeCompletedAtText or captureDB.completedAtText,
             keystoneUpgradeLevels = context.keystoneUpgradeLevels,
             keystoneUpgradeLevelsSource = context.keystoneUpgradeLevelsSource,
             deathCount = context.deathCount,
@@ -203,6 +210,7 @@ local function BuildEncounterRecord()
         stats = captureDB.statSnapshot or StatCapture.GetSnapshot(),
         gear = captureDB.gearSnapshot or (GearCapture and GearCapture.GetProfileSnapshot and GearCapture.GetProfileSnapshot()) or {},
         metrics = metrics,
+        metricAvailability = metricAvailability,
         metricRanks = metricRanks,
         combatSessions = combatSessions,
         capture = {
@@ -230,6 +238,10 @@ local function BuildEncounterRecord()
     if combatSessionError then
         encounter.captureNotes = encounter.captureNotes or {}
         encounter.captureNotes.combatSessions = combatSessionError
+    end
+    if captureDB.completedSeen == true and context.completionInfoCaptured ~= true then
+        encounter.captureNotes = encounter.captureNotes or {}
+        encounter.captureNotes.timing = "Blizzard completion timing was not returned; KeyLab did not estimate the dungeon timer from combat activity."
     end
     if deathAudit.officialMatchesPullSessions == false or deathAudit.officialMatchesAggregate == false then
         encounter.captureNotes = encounter.captureNotes or {}
@@ -269,12 +281,13 @@ function Capture.RepairLatestIncompleteEncounter()
     end
     if not candidate then return false, "No recent incomplete encounter found" end
 
-    local metrics, metricError, metricRanks = DamageMeter.GetSnapshot(candidate.challenge)
+    local metrics, metricError, metricRanks, metricAvailability = DamageMeter.GetSnapshot(candidate.challenge)
     if not HasPerformanceMetrics(metrics) then return false, metricError or METRICS_PENDING_REASON end
 
     candidate.metrics = type(candidate.metrics) == "table" and candidate.metrics or {}
     for key, value in pairs(metrics) do candidate.metrics[key] = value end
     candidate.metricRanks = type(metricRanks) == "table" and metricRanks or {}
+    candidate.metricAvailability = type(metricAvailability) == "table" and metricAvailability or {}
 
     if DamageMeter.GetCombatSessionsSnapshot then
         local combatSessions = DamageMeter.GetCombatSessionsSnapshot(candidate.challenge)
@@ -395,11 +408,8 @@ function Capture.Finalize(reason)
     if KeyLab.DB and KeyLab.DB.Encounters and KeyLab.DB.Encounters.AddEncounter then
         ok, result = KeyLab.DB.Encounters.AddEncounter(encounter)
     else
-        if type(KeyLabDB) ~= "table" then KeyLabDB = {} end
-        if type(KeyLabDB.encounters) ~= "table" then KeyLabDB.encounters = {} end
-        table.insert(KeyLabDB.encounters, encounter)
-        ok = true
-        result = encounter
+        ok = false
+        result = "Encounter database unavailable"
     end
 
     if not ok then
