@@ -138,7 +138,7 @@ local function GetAllEncounters()
             includeExcluded = true,
         })
     end
-    return KeyLabDB and KeyLabDB.encounters or {}
+    return {}
 end
 
 local function GetChallenge(encounter)
@@ -243,14 +243,10 @@ function Analysis.GetRunKey(encounter)
 end
 
 function Analysis.GetRecentRuns(days)
-    local now = time and time() or 0
-    local cutoff = now - ((tonumber(days) or 7) * 86400)
     local recent = {}
 
     for _, encounter in ipairs(GetAllEncounters() or {}) do
-        local timestamp = tonumber(encounter and encounter.timestamp) or 0
-        if timestamp >= cutoff
-            and EncounterMatchesCurrentCharacter(encounter)
+        if EncounterMatchesCurrentCharacter(encounter)
             and EncounterMatchesCurrentSpec(encounter)
             and IsDisplayableLastRun(encounter)
         then
@@ -261,6 +257,7 @@ function Analysis.GetRecentRuns(days)
     table.sort(recent, function(a, b)
         return (tonumber(a and a.timestamp) or 0) > (tonumber(b and b.timestamp) or 0)
     end)
+    while #recent > 10 do table.remove(recent) end
     return recent
 end
 
@@ -292,7 +289,7 @@ function Analysis.BuildState(selectedEncounter)
         keystoneUpgradeLevels = EncounterData.GetUpgradeLevels(encounter),
         dungeonName = challenge.dungeonName or encounter.dungeonName or "Unknown Dungeon",
         keyLevel = challenge.keyLevel or encounter.keyLevel or 0,
-        durationSeconds = EncounterData.GetDurationSeconds and EncounterData.GetDurationSeconds(encounter) or challenge.durationSeconds,
+        durationSeconds = EncounterData.GetTimingDurationSeconds and EncounterData.GetTimingDurationSeconds(encounter) or challenge.durationSeconds,
         timeLimitSeconds = EncounterData.GetTimeLimitSeconds and EncounterData.GetTimeLimitSeconds(encounter) or challenge.timeLimitSeconds,
         timeDeltaSeconds = EncounterData.GetTimeDelta(encounter),
         timed = EncounterData.GetTimed(encounter),

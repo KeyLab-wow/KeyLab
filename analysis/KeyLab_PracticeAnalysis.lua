@@ -193,6 +193,9 @@ function PracticeAnalysis.GetSessions()
     end
 
     table.sort(sessions, function(a, b)
+        local aProtected = a and a.status ~= nil and a.status ~= "" and a.status ~= "unmarked"
+        local bProtected = b and b.status ~= nil and b.status ~= "" and b.status ~= "unmarked"
+        if aProtected ~= bProtected then return aProtected end
         return (tonumber(a.timestamp) or 0) > (tonumber(b.timestamp) or 0)
     end)
 
@@ -256,6 +259,9 @@ end
 
 function PracticeAnalysis.SortSessionsByMetric(sessions, metricKey)
     table.sort(sessions, function(a, b)
+        local aProtected = a and a.status ~= nil and a.status ~= "" and a.status ~= "unmarked"
+        local bProtected = b and b.status ~= nil and b.status ~= "" and b.status ~= "unmarked"
+        if aProtected ~= bProtected then return aProtected end
         local av = PracticeAnalysis.GetMetricValue(a, metricKey)
         local bv = PracticeAnalysis.GetMetricValue(b, metricKey)
         if av ~= nil and bv ~= nil and av ~= bv then

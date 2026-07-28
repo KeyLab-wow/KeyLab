@@ -291,7 +291,7 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
         sourceLabel = "Tier Sources:"
     elseif not isMythTrack and (tierChecked or catalystItem) then
         guidanceSources = TierSources(specID, slotName, season)
-        sourceLabel = "Upgrade Sources:"
+        sourceLabel = "Target Source:"
     elseif not tierChecked and not craftedItem and not isMythTrack and target then
         guidanceSources = target.sourcesForDashboard or {}
         sourceLabel = #guidanceSources == 1 and "Target Source:" or "Target Sources:"
