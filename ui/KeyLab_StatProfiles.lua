@@ -349,168 +349,13 @@ end
 local STAT_KEYS = { "crit", "haste", "mastery", "versatility" }
 local STAT_TIE_ORDER = { crit = 1, haste = 2, mastery = 3, versatility = 4 }
 
-local function NormalizeKeyLabName(value)
-    value = tostring(value or "")
-    value = value:gsub("%s+", "")
-    value = value:gsub("'", "")
-    value = value:gsub("%-+", "-")
-    return string.lower(value)
-end
-
-local function GetCurrentCharacterIdentity()
-    local name, realm
-
-    if UnitFullName then
-        name, realm = UnitFullName("player")
-    end
-
-    if not name or name == "" then
-        name = UnitName and UnitName("player") or nil
-    end
-
-    if (not realm or realm == "") and GetRealmName then
-        realm = GetRealmName()
-    end
-
-    return name, realm
-end
-
-local function EncounterMatchesCurrentCharacter(encounter)
-    if EncounterData.EncounterMatchesCurrentCharacter then
-        return EncounterData.EncounterMatchesCurrentCharacter(encounter, { allowMissingIdentity = false })
-    end
-
-    if type(encounter) ~= "table" then
-        return false
-    end
-
-    local currentName, currentRealm = GetCurrentCharacterIdentity()
-    if not currentName or currentName == "" then
-        return true
-    end
-
-    local player = encounter.player or {}
-    local character = encounter.character or {}
-    local context = encounter.context or {}
-    local capture = encounter.capture or {}
-
-    local encounterName =
-        player.name
-        or player.characterName
-        or player.character
-        or player.playerName
-        or character.name
-        or character.characterName
-        or context.characterName
-        or context.playerName
-        or capture.characterName
-        or capture.playerName
-        or encounter.characterName
-        or encounter.playerName
-        or encounter.character
-        or encounter.name
-
-    local encounterRealm =
-        player.realm
-        or player.realmName
-        or player.server
-        or character.realm
-        or character.realmName
-        or context.realm
-        or context.realmName
-        or capture.realm
-        or capture.realmName
-        or encounter.realm
-        or encounter.realmName
-        or encounter.server
-
-    local encounterFull =
-        player.fullName
-        or player.characterFullName
-        or character.fullName
-        or character.characterFullName
-        or context.characterFullName
-        or context.fullName
-        or capture.characterFullName
-        or capture.fullName
-        or encounter.characterFullName
-        or encounter.fullName
-
-    local currentNameKey = NormalizeKeyLabName(currentName)
-    local currentRealmKey = NormalizeKeyLabName(currentRealm)
-    local currentFullKey = currentNameKey
-    if currentRealmKey ~= "" then
-        currentFullKey = currentFullKey .. "-" .. currentRealmKey
-    end
-
-    if encounterFull and encounterFull ~= "" then
-        local fullKey = NormalizeKeyLabName(encounterFull)
-        if fullKey == currentFullKey or fullKey == currentNameKey then
-            return true
-        end
-    end
-
-    -- Strict current-character mode:
-    -- if a run does not have character identity, do not show it in character-specific tabs.
-    if not encounterName or encounterName == "" then
-        return false
-    end
-
-    if NormalizeKeyLabName(encounterName) ~= currentNameKey then
-        return false
-    end
-
-    if encounterRealm and encounterRealm ~= "" and currentRealmKey ~= "" then
-        return NormalizeKeyLabName(encounterRealm) == currentRealmKey
-    end
-
-    return true
-end
-
-local function FilterCurrentCharacterEncounters(encounters)
-    local filtered = {}
-
-    for _, encounter in ipairs(encounters or {}) do
-        if EncounterMatchesCurrentCharacter(encounter) then
-            table.insert(filtered, encounter)
-        end
-    end
-
-    return filtered
-end
-
 local function GetEncounterList()
-    if EncounterData.GetEncounterList then
-        return EncounterData.GetEncounterList({
-            includeInterrupted = false,
-            includeExcluded = false,
-            allowMissingIdentity = false,
-        })
-    end
-
-    if KeyLab.DB and KeyLab.DB.Encounters and KeyLab.DB.Encounters.GetFiltered then
-        local list = KeyLab.DB.Encounters.GetFiltered({
-            includeInterrupted = false,
-            includeExcluded = false,
-        })
-        return FilterCurrentCharacterEncounters(list)
-    end
-
-    if KeyLabDB and type(KeyLabDB.encounters) == "table" then
-        local copy = {}
-        for _, encounter in ipairs(KeyLabDB.encounters) do
-            local flags = encounter.flags or {}
-            if flags.interrupted ~= true and flags.excludedFromComparisons ~= true and EncounterMatchesCurrentCharacter(encounter) then
-                table.insert(copy, encounter)
-            end
-        end
-        table.sort(copy, function(a, b)
-            return (SafeNumber(a.timestamp) or 0) > (SafeNumber(b.timestamp) or 0)
-        end)
-        return copy
-    end
-
-    return {}
+    if not EncounterData.GetEncounterList then return {} end
+    return EncounterData.GetEncounterList({
+        includeInterrupted = false,
+        includeExcluded = false,
+        allowMissingIdentity = false,
+    })
 end
 
 local function GetChallenge(encounter)
@@ -650,11 +495,11 @@ end
 
 local function GetMetricOptions()
     local list = {}
+    local keys = KeyLab.Mapping and KeyLab.Mapping.ProfileComparisonMetricKeys or { "dps", "hps" }
 
-    local order = KeyLab.Mapping and KeyLab.Mapping.MetricOrder or {}
-    for _, metricType in ipairs(order) do
-        local info = GetMetricInfoByType(metricType)
-        if info and info.store == true and info.keylabKey and info.keylabKey ~= "deaths" then
+    for _, metricKey in ipairs(keys) do
+        local info = GetMetricInfoByKey(metricKey)
+        if info and info.store == true and info.keylabKey then
             table.insert(list, {
                 text = info.label or info.keylabKey,
                 value = info.keylabKey,

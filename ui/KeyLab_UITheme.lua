@@ -127,16 +127,17 @@ Theme.tabHeader = {
     titleY = -18,
     titleSize = 16,
     titleWidth = 900,
-    titleHeight = 20,
-    descriptionY = -43,
-    descriptionWidth = 890,
-    descriptionHeight = 16,
-    summaryY = -66,
+    titleHeight = 24,
+    descriptionGap = 8,
+    descriptionY = -50,
+    descriptionWidth = 900,
+    descriptionHeight = 20,
+    summaryY = -72,
     summaryWidth = 890,
     summaryHeight = 14,
-    standardContentY = -74,
-    analysisControlsY = -86,
-    analysisContentY = -172,
+    standardContentY = -86,
+    analysisControlsY = -92,
+    analysisContentY = -178,
 }
 
 Theme.badge = {
@@ -301,19 +302,34 @@ function Theme.CreateCard(parent, x, y, width, height, title, accentColor, optio
     return card
 end
 
-function Theme.CreateSectionHeader(parent, title, subtitle, x, y, width)
-    local titleText = Theme.CreateText(parent, title, "GameFontNormalLarge", Theme.fonts.sectionSize, Theme.colors.gold)
-    titleText:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 18, y or -18)
-    titleText:SetSize(width or 900, 24)
+function Theme.CreateTabHeader(parent, title, subtitle, options)
+    options = options or {}
+    local header = Theme.tabHeader
+    local x = options.x or header.x
+    local y = options.y or header.titleY
+    local width = options.width or header.titleWidth
+
+    local titleText = Theme.CreateText(parent, title, "GameFontNormalLarge", header.titleSize, Theme.colors.gold)
+    titleText:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    titleText:SetSize(width, header.titleHeight)
 
     local subtitleText
     if subtitle and subtitle ~= "" then
         subtitleText = Theme.CreateText(parent, subtitle, "GameFontHighlightSmall", nil, Theme.colors.muted)
-        subtitleText:SetPoint("TOPLEFT", titleText, "BOTTOMLEFT", 0, -6)
-        subtitleText:SetSize(width or 900, 20)
+        subtitleText:SetPoint("TOPLEFT", titleText, "BOTTOMLEFT", 0, -(header.descriptionGap or 8))
+        subtitleText:SetSize(options.descriptionWidth or header.descriptionWidth, options.descriptionHeight or header.descriptionHeight)
     end
 
     return titleText, subtitleText
+end
+
+function Theme.CreateSectionHeader(parent, title, subtitle, x, y, width)
+    return Theme.CreateTabHeader(parent, title, subtitle, {
+        x = x,
+        y = y,
+        width = width,
+        descriptionWidth = width,
+    })
 end
 
 function Theme.CreateBadge(parent, text, width, height, borderColor, textColor)

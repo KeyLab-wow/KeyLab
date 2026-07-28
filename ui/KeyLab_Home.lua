@@ -67,224 +67,36 @@ local function MakePanel(parent, x, y, width, height, important)
     return panel
 end
 
-local function NormalizeKeyLabName(value)
-    value = tostring(value or "")
-    value = value:gsub("%s+", "")
-    value = value:gsub("'", "")
-    value = value:gsub("%-+", "-")
-    return string.lower(value)
-end
-
-local function GetCurrentCharacterIdentity()
-    local name, realm
-
-    if UnitFullName then
-        name, realm = UnitFullName("player")
-    end
-
-    if not name or name == "" then
-        name = UnitName and UnitName("player") or nil
-    end
-
-    if (not realm or realm == "") and GetRealmName then
-        realm = GetRealmName()
-    end
-
-    return name, realm
-end
-
-local function EncounterMatchesCurrentCharacter(encounter)
-    if EncounterData.EncounterMatchesCurrentCharacter then
-        return EncounterData.EncounterMatchesCurrentCharacter(encounter, { allowMissingIdentity = true })
-    end
-
-    if type(encounter) ~= "table" then
-        return false
-    end
-
-    local currentName, currentRealm = GetCurrentCharacterIdentity()
-    if not currentName or currentName == "" then
-        return true
-    end
-
-    local player = encounter.player or {}
-    local character = encounter.character or {}
-    local context = encounter.context or {}
-    local capture = encounter.capture or {}
-
-    local encounterName =
-        player.name
-        or player.characterName
-        or player.character
-        or player.playerName
-        or character.name
-        or character.characterName
-        or context.characterName
-        or context.playerName
-        or capture.characterName
-        or capture.playerName
-        or encounter.characterName
-        or encounter.playerName
-        or encounter.character
-        or encounter.name
-
-    local encounterRealm =
-        player.realm
-        or player.realmName
-        or player.server
-        or character.realm
-        or character.realmName
-        or context.realm
-        or context.realmName
-        or capture.realm
-        or capture.realmName
-        or encounter.realm
-        or encounter.realmName
-        or encounter.server
-
-    local encounterFull =
-        player.fullName
-        or player.characterFullName
-        or character.fullName
-        or character.characterFullName
-        or context.characterFullName
-        or context.fullName
-        or capture.characterFullName
-        or capture.fullName
-        or encounter.characterFullName
-        or encounter.fullName
-
-    local currentNameKey = NormalizeKeyLabName(currentName)
-    local currentRealmKey = NormalizeKeyLabName(currentRealm)
-    local currentFullKey = currentNameKey
-    if currentRealmKey ~= "" then
-        currentFullKey = currentFullKey .. "-" .. currentRealmKey
-    end
-
-    if encounterFull and encounterFull ~= "" then
-        local fullKey = NormalizeKeyLabName(encounterFull)
-        if fullKey == currentFullKey or fullKey == currentNameKey then
-            return true
-        end
-    end
-
-    if not encounterName or encounterName == "" then
-        return true
-    end
-
-    if NormalizeKeyLabName(encounterName) ~= currentNameKey then
-        return false
-    end
-
-    if encounterRealm and encounterRealm ~= "" and currentRealmKey ~= "" then
-        return NormalizeKeyLabName(encounterRealm) == currentRealmKey
-    end
-
-    return true
-end
-
-local function IsCompletedEncounter(encounter)
-    if EncounterData.IsCompletedEncounter then
-        return EncounterData.IsCompletedEncounter(encounter)
-    end
-
-    if type(encounter) ~= "table" then return false end
-
-    local flags = encounter.flags
-    if type(flags) == "table" then
-        if flags.interrupted == true then return false end
-        if flags.excludedFromComparisons == true then return false end
-    end
-
-    if encounter.status == "capture_failed" or encounter.excludeFromComparisons == true then
-        return false
-    end
-
-    if encounter.completed == true or encounter.isComplete == true then
-        return true
-    end
-
-    if encounter.result == "Completed" or encounter.result == "Complete" then
-        return true
-    end
-
-    if encounter.result == "Timed" or encounter.result == "Untimed" or encounter.result == "Depleted" then
-        return true
-    end
-
-    if type(encounter.metrics) == "table" and next(encounter.metrics) ~= nil then
-        return true
-    end
-
-    return false
-end
-
 local function CountEncounters()
-    if EncounterData.GetEncounterList then
-        return #EncounterData.GetEncounterList({
-            includeInterrupted = false,
-            includeExcluded = false,
-            completedOnly = true,
-            allowMissingIdentity = true,
-        })
-    end
-
-    local list = nil
-
-    if KeyLab.DB and KeyLab.DB.Encounters and KeyLab.DB.Encounters.GetFiltered then
-        list = KeyLab.DB.Encounters.GetFiltered({
-            includeInterrupted = false,
-            includeExcluded = true,
-        })
-    elseif type(KeyLabDB) == "table" then
-        list = KeyLabDB.encounters or {}
-    else
-        return 0
-    end
-
-    local count = 0
-    for _, encounter in pairs(list or {}) do
-        if EncounterMatchesCurrentCharacter(encounter) and IsCompletedEncounter(encounter) then
-            count = count + 1
-        end
-    end
-
-    return count
+    if not EncounterData.GetEncounterList then return 0 end
+    return #EncounterData.GetEncounterList({
+        includeInterrupted = false,
+        includeExcluded = false,
+        completedOnly = true,
+        allowMissingIdentity = true,
+    })
 end
 
 local function CountRaidBossPulls()
-    if KeyLab.RaidAnalysis and type(KeyLab.RaidAnalysis.GetEncounters) == "function" then
-        local encounters = KeyLab.RaidAnalysis.GetEncounters()
-        return type(encounters) == "table" and #encounters or 0
+    if not (KeyLab.RaidAnalysis and type(KeyLab.RaidAnalysis.GetEncounters) == "function") then return 0 end
+    local encounters = KeyLab.RaidAnalysis.GetEncounters()
+    return type(encounters) == "table" and #encounters or 0
+end
+
+local function GetActivityCounts()
+    local counters = KeyLab.DB and KeyLab.DB.ActivityCounters
+    if counters and counters.GetCurrentCounts then
+        return counters.GetCurrentCounts()
     end
-
-    local encounters = KeyLab.DB
-        and KeyLab.DB.Raids
-        and KeyLab.DB.Raids.GetEncounters
-        and KeyLab.DB.Raids.GetEncounters()
-        or {}
-    local count = 0
-
-    for _, encounter in ipairs(encounters) do
-        if EncounterMatchesCurrentCharacter(encounter)
-            and encounter.contentType == "raid"
-            and type(encounter.raid) == "table"
-            and encounter.raid.encounterID
-        then
-            count = count + 1
-        end
-    end
-
-    return count
+    return {
+        mplusRuns = CountEncounters(),
+        raidBossPulls = CountRaidBossPulls(),
+    }
 end
 
 local function GetTrackingSinceText()
     if KeyLab.DB and KeyLab.DB.GetTrackingSince then
         return KeyLab.DB.GetTrackingSince()
-    end
-
-    if KeyLabDB and KeyLabDB.trackingSince then
-        return KeyLabDB.trackingSince
     end
 
     return "Not started yet"
@@ -329,11 +141,11 @@ function HOME:Create(parent)
     local subtitle = MakeText(
         hero,
         "Track your Mythic+ runs and raid pulls, compare your setups, test rotations, and plan your gear—all in one personal journal.",
-        12,
+        11,
         COLORS.text,
         "LEFT"
     )
-    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
+    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     subtitle:SetSize(540, 38)
 
     local rhythm = MakeText(hero, "Try a build.\nAdjust your stats.\nRun content.\nReview the results.", 14, COLORS.title, "LEFT")
@@ -413,15 +225,16 @@ function HOME:Create(parent)
     local releaseNoteHeight = 132
     local releaseNote = MakePanel(frame, CFG.x, y, width, releaseNoteHeight, false)
 
-    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.86", 14, COLORS.title, "LEFT")
+    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.101", 14, COLORS.title, "LEFT")
     releaseTitle:SetPoint("TOPLEFT", releaseNote, "TOPLEFT", 14, -12)
     releaseTitle:SetSize(280, 18)
 
     local releaseBody = MakeText(
         releaseNote,
-        "Released July 26, 2026\n\n" ..
-        "- Added seven-day history selectors to M+ Last Run and Last Raid.\n" ..
-        "- Review older current-spec results, then return to the latest with one click.",
+        "Released July 28, 2026\n\n" ..
+        "- Added the new dark blue and gold main-window background.\n" ..
+        "- Added the KeyLab key icon beside the live header title.\n" ..
+        "- Kept every panel, card, button, and tab fully interactive.",
         11,
         COLORS.muted,
         "LEFT"
@@ -477,9 +290,10 @@ function HOME:Create(parent)
     frame.latestSaved = latestSaved
 
     function frame:Refresh()
+        local activityCounts = GetActivityCounts()
         self.summarySince:SetText(GetTrackingSinceText())
-        self.summaryRuns:SetText(tostring(CountEncounters()))
-        self.summaryRaidPulls:SetText(tostring(CountRaidBossPulls()))
+        self.summaryRuns:SetText(tostring(activityCounts.mplusRuns or 0))
+        self.summaryRaidPulls:SetText(tostring(activityCounts.raidBossPulls or 0))
 
         local state = GetLatestRunState()
         if state and state.hasRun then

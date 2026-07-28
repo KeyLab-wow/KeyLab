@@ -20,20 +20,10 @@ local DEFAULT_RADIUS = 106
 local DRAG_THRESHOLD = 5
 
 local function GetSettings()
-    if KeyLab.DB and KeyLab.DB.GetSettings then
-        local settings = KeyLab.DB.GetSettings()
-        if type(settings.minimapIcon) ~= "table" then
-            settings.minimapIcon = {}
-        end
-        return settings.minimapIcon
+    if KeyLab.DB and KeyLab.DB.GetSettingTable then
+        return KeyLab.DB.GetSettingTable("minimapIcon")
     end
-
-    KeyLabDB = KeyLabDB or {}
-    KeyLabDB.settings = KeyLabDB.settings or {}
-    if type(KeyLabDB.settings.minimapIcon) ~= "table" then
-        KeyLabDB.settings.minimapIcon = {}
-    end
-    return KeyLabDB.settings.minimapIcon
+    return {}
 end
 
 local function Atan2(y, x)

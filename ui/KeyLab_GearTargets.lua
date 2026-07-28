@@ -1364,12 +1364,12 @@ function GearTargets:Create(parent)
     self.sortKey = "source"
     self.sortAscending = true
 
-    local title = MakeText(frame, "Gear Targets", "GameFontNormalLarge", HEADER.titleSize, CFG.colors.gold)
-    title:SetPoint("TOPLEFT", frame, "TOPLEFT", HEADER.x, HEADER.titleY)
-    title:SetSize(400, 28)
-    local subtitle = MakeText(frame, "Browse dungeon and raid gear, save your Targets and Alternatives, or match items to your stat goals.", "GameFontHighlightSmall", nil, CFG.colors.muted)
-    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
-    subtitle:SetSize(540, 20)
+    Theme.CreateTabHeader(
+        frame,
+        "Gear Targets",
+        "Browse dungeon and raid gear, save your Targets and Alternatives, or match items to your stat goals.",
+        { descriptionWidth = 540 }
+    )
 
     self.statusDropdown = MakeDropdown(frame, 150, 580, -12, "Show", function(_, level)
         for _, option in ipairs(STATUS_FILTER_OPTIONS) do
@@ -1394,7 +1394,7 @@ function GearTargets:Create(parent)
     end)
 
     local controls = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    controls:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -74)
+    controls:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, HEADER.standardContentY)
     controls:SetPoint("RIGHT", frame, "RIGHT", -14, 0)
     controls:SetHeight(FILTER_CARD_HEIGHT)
     SetBackdrop(controls, CFG.colors.panel, CFG.colors.border)

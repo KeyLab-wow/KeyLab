@@ -11,8 +11,9 @@ KeyLab.Tabs.RaidEncounters = RaidEncounters
 
 local RaidAnalysis = KeyLab.RaidAnalysis or {}
 local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
-local SPACING = KeyLab.UI and KeyLab.UI.Theme and KeyLab.UI.Theme.spacing or { compactCard = 8, section = 18 }
-local HEADER = KeyLab.UI and KeyLab.UI.Theme and KeyLab.UI.Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16, analysisControlsY = -86, analysisContentY = -172 }
+local Theme = KeyLab.UI and KeyLab.UI.Theme or {}
+local SPACING = Theme.spacing or { compactCard = 8, section = 18 }
+local HEADER = Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16, analysisControlsY = -86, analysisContentY = -172 }
 
 local CFG = {
     pageSize = 5,
@@ -39,10 +40,12 @@ local CFG = {
     },
     controls = {
         x = 12, y = HEADER.analysisControlsY, width = 928, height = 74,
-        bossX = 18, bossWidth = 210,
-        difficultyX = 270, difficultyWidth = 130,
-        currentSpecX = 460, currentSpecWidth = 150,
-        dateX = 670, dateWidth = 150,
+        bossX = 18, bossWidth = 150,
+        difficultyX = 188, difficultyWidth = 100,
+        currentSpecX = 308, currentSpecWidth = 110,
+        dateX = 430, dateWidth = 105,
+        metricX = 552, metricWidth = 145,
+        sortX = 742, sortWidth = 130,
         labelY = -12,
     },
     list = { x = 12, y = HEADER.analysisContentY, width = 928 },
@@ -205,6 +208,23 @@ local function GetMetricValue(encounter, metricKey)
     return SafeNumber(encounter and encounter.metrics and encounter.metrics[metricKey])
 end
 
+local function MetricOptions()
+    local options = {}
+    for _, metricType in ipairs(KeyLab.Mapping and KeyLab.Mapping.MetricOrder or {}) do
+        local info = EncounterData.GetMetricInfoByType and EncounterData.GetMetricInfoByType(metricType)
+            or KeyLab.Mapping and KeyLab.Mapping.Metrics and KeyLab.Mapping.Metrics[metricType]
+        if info and info.store == true and info.keylabKey then
+            table.insert(options, { value = info.keylabKey, text = info.label or info.keylabKey })
+        end
+    end
+    return options
+end
+
+local function MetricText(value)
+    for _, option in ipairs(MetricOptions()) do if option.value == value then return option.text end end
+    return "DPS"
+end
+
 local function Options(encounters, selectedBoss, selectedDifficulty)
     local bosses = { { value = nil, text = "All Bosses" } }
     local difficulties = { { value = nil, text = "All Difficulties" } }
@@ -275,7 +295,17 @@ local function FilterEncounters(encounters)
         if include then include = MatchesDate(encounter, RaidEncounters.selectedDateFilter) end
         if include then table.insert(filtered, encounter) end
     end
-    table.sort(filtered, function(a, b) return (SafeNumber(a.timestamp) or 0) > (SafeNumber(b.timestamp) or 0) end)
+    table.sort(filtered, function(a, b)
+        local av = SafeNumber(GetMetricValue(a, RaidEncounters.selectedMetricKey))
+        local bv = SafeNumber(GetMetricValue(b, RaidEncounters.selectedMetricKey))
+        if av == nil or bv == nil then
+            if av == nil and bv == nil then return (SafeNumber(a.timestamp) or 0) > (SafeNumber(b.timestamp) or 0) end
+            return av ~= nil
+        end
+        if av == bv then return (SafeNumber(a.timestamp) or 0) > (SafeNumber(b.timestamp) or 0) end
+        if RaidEncounters.selectedSortDirection == "low" then return av < bv end
+        return av > bv
+    end)
     return filtered
 end
 
@@ -462,6 +492,10 @@ function RaidEncounters:RefreshOptions()
     SetDropdownText(self.difficultyDropdown, OptionText(self.difficultyOptions, self.selectedDifficultyID, "All Difficulties"))
     self.specValue:SetText(self.currentSpecName or "No Specialization")
     SetDropdownText(self.dateDropdown, DateText(self.selectedDateFilter))
+    self.selectedMetricKey = self.selectedMetricKey or "dps"
+    self.selectedSortDirection = self.selectedSortDirection or "high"
+    SetDropdownText(self.metricDropdown, MetricText(self.selectedMetricKey))
+    SetDropdownText(self.sortDropdown, self.selectedSortDirection == "low" and "Low to High" or "High to Low")
 end
 
 function RaidEncounters:Refresh()
@@ -511,12 +545,13 @@ function RaidEncounters:Create(parent)
     StylePanel(frame, CFG.colors.bg, { 0, 0, 0, 0 })
     self.frame, self.cards, self.currentPage = frame, {}, 1
 
-    local title = AddFont(frame, "Raid Encounters", "GameFontNormalLarge", HEADER.x, HEADER.titleY, 500)
-    title:SetFont(STANDARD_TEXT_FONT, HEADER.titleSize, "")
-    ApplyColor(title, CFG.colors.gold)
-    local subtitle = AddFont(frame, "Review your saved raid boss pulls and select one to see its details.", "GameFontHighlightSmall", 18, -47, 900)
-    ApplyColor(subtitle, CFG.colors.muted)
-    self.summaryText = AddFont(frame, "Loading raid pulls...", "GameFontDisableSmall", 18, -70, 900)
+    Theme.CreateTabHeader(
+        frame,
+        "Raid Encounters",
+        "Review your saved raid boss pulls and select one to see its details."
+    )
+    self.summaryText = AddFont(frame, "Loading raid pulls...", "GameFontDisableSmall", HEADER.x, HEADER.summaryY, HEADER.summaryWidth)
+    self.summaryText:SetHeight(HEADER.summaryHeight)
     ApplyColor(self.summaryText, CFG.colors.soft)
 
     local controls = CreateFrame("Frame", nil, frame, "BackdropTemplate")
@@ -561,6 +596,33 @@ function RaidEncounters:Create(parent)
             info.text, info.checked = option.text, value == RaidEncounters.selectedDateFilter
             info.func = function()
                 RaidEncounters.selectedDateFilter, RaidEncounters.currentPage, RaidEncounters.selectedEncounter = value, 1, nil
+                RaidEncounters:Refresh()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+    self.metricDropdown = MakeDropdown(controls, CFG.controls.metricWidth, CFG.controls.metricX, CFG.controls.labelY, "Performance Metric", function(_, level)
+        for _, option in ipairs(MetricOptions()) do
+            local value = option.value
+            local info = UIDropDownMenu_CreateInfo()
+            info.text, info.checked = option.text, value == RaidEncounters.selectedMetricKey
+            info.func = function()
+                RaidEncounters.selectedMetricKey, RaidEncounters.currentPage, RaidEncounters.selectedEncounter = value, 1, nil
+                RaidEncounters:Refresh()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+    self.sortDropdown = MakeDropdown(controls, CFG.controls.sortWidth, CFG.controls.sortX, CFG.controls.labelY, "Sort", function(_, level)
+        for _, option in ipairs({
+            { value = "high", text = "High to Low" },
+            { value = "low", text = "Low to High" },
+        }) do
+            local value = option.value
+            local info = UIDropDownMenu_CreateInfo()
+            info.text, info.checked = option.text, value == RaidEncounters.selectedSortDirection
+            info.func = function()
+                RaidEncounters.selectedSortDirection, RaidEncounters.currentPage, RaidEncounters.selectedEncounter = value, 1, nil
                 RaidEncounters:Refresh()
             end
             UIDropDownMenu_AddButton(info, level)

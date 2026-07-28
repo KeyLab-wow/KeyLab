@@ -180,13 +180,15 @@ local function MetricOptions()
 end
 
 local function GetSelectedMetric()
-    KeyLabDB = type(KeyLabDB) == "table" and KeyLabDB or {}
-    KeyLabDB.settings = type(KeyLabDB.settings) == "table" and KeyLabDB.settings or {}
-    local selected = KeyLabDB.settings.raidSelectedMetric or "dps"
+    local selected = KeyLab.DB and KeyLab.DB.GetSetting
+        and KeyLab.DB.GetSetting("raidSelectedMetric", "dps")
+        or "dps"
     for _, metric in ipairs(MetricOptions()) do
         if metric.keylabKey == selected then return selected end
     end
-    KeyLabDB.settings.raidSelectedMetric = "dps"
+    if KeyLab.DB and KeyLab.DB.SetSetting then
+        KeyLab.DB.SetSetting("raidSelectedMetric", "dps")
+    end
     return "dps"
 end
 
@@ -791,18 +793,18 @@ function RaidSummary:Create(parent)
     Style(frame, Color("bg"), { 0, 0, 0, 0 })
     self.frame = frame
 
-    local title = Text(frame, "Last Raid", "GameFontNormalLarge", HEADER.titleSize, Color("gold"))
-    title:SetPoint("TOPLEFT", frame, "TOPLEFT", HEADER.x, HEADER.titleY)
-    local subtitle = Text(frame, "Review your latest raid session and see how each boss pull went.", "GameFontHighlightSmall", nil, Color("muted"))
-    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -7)
-    subtitle:SetSize(850, 20)
+    local title, subtitle = Theme.CreateTabHeader(
+        frame,
+        "Last Raid",
+        "Review your latest raid session and see how each boss pull went."
+    )
 
-    local historyLabel = Text(frame, "View boss pulls from the past 7 days", "GameFontDisableSmall", nil, Color("muted"))
-    historyLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -65)
+    local historyLabel = Text(frame, "View one of your latest saved raid sessions", "GameFontDisableSmall", nil, Color("muted"))
+    historyLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -83)
     historyLabel:SetSize(280, 18)
 
     self.historyDropdown = CreateFrame("Frame", "KeyLabLastRaidHistoryDropdown", frame, "UIDropDownMenuTemplate")
-    self.historyDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -80)
+    self.historyDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -98)
     UIDropDownMenu_SetWidth(self.historyDropdown, 420)
     UIDropDownMenu_Initialize(self.historyDropdown, function(_, level)
         if level ~= 1 then return end
@@ -838,7 +840,7 @@ function RaidSummary:Create(parent)
     end)
 
     self.returnLatestButton = CreateActionButton(frame, "Return to Latest", 138, 26)
-    self.returnLatestButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 458, -84)
+    self.returnLatestButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 458, -102)
     self.returnLatestButton:SetScript("OnClick", function()
         RaidSummary.selectedNightID = nil
         RaidSummary.renderFingerprint = nil
@@ -847,11 +849,11 @@ function RaidSummary:Create(parent)
     self.returnLatestButton:Hide()
 
     self.context = Text(frame, "", "GameFontDisableSmall", nil, Color("muted"))
-    self.context:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -126)
+    self.context:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -144)
     self.context:SetSize(650, 18)
 
     self.scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    self.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -150)
+    self.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -168)
     self.scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 18)
     self.content = CreateFrame("Frame", nil, self.scroll)
     self.content:SetSize(888, 650)

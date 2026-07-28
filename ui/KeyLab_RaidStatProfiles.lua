@@ -252,9 +252,9 @@ end
 
 local function MetricOptions()
     local options = {}
-    for _, metricType in ipairs(KeyLab.Mapping and KeyLab.Mapping.MetricOrder or {}) do
-        local info = EncounterData.GetMetricInfoByType and EncounterData.GetMetricInfoByType(metricType)
-            or KeyLab.Mapping and KeyLab.Mapping.Metrics and KeyLab.Mapping.Metrics[metricType]
+    local keys = KeyLab.Mapping and KeyLab.Mapping.ProfileComparisonMetricKeys or { "dps", "hps" }
+    for _, metricKey in ipairs(keys) do
+        local info = MetricInfo(metricKey)
         if info and info.store == true and info.keylabKey then table.insert(options, { value = info.keylabKey, text = info.label or info.keylabKey }) end
     end
     return options
@@ -556,12 +556,13 @@ function RaidStatProfiles:RefreshOptions()
         self.bossOptions, self.difficultyOptions = BuildOptions(self.currentSpecEncounters, self.selectedEncounterID, nil)
     end
     self.metricOptions = MetricOptions()
-    KeyLabDB = type(KeyLabDB) == "table" and KeyLabDB or {}
-    KeyLabDB.settings = type(KeyLabDB.settings) == "table" and KeyLabDB.settings or {}
-    local savedMetric = KeyLabDB.settings.raidStatMetric
+    local savedMetric = KeyLab.DB and KeyLab.DB.GetSetting
+        and KeyLab.DB.GetSetting("raidStatMetric")
     if HasOption(self.metricOptions, savedMetric) then self.selectedMetricKey = savedMetric end
     if not HasOption(self.metricOptions, self.selectedMetricKey) then self.selectedMetricKey = HasOption(self.metricOptions, "dps") and "dps" or (self.metricOptions[1] and self.metricOptions[1].value) end
-    KeyLabDB.settings.raidStatMetric = self.selectedMetricKey
+    if KeyLab.DB and KeyLab.DB.SetSetting then
+        KeyLab.DB.SetSetting("raidStatMetric", self.selectedMetricKey)
+    end
     SetDropdownText(self.bossDropdown, OptionText(self.bossOptions, self.selectedEncounterID, "All Bosses"))
     SetDropdownText(self.difficultyDropdown, OptionText(self.difficultyOptions, self.selectedDifficultyID, "All Difficulties"))
     self.specValue:SetText(self.currentSpecName or "No Specialization")
@@ -673,7 +674,7 @@ function RaidStatProfiles:Create(parent)
             local info = UIDropDownMenu_CreateInfo(); info.text, info.checked = option.text, value == RaidStatProfiles.selectedMetricKey
             info.func = function()
                 RaidStatProfiles.selectedMetricKey = value
-                KeyLabDB.settings.raidStatMetric = value
+                if KeyLab.DB and KeyLab.DB.SetSetting then KeyLab.DB.SetSetting("raidStatMetric", value) end
                 RaidStatProfiles.selectedProfile, RaidStatProfiles.selectedIndex = nil, nil
                 RaidStatProfiles:Refresh()
             end

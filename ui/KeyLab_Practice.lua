@@ -39,13 +39,18 @@ local TABLE_COLUMNS = {
     status = { x = 722, width = 108, label = "Status" },
 }
 
-local PAGE_SIZE = 9
+local PAGE_SIZE = 6
+local TABLE_ROW_HEIGHT = 27
+local TABLE_HEIGHT = 137 + (PAGE_SIZE * TABLE_ROW_HEIGHT)
+local PAGER_TEXT_Y = -(109 + (PAGE_SIZE * TABLE_ROW_HEIGHT))
+local PAGER_BUTTON_Y = -(101 + (PAGE_SIZE * TABLE_ROW_HEIGHT))
+local PANEL_X = 12
 
 local NEW_SESSION_HEIGHT = 86
-local LAYOUT = { newSessionY = -66 }
+local LAYOUT = { newSessionY = -78 }
 LAYOUT.filtersY = LAYOUT.newSessionY - NEW_SESSION_HEIGHT - SPACING.card
 LAYOUT.tableY = LAYOUT.filtersY - 78 - SPACING.card
-LAYOUT.detailsY = LAYOUT.tableY - 380 - SPACING.card
+LAYOUT.detailsY = LAYOUT.tableY - TABLE_HEIGHT - SPACING.card
 
 local METRIC_COLORS = {
     damageDone = COLORS.orange,
@@ -849,7 +854,7 @@ function Practice:RefreshDropdowns(baseSessions)
 end
 
 function Practice:BuildNewSession(parent)
-    local panel = MakePanel(parent, 0, LAYOUT.newSessionY, 908, NEW_SESSION_HEIGHT, "New Session")
+    local panel = MakePanel(parent, PANEL_X, LAYOUT.newSessionY, 908, NEW_SESSION_HEIGHT, "New Session")
     local active = Capture().GetActiveSession and Capture().GetActiveSession()
     local actionX = 756
 
@@ -927,7 +932,7 @@ function Practice:BuildNewSession(parent)
 end
 
 function Practice:BuildFilters(parent, baseSessions)
-    local panel = MakePanel(parent, 0, LAYOUT.filtersY, 908, 78, "Filters")
+    local panel = MakePanel(parent, PANEL_X, LAYOUT.filtersY, 908, 78, "Filters")
 
     AddLine(panel, "Current Spec", 18, -34, 140, COLORS.muted, "GameFontDisableSmall")
     self.currentSpecValue = AddLine(panel, CurrentSpecName(), 18, -58, 140, COLORS.gold, "GameFontHighlightSmall")
@@ -1004,7 +1009,7 @@ function Practice:BuildFilters(parent, baseSessions)
 end
 
 function Practice:BuildSessionTable(parent, sessions, baseCount)
-    local panel = MakePanel(parent, 0, LAYOUT.tableY, 908, 380, "Saved Practice Sessions")
+    local panel = MakePanel(parent, PANEL_X, LAYOUT.tableY, 908, TABLE_HEIGHT, "Saved Practice Sessions")
     local totalPages = math.max(1, math.ceil(#sessions / PAGE_SIZE))
     self.currentPage = Clamp(self.currentPage or 1, 1, totalPages)
     local startIndex = ((self.currentPage - 1) * PAGE_SIZE) + 1
@@ -1040,7 +1045,7 @@ function Practice:BuildSessionTable(parent, sessions, baseCount)
     for index = startIndex, endIndex do
         local session = sessions[index]
         local rowNumber = index - startIndex + 1
-        local y = -84 - ((rowNumber - 1) * 27)
+        local y = -84 - ((rowNumber - 1) * TABLE_ROW_HEIGHT)
         local metricValue = MetricValue(session, self.selectedMetricKey)
         local metricColor = METRIC_COLORS[self.selectedMetricKey] or COLORS.blue
         if metricValue and maxMetric and metricValue == maxMetric then
@@ -1079,11 +1084,11 @@ function Practice:BuildSessionTable(parent, sessions, baseCount)
         end)
     end
 
-    local pageText = AddLine(panel, string.format("Page %d / %d", self.currentPage, totalPages), 14, -352, 160, COLORS.muted, "GameFontDisableSmall")
+    local pageText = AddLine(panel, string.format("Page %d / %d", self.currentPage, totalPages), 14, PAGER_TEXT_Y, 160, COLORS.muted, "GameFontDisableSmall")
     pageText:SetJustifyH("LEFT")
 
     local back = MakeButton(panel, "Back", 82, 24)
-    back:SetPoint("TOPLEFT", panel, "TOPLEFT", 686, -344)
+    back:SetPoint("TOPLEFT", panel, "TOPLEFT", 686, PAGER_BUTTON_Y)
     back:SetScript("OnClick", function()
         Practice.currentPage = math.max(1, (Practice.currentPage or 1) - 1)
         Practice.selectedSessionID = nil
@@ -1092,7 +1097,7 @@ function Practice:BuildSessionTable(parent, sessions, baseCount)
     if self.currentPage <= 1 then back:Disable() end
 
     local nextButton = MakeButton(panel, "Next", 82, 24)
-    nextButton:SetPoint("TOPLEFT", panel, "TOPLEFT", 782, -344)
+    nextButton:SetPoint("TOPLEFT", panel, "TOPLEFT", 782, PAGER_BUTTON_Y)
     nextButton:SetScript("OnClick", function()
         Practice.currentPage = math.min(totalPages, (Practice.currentPage or 1) + 1)
         Practice.selectedSessionID = nil
@@ -1104,7 +1109,7 @@ function Practice:BuildSessionTable(parent, sessions, baseCount)
 end
 
 function Practice:BuildDetails(parent, session)
-    local panel = MakePanel(parent, 0, LAYOUT.detailsY, 908, 192, "Session Details")
+    local panel = MakePanel(parent, PANEL_X, LAYOUT.detailsY, 908, 192, "Session Details")
     if not session then
         AddLine(panel, "Select a saved Practice Session to see its setup and results.", 14, -44, 830, COLORS.muted, "GameFontNormal")
         return panel
@@ -1178,13 +1183,12 @@ function Practice:Refresh()
     self.selectedStartDuration = self.selectedStartDuration or 60
     self.selectedStatusFilter = self.selectedStatusFilter or "all"
 
-    local title = MakeText(self.content, "Practice", "GameFontNormalLarge", HEADER.titleSize, COLORS.gold)
-    title:SetPoint("TOPLEFT", self.content, "TOPLEFT", HEADER.x, HEADER.titleY)
-    title:SetSize(880, 24)
-
-    local subtitle = MakeText(self.content, "Test your setup at a training dummy and compare saved results. Choose a Macro Sequence version to track the rotation used.", "GameFontHighlightSmall", nil, COLORS.muted)
-    subtitle:SetPoint("TOPLEFT", self.content, "TOPLEFT", 18, -44)
-    subtitle:SetSize(860, 16)
+    Theme.CreateTabHeader(
+        self.content,
+        "Practice",
+        "Test your setup at a training dummy and compare saved results. Choose a Macro Sequence version to track the rotation used.",
+        { descriptionWidth = 860 }
+    )
 
     local baseSessions = GetSessions()
     self.talentBuildLabels = BuildTalentLabels(baseSessions)

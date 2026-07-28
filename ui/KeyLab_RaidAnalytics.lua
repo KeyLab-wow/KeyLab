@@ -696,12 +696,13 @@ local function NewTab(key, title, subtitle, metricSetting, buildContent, metricO
             if not HasOption(self.specOptions, self.selectedSpec) then self.selectedSpec = nil end
         end
         self.metricOptions = self.metricOptionsFunc and self.metricOptionsFunc() or Analysis.GetMetricOptions()
-        KeyLabDB = type(KeyLabDB) == "table" and KeyLabDB or {}
-        KeyLabDB.settings = type(KeyLabDB.settings) == "table" and KeyLabDB.settings or {}
-        local savedMetric = KeyLabDB.settings[self.metricSetting]
+        local savedMetric = KeyLab.DB and KeyLab.DB.GetSetting
+            and KeyLab.DB.GetSetting(self.metricSetting)
         if HasOption(self.metricOptions, savedMetric) then self.selectedMetricKey = savedMetric end
         if not HasOption(self.metricOptions, self.selectedMetricKey) then self.selectedMetricKey = self.metricOptions[1] and self.metricOptions[1].value or "dps" end
-        KeyLabDB.settings[self.metricSetting] = self.selectedMetricKey
+        if KeyLab.DB and KeyLab.DB.SetSetting then
+            KeyLab.DB.SetSetting(self.metricSetting, self.selectedMetricKey)
+        end
 
         self.bossDropdown:SetDisplay(self.selectedEncounterID, "No Bosses Yet")
         self.difficultyDropdown:SetDisplay(self.selectedDifficultyID, "All Difficulties")
@@ -746,7 +747,10 @@ local function NewTab(key, title, subtitle, metricSetting, buildContent, metricO
         local metricX = self.lockCurrentSpec and 442 or 632
         local metricFilterLabel = self.key == "RaidTrends" and "Performance Metric" or "Metric"
         self.metricDropdown = Dropdown(controls, metricFilterLabel, metricX, 170, function() return tab.metricOptions or {} end, function() return tab.selectedMetricKey end, function(value)
-            tab.selectedMetricKey = value; KeyLabDB.settings[tab.metricSetting] = value; tab.selectedKey = nil; tab:Refresh()
+            tab.selectedMetricKey = value
+            if KeyLab.DB and KeyLab.DB.SetSetting then KeyLab.DB.SetSetting(tab.metricSetting, value) end
+            tab.selectedKey = nil
+            tab:Refresh()
         end)
 
         local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")

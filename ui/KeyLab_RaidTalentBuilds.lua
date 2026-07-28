@@ -255,9 +255,9 @@ end
 
 local function MetricOptions()
     local options = {}
-    for _, metricType in ipairs(KeyLab.Mapping and KeyLab.Mapping.MetricOrder or {}) do
-        local info = EncounterData.GetMetricInfoByType and EncounterData.GetMetricInfoByType(metricType)
-            or KeyLab.Mapping and KeyLab.Mapping.Metrics and KeyLab.Mapping.Metrics[metricType]
+    local keys = KeyLab.Mapping and KeyLab.Mapping.ProfileComparisonMetricKeys or { "dps", "hps" }
+    for _, metricKey in ipairs(keys) do
+        local info = MetricInfo(metricKey)
         if info and info.store == true and info.keylabKey then
             table.insert(options, { value = info.keylabKey, text = info.label or info.keylabKey })
         end
@@ -552,12 +552,13 @@ function RaidTalentBuilds:RefreshOptions()
     end
 
     self.metricOptions = MetricOptions()
-    KeyLabDB = type(KeyLabDB) == "table" and KeyLabDB or {}
-    KeyLabDB.settings = type(KeyLabDB.settings) == "table" and KeyLabDB.settings or {}
-    local savedMetric = KeyLabDB.settings.raidTalentMetric
+    local savedMetric = KeyLab.DB and KeyLab.DB.GetSetting
+        and KeyLab.DB.GetSetting("raidTalentMetric")
     if HasOption(self.metricOptions, savedMetric) then self.selectedMetricKey = savedMetric end
     if not HasOption(self.metricOptions, self.selectedMetricKey) then self.selectedMetricKey = HasOption(self.metricOptions, "dps") and "dps" or (self.metricOptions[1] and self.metricOptions[1].value) end
-    KeyLabDB.settings.raidTalentMetric = self.selectedMetricKey
+    if KeyLab.DB and KeyLab.DB.SetSetting then
+        KeyLab.DB.SetSetting("raidTalentMetric", self.selectedMetricKey)
+    end
 
     SetDropdownText(self.bossDropdown, OptionText(self.bossOptions, self.selectedEncounterID, "All Bosses"))
     SetDropdownText(self.difficultyDropdown, OptionText(self.difficultyOptions, self.selectedDifficultyID, "All Difficulties"))
@@ -680,7 +681,7 @@ function RaidTalentBuilds:Create(parent)
             info.text, info.checked = option.text, value == RaidTalentBuilds.selectedMetricKey
             info.func = function()
                 RaidTalentBuilds.selectedMetricKey = value
-                KeyLabDB.settings.raidTalentMetric = value
+                if KeyLab.DB and KeyLab.DB.SetSetting then KeyLab.DB.SetSetting("raidTalentMetric", value) end
                 RaidTalentBuilds.selectedCardData, RaidTalentBuilds.selectedIndex = nil, nil
                 RaidTalentBuilds:Refresh()
             end

@@ -187,22 +187,14 @@ function GearPlanning:Create(parent)
     frame:SetAllPoints(parent)
     SetBackdrop(frame, COLORS.bg, {0, 0, 0, 0})
 
-    local header = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    header:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -14)
-    header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -14)
-    header:SetHeight(68)
-    SetBackdrop(header, COLORS.panel, COLORS.border)
-
-    local title = Text(header, "Gear Planning", "GameFontNormalLarge", HEADER.titleSize, COLORS.gold)
-    title:SetPoint("TOPLEFT", header, "TOPLEFT", 16, -10)
-    title:SetSize(420, 24)
-
-    local subtitle = Text(header, "Learn the main gearing choices, then plan the open slots around your goals.", "GameFontHighlightSmall", 12, COLORS.muted)
-    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-    subtitle:SetSize(850, 24)
+    KeyLab.UI.Theme.CreateTabHeader(
+        frame,
+        "Gear Planning",
+        "Learn the main gearing choices, then plan the open slots around your goals."
+    )
 
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -98)
+    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, HEADER.standardContentY)
     scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
 
     local content = CreateFrame("Frame", nil, scroll)

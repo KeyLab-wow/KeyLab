@@ -271,156 +271,13 @@ end
 local STAT_KEYS = { "crit", "haste", "mastery", "versatility" }
 local STAT_TIE_ORDER = { crit = 1, haste = 2, mastery = 3, versatility = 4 }
 
-local function NormalizeKeyLabName(value)
-    value = tostring(value or "")
-    value = value:gsub("%s+", "")
-    value = value:gsub("'", "")
-    value = value:gsub("%-+", "-")
-    return string.lower(value)
-end
-
-local function GetCurrentCharacterIdentity()
-    local name, realm
-
-    if UnitFullName then
-        name, realm = UnitFullName("player")
-    end
-
-    if not name or name == "" then
-        name = UnitName and UnitName("player") or nil
-    end
-
-    if (not realm or realm == "") and GetRealmName then
-        realm = GetRealmName()
-    end
-
-    return name, realm
-end
-
-local function EncounterMatchesCurrentCharacter(encounter)
-    if EncounterData.EncounterMatchesCurrentCharacter then
-        return EncounterData.EncounterMatchesCurrentCharacter(encounter, { allowMissingIdentity = false })
-    end
-
-    if type(encounter) ~= "table" then
-        return false
-    end
-
-    local currentName, currentRealm = GetCurrentCharacterIdentity()
-    if not currentName or currentName == "" then
-        return true
-    end
-
-    local player = encounter.player or {}
-    local character = encounter.character or {}
-    local context = encounter.context or {}
-    local capture = encounter.capture or {}
-
-    local encounterName =
-        player.name
-        or player.characterName
-        or player.character
-        or player.playerName
-        or character.name
-        or character.characterName
-        or context.characterName
-        or context.playerName
-        or capture.characterName
-        or capture.playerName
-        or encounter.characterName
-        or encounter.playerName
-        or encounter.character
-        or encounter.name
-
-    local encounterRealm =
-        player.realm
-        or player.realmName
-        or player.server
-        or character.realm
-        or character.realmName
-        or context.realm
-        or context.realmName
-        or capture.realm
-        or capture.realmName
-        or encounter.realm
-        or encounter.realmName
-        or encounter.server
-
-    local encounterFull =
-        player.fullName
-        or player.characterFullName
-        or character.fullName
-        or character.characterFullName
-        or context.characterFullName
-        or context.fullName
-        or capture.characterFullName
-        or capture.fullName
-        or encounter.characterFullName
-        or encounter.fullName
-
-    local currentNameKey = NormalizeKeyLabName(currentName)
-    local currentRealmKey = NormalizeKeyLabName(currentRealm)
-    local currentFullKey = currentNameKey
-    if currentRealmKey ~= "" then
-        currentFullKey = currentFullKey .. "-" .. currentRealmKey
-    end
-
-    if encounterFull and encounterFull ~= "" then
-        local fullKey = NormalizeKeyLabName(encounterFull)
-        if fullKey == currentFullKey or fullKey == currentNameKey then
-            return true
-        end
-    end
-
-    if not encounterName or encounterName == "" then
-        return false
-    end
-
-    if NormalizeKeyLabName(encounterName) ~= currentNameKey then
-        return false
-    end
-
-    if encounterRealm and encounterRealm ~= "" and currentRealmKey ~= "" then
-        return NormalizeKeyLabName(encounterRealm) == currentRealmKey
-    end
-
-    return true
-end
-
 local function GetEncounterList()
-    if EncounterData.GetEncounterList then
-        return EncounterData.GetEncounterList({
-            includeInterrupted = false,
-            includeExcluded = false,
-            allowMissingIdentity = false,
-        })
-    end
-
-    local raw = {}
-
-    if KeyLab.DB and KeyLab.DB.Encounters and KeyLab.DB.Encounters.GetFiltered then
-        raw = KeyLab.DB.Encounters.GetFiltered({
-            includeInterrupted = false,
-            includeExcluded = false,
-        })
-    elseif KeyLabDB and type(KeyLabDB.encounters) == "table" then
-        raw = KeyLabDB.encounters
-    end
-
-    local list = {}
-
-    for _, encounter in ipairs(raw or {}) do
-        local flags = encounter.flags or {}
-        if flags.interrupted ~= true and flags.excludedFromComparisons ~= true and EncounterMatchesCurrentCharacter(encounter) then
-            table.insert(list, encounter)
-        end
-    end
-
-    table.sort(list, function(a, b)
-        return (SafeNumber(a.timestamp) or 0) > (SafeNumber(b.timestamp) or 0)
-    end)
-
-    return list
+    if not EncounterData.GetEncounterList then return {} end
+    return EncounterData.GetEncounterList({
+        includeInterrupted = false,
+        includeExcluded = false,
+        allowMissingIdentity = false,
+    })
 end
 
 local function GetChallenge(encounter)
@@ -1573,21 +1430,15 @@ function Trends:Create(parent)
 
     self.frame = frame
 
-    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.header.x, CFG.header.y)
-    title:SetFont(STANDARD_TEXT_FONT, HEADER.titleSize, "")
-    title:SetText("M+ Trends")
-    ApplyColor(title, CFG.colors.gold)
-
-    local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-    subtitle:SetWidth(CFG.header.subtitleWidth)
-    subtitle:SetJustifyH("LEFT")
-    subtitle:SetText("See whether your recent Mythic+ results are improving, steady, or changing.")
-    ApplyColor(subtitle, CFG.colors.muted)
+    local title, subtitle = Theme.CreateTabHeader(
+        frame,
+        "M+ Trends",
+        "See whether your recent Mythic+ results are improving, steady, or changing."
+    )
 
     self.summaryText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    self.summaryText:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -10)
+    self.summaryText:SetPoint("TOPLEFT", frame, "TOPLEFT", HEADER.x, HEADER.summaryY)
+    self.summaryText:SetSize(HEADER.summaryWidth, HEADER.summaryHeight)
     self.summaryText:SetText("Loading trends...")
     ApplyColor(self.summaryText, CFG.colors.soft)
 

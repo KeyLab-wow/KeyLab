@@ -141,8 +141,13 @@ end
 
 local function GetMetricOptions()
     local options = {}
-    local list = EncounterData.GetMetricList and EncounterData.GetMetricList() or {}
-    for _, info in ipairs(list) do table.insert(options, { value = info.keylabKey, label = info.label or info.keylabKey }) end
+    local keys = KeyLab.Mapping and KeyLab.Mapping.ProfileComparisonMetricKeys or { "dps", "hps" }
+    for _, metricKey in ipairs(keys) do
+        local info = GetMetricInfo(metricKey)
+        if info and info.store == true then
+            table.insert(options, { value = info.keylabKey, label = info.label or info.keylabKey })
+        end
+    end
     return options
 end
 

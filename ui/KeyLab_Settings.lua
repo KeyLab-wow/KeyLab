@@ -11,7 +11,8 @@ KeyLab.Tabs = KeyLab.Tabs or {}
 
 local Settings = {}
 KeyLab.Tabs.Settings = Settings
-local HEADER = KeyLab.UI.Theme and KeyLab.UI.Theme.tabHeader or { titleSize = 16 }
+local Theme = KeyLab.UI.Theme or {}
+local HEADER = Theme.tabHeader or { titleSize = 16, standardContentY = -86 }
 
 -- =========================================================
 -- EASY EDIT SETTINGS
@@ -257,12 +258,14 @@ function Settings:Create(parent)
     frame:SetAllPoints(parent)
     SetBackdrop(frame, COLORS.bg, {0, 0, 0, 0})
 
-    local title = MakeText(frame, "Settings", "GameFontNormalLarge", FONT_PAGE_TITLE, COLORS.gold, "LEFT")
-    title:SetPoint("TOPLEFT", CONTENT_PAD, -22)
-    title:SetSize(420, 30)
+    Theme.CreateTabHeader(
+        frame,
+        "Settings",
+        "Choose how KeyLab behaves and manage your saved journal data."
+    )
 
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -68)
+    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, HEADER.standardContentY)
     scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 14)
 
     local content = CreateFrame("Frame", nil, scroll)

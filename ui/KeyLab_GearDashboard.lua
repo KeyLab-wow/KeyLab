@@ -402,19 +402,18 @@ end
 function GearDashboard:Build()
     if not self.frame then return end
 
-    self.title = MakeText(self.frame, "Gear Dashboard", "GameFontNormalLarge", HEADER.titleSize, COLORS.gold)
-    self.title:SetPoint("TOPLEFT", self.frame, "TOPLEFT", HEADER.x, HEADER.titleY)
-    self.title:SetSize(420, 28)
-    self.subtitle = MakeText(self.frame, "See your equipped gear, Tier progress, Targets, and Alternatives at a glance.", "GameFontHighlightSmall", nil, COLORS.muted)
-    self.subtitle:SetPoint("TOPLEFT", self.title, "BOTTOMLEFT", 0, -4)
-    self.subtitle:SetSize(900, 20)
+    self.title, self.subtitle = Theme.CreateTabHeader(
+        self.frame,
+        "Gear Dashboard",
+        "See your equipped gear, Tier progress, Targets, and Alternatives at a glance."
+    )
 
     self.leftSlots, self.rightSlots = {}, {}
     local columnsWidth = SLOT_WIDTH + CENTER_WIDTH + SLOT_WIDTH + (SPACING.column * 2)
     local leftX = (CONTENT_WIDTH - columnsWidth) / 2
     local centerX = leftX + SLOT_WIDTH + SPACING.column
     local rightX = centerX + CENTER_WIDTH + SPACING.column
-    local topY = -76
+    local topY = HEADER.standardContentY
     for index, slotName in ipairs(Analysis().LeftSlots or {}) do
         self.leftSlots[slotName] = MakeSlotCard(self.frame, leftX, topY - ((index - 1) * (SLOT_HEIGHT + SLOT_GAP)), slotName)
     end
@@ -422,7 +421,7 @@ function GearDashboard:Build()
         self.rightSlots[slotName] = MakeSlotCard(self.frame, rightX, topY - ((index - 1) * (SLOT_HEIGHT + SLOT_GAP)), slotName)
     end
 
-    self.itemLevelCard = MakeCard(self.frame, centerX, -76, CENTER_WIDTH, 92, "Current Item Level")
+    self.itemLevelCard = MakeCard(self.frame, centerX, HEADER.standardContentY, CENTER_WIDTH, 92, "Current Item Level")
     self.itemLevelValue = MakeText(self.itemLevelCard, "-", "GameFontNormalLarge", 32, COLORS.purple, "CENTER")
     self.itemLevelValue:SetPoint("CENTER", self.itemLevelCard, "CENTER", 0, -5)
     self.itemLevelValue:SetSize(CENTER_WIDTH - 20, 34)
@@ -430,7 +429,7 @@ function GearDashboard:Build()
     self.itemLevelSubtext:SetPoint("BOTTOM", self.itemLevelCard, "BOTTOM", 0, 8)
     self.itemLevelSubtext:SetSize(CENTER_WIDTH - 20, 14)
 
-    local tierY = -76 - 92 - CARD_GAP
+    local tierY = HEADER.standardContentY - 92 - CARD_GAP
     self.tierCard = MakeCard(self.frame, centerX, tierY, CENTER_WIDTH, 210, "Tier Set")
     self.tierCard.title:SetJustifyH("LEFT")
     self.tierCard.title:ClearAllPoints()

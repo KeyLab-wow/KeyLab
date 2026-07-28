@@ -12,7 +12,9 @@ local Theme = KeyLab.UI.Theme or {}
 local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
 local SPACING = Theme.spacing or { card = 14, column = 12 }
 local HEADER = Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16 }
-local CONTENT_WIDTH = 908
+-- The shared tab surface reserves one pixel on each side for its outer line.
+-- Keep Last Run's fixed cards inside the resulting scroll viewport.
+local CONTENT_WIDTH = 906
 local SECONDARY_WIDTH = 444
 local SUMMARY_HEIGHT = 122
 local SECONDARY_HEIGHT = 178
@@ -202,12 +204,11 @@ local function RankText(rank, metricKey, state)
 
     if type(rank) ~= "table" or not rank.rank then
         local metrics = state and state.metrics or {}
-        if (metricKey == "interrupts" or metricKey == "dispels")
-            and (tonumber(metrics[metricKey]) or 0) <= 0
-        then
+        local capturedValue = tonumber(metrics[metricKey])
+        if (metricKey == "interrupts" or metricKey == "dispels") and capturedValue == 0 then
             return "0 / " .. tostring(groupSize)
         end
-        return "No rank"
+        return capturedValue == nil and "No data" or "No rank"
     end
 
     return tostring(rank.rank) .. " / " .. tostring(groupSize)
@@ -267,9 +268,11 @@ local function BuildSummary(parent, state)
     AddValue(card, "Duration", FormatDuration(state.durationSeconds), 534, -40, 88, durationColor)
     AddVerticalDivider(card, 630, -36, 76)
 
-    local deltaLabel = state.timed == false and "Overtime" or "Remaining"
-    local deltaColor = (state.timed == false or overTimer) and COLORS.red or COLORS.green
-    AddValue(card, deltaLabel, FormatDelta(state.timeDeltaSeconds), 640, -40, 88, deltaColor)
+    local timerKnown = state.timed ~= nil or state.durationSeconds ~= nil or state.timeDeltaSeconds ~= nil
+    local deltaLabel = not timerKnown and "Timer Data" or (state.timed == false and "Overtime" or "Remaining")
+    local deltaColor = not timerKnown and COLORS.muted or ((state.timed == false or overTimer) and COLORS.red or COLORS.green)
+    local deltaText = not timerKnown and "Unavailable" or FormatDelta(state.timeDeltaSeconds)
+    AddValue(card, deltaLabel, deltaText, 640, -40, 88, deltaColor)
     AddVerticalDivider(card, 738, -36, 76)
     AddValue(card, "Saved", state.timestamp and FormatSummaryDateTime(state.timestamp) or tostring(state.dateText or "-"), 746, -40, 144, COLORS.muted)
 
@@ -560,23 +563,17 @@ SessionMetric = function(session, metricKey)
     return EncounterData.GetSessionMetric(session, metricKey)
 end
 
-local function SessionHasGraphMetric(session, metricKeys)
-    for _, metricKey in ipairs(metricKeys or {}) do
-        if SessionMetric(session, metricKey) ~= nil then
-            return true
-        end
+local function GetGraphSessions(encounter)
+    if EncounterData.GetPullSessions then
+        return EncounterData.GetPullSessions(encounter)
     end
-    return false
-end
 
-local function GetGraphSessions(encounter, metricKeys)
     local out = {}
 
     for _, session in ipairs(GetCombatSessions(encounter)) do
         if type(session) == "table"
             and session.isAggregateSession ~= true
             and (tonumber(session.durationSeconds) or 0) > 0
-            and SessionHasGraphMetric(session, metricKeys)
         then
             table.insert(out, session)
         end
@@ -782,8 +779,8 @@ end
 local function BuildPullGraph(parent, state, profile, yOffset)
     profile = profile or GetGraphProfile(state)
     local card = MakeCard(parent, 0, yOffset or FIRST_GRAPH_Y, CONTENT_WIDTH, GRAPH_HEIGHT, profile.title or "Pull Timeline", COLORS.blue)
-    local metricKeys, markerMetricKeys, allMetricKeys = GetGraphMetricLists(profile)
-    local sessions = GetGraphSessions(state and state.encounter, allMetricKeys)
+    local metricKeys, markerMetricKeys = GetGraphMetricLists(profile)
+    local sessions = GetGraphSessions(state and state.encounter)
     local perMetricScale = profile.scale == "perMetric"
     local drawStems = profile.showStems ~= false and #metricKeys <= 1
 
@@ -956,7 +953,7 @@ local function BuildPullGraph(parent, state, profile, yOffset)
     end
 
     AddLine(card, "Pull #", graphX, footerY, 80, COLORS.muted, "GameFontDisableSmall")
-    AddLine(card, "M = Metric data not returned", graphX + 270, footerY, 220, COLORS.warning, "GameFontDisableSmall")
+    AddLine(card, "M = Metric unavailable for this pull", graphX + 256, footerY, 244, COLORS.warning, "GameFontDisableSmall")
 
     return card
 end
@@ -1021,9 +1018,20 @@ end
 
 function LastRun:Refresh()
     if not self.content then return end
-    ClearChildren(self.content)
 
     local selectedEncounter = self:GetSelectedEncounter()
+    local analysis = Analysis()
+    local runKey = selectedEncounter and analysis.GetRunKey and analysis.GetRunKey(selectedEncounter) or nil
+    if self.renderedRunKey ~= runKey then
+        self.resetScrollPosition = true
+        self.renderedRunKey = runKey
+    end
+    if self.resetScrollPosition and self.scrollFrame and self.scrollFrame.SetVerticalScroll then
+        self.scrollFrame:SetVerticalScroll(0)
+        self.resetScrollPosition = nil
+    end
+
+    ClearChildren(self.content)
     self:RefreshHistoryControls()
     local state = Analysis().BuildState and Analysis().BuildState(selectedEncounter) or { hasRun = false }
     if not state.hasRun then
@@ -1051,11 +1059,11 @@ function LastRun:Create(parent)
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", HEADER.x, HEADER.titleY)
     title:SetSize(900, 24)
 
-    local subtitle = MakeText(frame, "See your latest Mythic+ run, including the timer, group, totals, pulls, and role results. Blizzard's Damage Meter may sometimes leave a pull metric blank.", "GameFontHighlightSmall", nil, COLORS.muted)
+    local subtitle = MakeText(frame, "See your latest Mythic+ run, including the timer, group, totals, pulls, and role results.", "GameFontHighlightSmall", nil, COLORS.muted)
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     subtitle:SetSize(900, 32)
 
-    local historyLabel = MakeText(frame, "View a run from the past 7 days", "GameFontDisableSmall", nil, COLORS.muted)
+    local historyLabel = MakeText(frame, "View one of your latest 10 runs", "GameFontDisableSmall", nil, COLORS.muted)
     historyLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -83)
     historyLabel:SetSize(260, 18)
 
@@ -1074,6 +1082,7 @@ function LastRun:Create(parent)
         info.disabled = latest == nil
         info.func = function()
             LastRun.selectedRunKey = nil
+            LastRun.resetScrollPosition = true
             LastRun:Refresh()
         end
         UIDropDownMenu_AddButton(info, level)
@@ -1086,6 +1095,7 @@ function LastRun:Create(parent)
                 info.checked = LastRun.selectedRunKey == key
                 info.func = function()
                     LastRun.selectedRunKey = key
+                    LastRun.resetScrollPosition = true
                     LastRun:Refresh()
                 end
                 UIDropDownMenu_AddButton(info, level)
@@ -1098,6 +1108,7 @@ function LastRun:Create(parent)
     returnLatest:SetPoint("TOPLEFT", frame, "TOPLEFT", 458, -102)
     returnLatest:SetScript("OnClick", function()
         LastRun.selectedRunKey = nil
+        LastRun.resetScrollPosition = true
         LastRun:Refresh()
     end)
     returnLatest:Hide()
@@ -1118,6 +1129,7 @@ function LastRun:Create(parent)
         LastRun:Refresh()
     end
     frame:SetScript("OnShow", function()
+        LastRun.resetScrollPosition = true
         LastRun:Refresh()
     end)
 

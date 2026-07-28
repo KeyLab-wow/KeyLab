@@ -772,7 +772,7 @@ function Sequencer:BuildTop(frame)
     local definitions={{key="editor",label="Editor",width=128},{key="binding",label="Binding List",width=138},{key="information",label="Information",width=138},{key="recycle",label="Recycle Bin",width=138}}
     local x=18
     for _,definition in ipairs(definitions) do
-        local button=Button(frame,definition.label,definition.width,function() Sequencer:SetView(definition.key) end,30); button:SetPoint("TOPLEFT",x,-72); self.viewButtons[definition.key]=button; x=x+definition.width+8
+        local button=Button(frame,definition.label,definition.width,function() Sequencer:SetView(definition.key) end,30); button:SetPoint("TOPLEFT",x,-78); self.viewButtons[definition.key]=button; x=x+definition.width+8
     end
 end
 function Sequencer:BuildMacroEditor(parent)
@@ -1112,8 +1112,11 @@ function Sequencer:Create(parent)
     local frame=CreateFrame("Frame","KeyLabSequencerTab",parent,"BackdropTemplate"); frame:SetAllPoints(parent)
     if Theme.StylePanel then Theme.StylePanel(frame,COLORS.bg,{0,0,0,0}) end
     self.frame=frame; self.views={}; self.selectedView="editor"
-    local title=Text(frame,"Macro Sequencer","GameFontNormalLarge",20,COLORS.gold); title:SetPoint("TOPLEFT",18,-18); title:SetSize(900,22)
-    local description=Text(frame,"Build class and spec Macro Sequences from the exact macro blocks you want to use.","GameFontHighlightSmall",nil,COLORS.muted); description:SetPoint("TOPLEFT",18,-45); description:SetSize(900,18)
+    Theme.CreateTabHeader(
+        frame,
+        "Macro Sequencer",
+        "Build class and spec Macro Sequences from the exact macro blocks you want to use."
+    )
     self:BuildTop(frame); self:BuildEditor(frame); self:BuildBindingList(frame); self:BuildInformation(frame); self:BuildRecycleBin(frame)
     self:LoadSequence(nil); self:SetView("editor")
     frame.Refresh=function() Sequencer:Refresh() end

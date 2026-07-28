@@ -22,9 +22,10 @@ KeyLab.Tabs = KeyLab.Tabs or {}
 
 local Encounters = {}
 KeyLab.Tabs.Encounters = Encounters
+local Theme = KeyLab.UI.Theme or {}
 local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
-local SPACING = KeyLab.UI.Theme and KeyLab.UI.Theme.spacing or { compactCard = 8, section = 18 }
-local HEADER = KeyLab.UI.Theme and KeyLab.UI.Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16, analysisControlsY = -86, analysisContentY = -172 }
+local SPACING = Theme.spacing or { compactCard = 8, section = 18 }
+local HEADER = Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16, analysisControlsY = -86, analysisContentY = -172 }
 
 -- =========================================================
 -- EASY EDIT SETTINGS
@@ -77,15 +78,19 @@ local CFG = {
         height = 74,
 
         dungeonX = 18,
-        keyX = 255,
-        currentSpecX = 390,
-        dateX = 610,
+        keyX = 192,
+        currentSpecX = 292,
+        dateX = 420,
+        metricX = 560,
+        sortX = 742,
         labelY = -12,
 
-        dungeonWidth = 185,
-        keyWidth = 90,
-        currentSpecWidth = 170,
-        dateWidth = 150,
+        dungeonWidth = 145,
+        keyWidth = 70,
+        currentSpecWidth = 110,
+        dateWidth = 110,
+        metricWidth = 145,
+        sortWidth = 130,
     },
 
     list = {
@@ -296,167 +301,13 @@ end
 -- =========================================================
 
 
-local function NormalizeKeyLabName(value)
-    value = tostring(value or "")
-    value = value:gsub("%s+", "")
-    value = value:gsub("'", "")
-    value = value:gsub("%-+", "-")
-    return string.lower(value)
-end
-
-local function GetCurrentCharacterIdentity()
-    local name, realm
-
-    if UnitFullName then
-        name, realm = UnitFullName("player")
-    end
-
-    if not name or name == "" then
-        name = UnitName and UnitName("player") or nil
-    end
-
-    if (not realm or realm == "") and GetRealmName then
-        realm = GetRealmName()
-    end
-
-    return name, realm
-end
-
-local function EncounterMatchesCurrentCharacter(encounter)
-    if EncounterData.EncounterMatchesCurrentCharacter then
-        return EncounterData.EncounterMatchesCurrentCharacter(encounter, { allowMissingIdentity = false })
-    end
-
-    if type(encounter) ~= "table" then
-        return false
-    end
-
-    local currentName, currentRealm = GetCurrentCharacterIdentity()
-    if not currentName or currentName == "" then
-        return true
-    end
-
-    local player = encounter.player or {}
-    local character = encounter.character or {}
-    local context = encounter.context or {}
-    local capture = encounter.capture or {}
-
-    local encounterName =
-        player.name
-        or player.characterName
-        or player.character
-        or player.playerName
-        or character.name
-        or character.characterName
-        or context.characterName
-        or context.playerName
-        or capture.characterName
-        or capture.playerName
-        or encounter.characterName
-        or encounter.playerName
-        or encounter.character
-        or encounter.name
-
-    local encounterRealm =
-        player.realm
-        or player.realmName
-        or player.server
-        or character.realm
-        or character.realmName
-        or context.realm
-        or context.realmName
-        or capture.realm
-        or capture.realmName
-        or encounter.realm
-        or encounter.realmName
-        or encounter.server
-
-    local encounterFull =
-        player.fullName
-        or player.characterFullName
-        or character.fullName
-        or character.characterFullName
-        or context.characterFullName
-        or context.fullName
-        or capture.characterFullName
-        or capture.fullName
-        or encounter.characterFullName
-        or encounter.fullName
-
-    local currentNameKey = NormalizeKeyLabName(currentName)
-    local currentRealmKey = NormalizeKeyLabName(currentRealm)
-    local currentFullKey = currentNameKey
-    if currentRealmKey ~= "" then
-        currentFullKey = currentFullKey .. "-" .. currentRealmKey
-    end
-
-    if encounterFull and encounterFull ~= "" then
-        local fullKey = NormalizeKeyLabName(encounterFull)
-        if fullKey == currentFullKey or fullKey == currentNameKey then
-            return true
-        end
-    end
-
-    -- Strict current-character mode:
-    -- if a run does not have character identity, do not show it in character-specific tabs.
-    if not encounterName or encounterName == "" then
-        return false
-    end
-
-    if NormalizeKeyLabName(encounterName) ~= currentNameKey then
-        return false
-    end
-
-    if encounterRealm and encounterRealm ~= "" and currentRealmKey ~= "" then
-        return NormalizeKeyLabName(encounterRealm) == currentRealmKey
-    end
-
-    return true
-end
-local function FilterCurrentCharacterEncounters(encounters)
-    local filtered = {}
-
-    for _, encounter in ipairs(encounters or {}) do
-        if EncounterMatchesCurrentCharacter(encounter) then
-            table.insert(filtered, encounter)
-        end
-    end
-
-    return filtered
-end
-
-
 local function GetEncounterList()
-    if EncounterData.GetEncounterList then
-        return EncounterData.GetEncounterList({
-            includeInterrupted = true,
-            includeExcluded = true,
-            allowMissingIdentity = false,
-        })
-    end
-
-    if KeyLab.DB and KeyLab.DB.Encounters and KeyLab.DB.Encounters.GetFiltered then
-        local list = KeyLab.DB.Encounters.GetFiltered({
-            includeInterrupted = true,
-            includeExcluded = true,
-        })
-        return FilterCurrentCharacterEncounters(list)
-    end
-
-    if KeyLabDB and type(KeyLabDB.encounters) == "table" then
-        local copy = {}
-        for _, encounter in ipairs(KeyLabDB.encounters) do
-            if EncounterMatchesCurrentCharacter(encounter) then
-                table.insert(copy, encounter)
-            end
-        end
-        table.sort(copy, function(a, b)
-            return (a.timestamp or 0) > (b.timestamp or 0)
-        end)
-        return copy
-    end
-
-    return {}
+    if not EncounterData.GetEncounterList then return {} end
+    return EncounterData.GetEncounterList({
+        includeInterrupted = true,
+        includeExcluded = true,
+        allowMissingIdentity = false,
+    })
 end
 
 local function GetChallenge(encounter)
@@ -573,9 +424,7 @@ local function GetMetricInfoByType(metricType)
 end
 
 local function GetMetricOptions()
-    local list = {
-        { text = "All Outcomes", value = nil },
-    }
+    local list = {}
 
     local order = KeyLab.Mapping and KeyLab.Mapping.MetricOrder or {}
     for _, metricType in ipairs(order) do
@@ -592,7 +441,7 @@ local function GetMetricOptions()
 end
 
 local function GetMetricText(metricKey)
-    if not metricKey then return "All Outcomes" end
+    if not metricKey then return "DPS" end
     local info = GetMetricInfoByKey(metricKey)
     return info and info.label or tostring(metricKey)
 end
@@ -720,7 +569,7 @@ local function MatchesFilters(encounter, selectedMapID, selectedKeyLevel, select
     return true
 end
 
-local function FilterEncounters(encounters, selectedMapID, selectedKeyLevel, selectedSpec, dateFilter)
+local function FilterEncounters(encounters, selectedMapID, selectedKeyLevel, selectedSpec, dateFilter, metricKey, sortDirection)
     local results = {}
 
     for _, encounter in ipairs(encounters or {}) do
@@ -730,7 +579,15 @@ local function FilterEncounters(encounters, selectedMapID, selectedKeyLevel, sel
     end
 
     table.sort(results, function(a, b)
-        return (a.timestamp or 0) > (b.timestamp or 0)
+        local av = tonumber(GetMetricValue(a, metricKey))
+        local bv = tonumber(GetMetricValue(b, metricKey))
+        if av == nil or bv == nil then
+            if av == nil and bv == nil then return (a.timestamp or 0) > (b.timestamp or 0) end
+            return av ~= nil
+        end
+        if av == bv then return (a.timestamp or 0) > (b.timestamp or 0) end
+        if sortDirection == "low" then return av < bv end
+        return av > bv
     end)
 
     return results
@@ -1053,6 +910,10 @@ function Encounters:RefreshDropdowns()
 
     self.specValue:SetText(self.currentSpecName or "No Specialization")
     SetDropdownText(self.dateDropdown, GetDateText(self.selectedDateFilter))
+    self.selectedMetricKey = self.selectedMetricKey or "dps"
+    self.selectedSortDirection = self.selectedSortDirection or "high"
+    SetDropdownText(self.metricDropdown, GetMetricText(self.selectedMetricKey))
+    SetDropdownText(self.sortDropdown, self.selectedSortDirection == "low" and "Low to High" or "High to Low")
 end
 
 function Encounters:RefreshSelection()
@@ -1101,7 +962,8 @@ function Encounters:Refresh()
 
     self:RefreshDropdowns()
 
-    local filtered = FilterEncounters(self.allEncounters or {}, self.selectedMapID, self.selectedKeyLevel, self.currentSpecName, self.selectedDateFilter)
+    local filtered = FilterEncounters(self.allEncounters or {}, self.selectedMapID, self.selectedKeyLevel,
+        self.currentSpecName, self.selectedDateFilter, self.selectedMetricKey, self.selectedSortDirection)
     self.filteredEncounters = filtered
 
     local total = #filtered
@@ -1164,21 +1026,15 @@ function Encounters:Create(parent)
     self.cards = {}
     self.currentPage = 1
 
-    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.header.x, CFG.header.y)
-    title:SetFont(STANDARD_TEXT_FONT, HEADER.titleSize, "")
-    title:SetText("M+ Encounters")
-    ApplyColor(title, CFG.colors.gold)
-
-    local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-    subtitle:SetWidth(CFG.header.subtitleWidth)
-    subtitle:SetJustifyH("LEFT")
-    subtitle:SetText("Review your saved Mythic+ runs and select one to see its details.")
-    ApplyColor(subtitle, CFG.colors.muted)
+    local title, subtitle = Theme.CreateTabHeader(
+        frame,
+        "M+ Encounters",
+        "Review your saved Mythic+ runs and select one to see its details."
+    )
 
     self.summaryText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    self.summaryText:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -10)
+    self.summaryText:SetPoint("TOPLEFT", frame, "TOPLEFT", HEADER.x, HEADER.summaryY)
+    self.summaryText:SetSize(HEADER.summaryWidth, HEADER.summaryHeight)
     self.summaryText:SetText("Loading encounters...")
     ApplyColor(self.summaryText, CFG.colors.soft)
 
@@ -1242,6 +1098,39 @@ function Encounters:Create(parent)
             info.text = option.text
             info.func = function()
                 Encounters.selectedDateFilter = option.value
+                Encounters.currentPage = 1
+                Encounters.selectedEncounter = nil
+                Encounters:Refresh()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+
+    self.metricDropdown = MakeDropdown(controls, CFG.controls.metricWidth, CFG.controls.metricX, CFG.controls.labelY, "Performance Metric", function(_, level)
+        for _, option in ipairs(GetMetricOptions()) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = option.text
+            info.checked = option.value == Encounters.selectedMetricKey
+            info.func = function()
+                Encounters.selectedMetricKey = option.value
+                Encounters.currentPage = 1
+                Encounters.selectedEncounter = nil
+                Encounters:Refresh()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+
+    self.sortDropdown = MakeDropdown(controls, CFG.controls.sortWidth, CFG.controls.sortX, CFG.controls.labelY, "Sort", function(_, level)
+        for _, option in ipairs({
+            { text = "High to Low", value = "high" },
+            { text = "Low to High", value = "low" },
+        }) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = option.text
+            info.checked = option.value == Encounters.selectedSortDirection
+            info.func = function()
+                Encounters.selectedSortDirection = option.value
                 Encounters.currentPage = 1
                 Encounters.selectedEncounter = nil
                 Encounters:Refresh()
