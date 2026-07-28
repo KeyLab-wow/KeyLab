@@ -5,8 +5,8 @@
 --   Owns the main addon window, sidebar navigation, and tab switching.
 --
 -- Current UI direction:
---   No image assets required yet.
---   Uses simple colored panels, borders, and text so layout/card work can be tested first.
+--   Main-window artwork provides the shared visual foundation.
+--   Colored panels, borders, and live text remain above the artwork for clarity.
 --
 -- Individual tab files own their own content inside the content frame.
 
@@ -291,6 +291,15 @@ function KeyLab.UI:Create()
     self.contentMode = GetSavedContentMode()
     self.navigationTabs = GetVisibleNavigationTabs()
 
+    -- Presentation-only artwork. The source texture uses a WoW-safe
+    -- 2048 x 1024 canvas with the 1200 x 980 window art in its visible region.
+    local backgroundArtwork = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
+    backgroundArtwork:SetAllPoints(frame)
+    backgroundArtwork:SetTexture("Interface\\AddOns\\KeyLab\\Assets\\KeyLabWindowBackground.tga")
+    backgroundArtwork:SetTexCoord(0, CFG.main.width / 2048, 0, CFG.main.height / 1024)
+    backgroundArtwork:SetAlpha(1)
+    self.backgroundArtwork = backgroundArtwork
+
     -- Header background with KeyLab title.
     local header = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     header:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -14)
@@ -307,6 +316,15 @@ function KeyLab.UI:Create()
     title:SetShadowColor(0, 0, 0, 0.85)
     title:SetShadowOffset(2, -2)
     self.title = title
+
+    local titleIcon = header:CreateTexture(nil, "ARTWORK", nil, 1)
+    titleIcon:SetTexture("Interface\\AddOns\\KeyLab\\Assets\\KeyLabKeyIcon.tga")
+    titleIcon:SetSize(58, 58)
+    titleIcon:SetPoint("LEFT", header, "LEFT", 14, 0)
+    self.titleIcon = titleIcon
+
+    title:ClearAllPoints()
+    title:SetPoint("LEFT", titleIcon, "RIGHT", 10, 0)
 
     local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     close:SetSize(CFG.close.width, CFG.close.height)
@@ -540,20 +558,44 @@ function KeyLab.UI:CreateTabFrame(tabName)
         return nil
     end
 
-    local ok, tabFrameOrError = pcall(reg.createFunc, self.content)
+    -- Every tab sits inside the same shared surface. Keeping the visible outer
+    -- edge here prevents individual tab backgrounds from covering it.
+    local surface = CreateFrame("Frame", nil, self.content, "BackdropTemplate")
+    surface:SetAllPoints(self.content)
+    surface:SetFrameLevel(self.content:GetFrameLevel() + 1)
+    StylePanel(
+        surface,
+        CFG.colors.contentBg,
+        (KeyLab.UI.Theme and KeyLab.UI.Theme.colors and KeyLab.UI.Theme.colors.cardBorder) or CFG.colors.contentBorder
+    )
+
+    local ok, tabFrameOrError = pcall(reg.createFunc, surface)
     if not ok then
+        surface:Hide()
         SafePrint("Error creating tab " .. tostring(tabName) .. ": " .. tostring(tabFrameOrError))
         return nil
     end
 
-    if not tabFrameOrError then return nil end
+    if not tabFrameOrError then
+        surface:Hide()
+        return nil
+    end
 
     local tabFrame = tabFrameOrError
-    tabFrame:SetParent(self.content)
-    tabFrame:SetAllPoints(self.content)
-    tabFrame:Hide()
-    self.tabFrames[tabName] = tabFrame
-    return tabFrame
+    tabFrame:SetParent(surface)
+    tabFrame:ClearAllPoints()
+    tabFrame:SetPoint("TOPLEFT", surface, "TOPLEFT", 1, -1)
+    tabFrame:SetPoint("BOTTOMRIGHT", surface, "BOTTOMRIGHT", -1, 1)
+    tabFrame:SetFrameLevel(surface:GetFrameLevel() + 1)
+    surface.tabContent = tabFrame
+    if type(tabFrame.Refresh) == "function" then
+        surface.Refresh = function()
+            tabFrame:Refresh()
+        end
+    end
+    surface:Hide()
+    self.tabFrames[tabName] = surface
+    return surface
 end
 
 function KeyLab.UI:RefreshSelectedTab()

@@ -1,5 +1,134 @@
 # KeyLab Changelog
 
+## Version 1.8.101 - Main Window Artwork
+
+Released July 28, 2026
+
+- Added KeyLab's new dark blue and gold artwork as the main addon window background.
+- Added the KeyLab key icon beside the live title in the header.
+- Kept every panel, card, label, button, and tab as live UI above the artwork.
+
+## Version 1.8.100 - Independent Activity Counts
+
+Released July 27, 2026
+
+- Changed the Home M+ Run and Raid Boss Pull totals into independent per-character season counters.
+- Totals now continue increasing after Encounter history reaches its 50-record limit.
+- Existing installs seed their starting totals from the records still available, while author screenshot data is ignored.
+- Pruning or deleting an old Encounter record no longer lowers the Home activity totals.
+
+## Version 1.8.99 - Practice Panel Spacing
+
+Released July 27, 2026
+
+- Added a consistent inner margin between the Practice panels and the tab's highlighted outer edge.
+- Aligned New Session, Filters, Saved Practice Sessions, and Session Details to the same inset.
+
+## Version 1.8.98 - Practice Details Room
+
+Released July 27, 2026
+
+- Limited each Saved Practice Sessions page to six sessions.
+- Shortened the saved-session panel and moved its pager upward so Session Details remain comfortably visible.
+- Kept the 25-session saved limit and all existing Practice records unchanged.
+
+## Version 1.8.97 - Reserved Top 5 Layout
+
+Released July 27, 2026
+
+- Reserved space for all five leaderboard cards in Talent Builds, Stat Profiles, and Gear Profiles.
+- Kept the matching open Encounter Details design beneath the complete Top 5 card area.
+
+## Version 1.8.96 - Matching Profile Details
+
+Released July 27, 2026
+
+- Matched Talent Build and Stat Profile details to the open Encounter Details layout, including its size, padding, columns, dividers, fonts, and spacing.
+- Matched Gear Profile details to the same open background treatment and footprint while preserving the equipped-item view.
+- Standardized the details presentation without changing the saved leaderboard records.
+
+## Version 1.8.95 - Profile Comparison Bars
+
+Released July 27, 2026
+
+- Added the colored comparison bar beneath each DPS or HPS value in Talent Builds, Stat Profiles, and Gear Profiles.
+- DPS bars use blue and HPS bars use green while preserving the compact Encounter-style cards.
+
+## Version 1.8.94 - Matching Profile Cards
+
+Released July 27, 2026
+
+- Matched Talent Build, Stat Profile, and Gear Profile cards to the compact size, fonts, colors, and borders used by Encounter cards.
+- Matched the profile filter and details panels to the Encounter tab color scheme.
+- Kept the restored DPS and HPS Performance Metric choice and full details views.
+- Corrected the M+ Last Run content width so card borders are no longer clipped on the right.
+
+## Version 1.8.93 - Restored Profile Comparisons
+
+Released July 27, 2026
+
+- Restored the DPS and HPS Performance Metric choice in Talent Builds, Stat Profiles, and Gear Profiles.
+- Returned the Top 5 results to full-width, encounter-style selectable cards.
+- Restored the detailed Run Details, Stats, Talent String, and Captured Outcomes view for Talent Builds and Stat Profiles.
+- Restored the full equipped-item details view for Gear Profiles.
+- Kept the permanent per-character and per-specialization season leaderboards unchanged.
+
+## Version 1.8.92 - Consistent Tab Layout
+
+Released July 27, 2026
+
+- Added the same highlighted outer edge to every main tab window.
+- Standardized tab title and description sizing across the addon.
+- Evened out the spacing between tab descriptions, summaries, filters, and main content.
+- Moved shared tab framing and header measurements into the UI theme so future tabs can match automatically.
+
+## Version 1.8.91 - Season Journal Leaderboards
+
+Released July 27, 2026
+
+- Added permanent Top 5 DPS and Top 5 HPS leaderboards for Talent Builds, Stat Profiles, and Gear Profiles on both Mythic+ and Raid.
+- Leaderboards are separate for each character and specialization. A lower result never replaces a better saved result.
+- Kept up to 50 Mythic+ encounters and 50 raid boss pulls per character and specialization, with full pull details for the latest 10 of each.
+- Added Performance Metric and High-to-Low or Low-to-High sorting to Mythic+ and Raid Encounters.
+- Limited Practice to 25 sessions per character and specialization while keeping status-marked sessions first and protected.
+- Removed automatic full-database release snapshots. Player Export and Import remain available for journal backups.
+- Existing saved encounters seed the new leaderboards before the one-time storage cleanup runs.
+
+## Version 1.8.90 - Focused Profile Comparisons
+
+Released July 27, 2026
+
+- Limited the Performance Metric choices in Talent Builds, Stat Profiles, and Gear Profiles to DPS and HPS.
+- Applied the same focused choices to both Mythic+ and Raid comparisons.
+- Existing saved metrics remain safely stored for encounter details and other analysis views.
+
+## Version 1.8.89 - Reliable Capture Structure
+
+Released July 27, 2026
+
+- Restored one master Mythic+ run record as the shared source for Encounters, Last Run, Talent Builds, Stat Profiles, Gear Profiles, and Trends.
+- Stopped the blank rolling combat session Blizzard starts after a completed dungeon from becoming an extra pull.
+- Returned saved damage-meter fields to the metric mapping and removed unused raw per-pull source details from new records.
+- Moved shared encounter and settings access out of the UI so capture, database, analysis, and display responsibilities stay separate.
+- Older saved runs are read through the corrected pull and timer rules without changing or deleting their original records.
+
+## Version 1.8.88 - Reliable Last Run Results
+
+Released July 27, 2026
+
+- Updated Mythic+ capture to Blizzard's current completion-result fields for accurate timed or untimed results, official duration, remaining or overtime, and key upgrades.
+- Stopped using active-combat duration as a substitute for the official Mythic+ timer.
+- Corrected zero-value player metrics so they are not mislabeled as missing data.
+- Both Last Run graphs now use the same saved pull list and matching pull numbers.
+- Last Run returns to the top when the tab opens or a different saved run is selected.
+- Existing saved records remain unchanged; older records without official timing now show that timer data is unavailable instead of reporting a false result.
+
+## Version 1.8.87 - Gear Target Source Label
+
+Released July 27, 2026
+
+- Changed the Gear Dashboard's Upgrade Source label back to Target Source.
+
 ## Version 1.8.86 - Seven-Day Run History
 
 Released July 26, 2026

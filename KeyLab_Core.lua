@@ -122,6 +122,7 @@ local function Initialize()
         KeyLabDB.gearTargets = KeyLabDB.gearTargets or {}
         KeyLabDB.tierSets = KeyLabDB.tierSets or {}
         KeyLabDB.statGoals = KeyLabDB.statGoals or {}
+        KeyLabDB.activityCounts = KeyLabDB.activityCounts or {}
     end
 
     if KeyLab.LootTargetsDB and KeyLab.LootTargetsDB.MigrateLegacy then
@@ -164,6 +165,7 @@ local function ResetAll()
             tierSets = {},
             statGoals = {},
             statGoalMatcherResults = {},
+            activityCounts = { schemaVersion = 1, characters = {} },
         }
     end
 
