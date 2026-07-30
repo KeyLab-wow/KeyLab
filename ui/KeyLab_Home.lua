@@ -225,16 +225,16 @@ function HOME:Create(parent)
     local releaseNoteHeight = 132
     local releaseNote = MakePanel(frame, CFG.x, y, width, releaseNoteHeight, false)
 
-    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.101", 14, COLORS.title, "LEFT")
+    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.115", 14, COLORS.title, "LEFT")
     releaseTitle:SetPoint("TOPLEFT", releaseNote, "TOPLEFT", 14, -12)
     releaseTitle:SetSize(280, 18)
 
     local releaseBody = MakeText(
         releaseNote,
-        "Released July 28, 2026\n\n" ..
-        "- Added the new dark blue and gold main-window background.\n" ..
-        "- Added the KeyLab key icon beside the live header title.\n" ..
-        "- Kept every panel, card, button, and tab fully interactive.",
+        "Released July 30, 2026\n\n" ..
+        "- Refined Macro Sequencer mapping and configuration summaries.\n" ..
+        "- Simplified the editor status area for easier review.\n" ..
+        "- Existing sequences, bindings, and secure execution stay unchanged.",
         11,
         COLORS.muted,
         "LEFT"

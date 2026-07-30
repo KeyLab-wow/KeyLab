@@ -17,9 +17,9 @@ Purpose:
 ]]
 
 local CFG = {
-    width = 620,
-    minHeight = 310,
-    maxHeight = 720,
+    width = 760,
+    minHeight = 390,
+    maxHeight = 760,
     lineHeight = 19,
     maxAlternativesShown = 8,
     colors = {
@@ -30,10 +30,14 @@ local CFG = {
         text = {0.940, 0.960, 0.990, 1.0},
         muted = {0.680, 0.730, 0.820, 1.0},
         blue = {0.500, 0.680, 0.940, 1.0},
+        green = {0.470, 0.850, 0.550, 1.0},
+        violet = {0.720, 0.560, 0.980, 1.0},
+        activity = {1.000, 0.840, 0.300, 1.0},
     },
 }
 
 local frame
+local completionFrame
 local SLOT_SORT = {
     ["Head"] = 1, ["Neck"] = 2, ["Shoulders"] = 3, ["Back"] = 4,
     ["Chest"] = 5, ["Wrist"] = 6, ["Hands"] = 7, ["Waist"] = 8,
@@ -50,6 +54,22 @@ local function SetBackdrop(f, color, borderColor)
     })
     f:SetBackdropColor(unpack(color or CFG.colors.panel))
     f:SetBackdropBorderColor(unpack(borderColor or CFG.colors.border))
+end
+
+local function AddWindowArtwork(f)
+    local art = f:CreateTexture(nil, "BACKGROUND", nil, 1)
+    art:SetAllPoints(f)
+    art:SetTexture("Interface\\AddOns\\KeyLab\\Assets\\KeyLabWindowBackground.tga")
+    art:SetTexCoord(0, CFG.width / 2048, 0, CFG.maxHeight / 1024)
+    art:SetAlpha(0.32)
+    f.backgroundArtwork = art
+
+    local icon = f:CreateTexture(nil, "ARTWORK", nil, 2)
+    icon:SetTexture("Interface\\AddOns\\KeyLab\\Assets\\KeyLabKeyIcon.tga")
+    icon:SetTexCoord(0, 1, 1, 0)
+    icon:SetSize(42, 42)
+    icon:SetPoint("TOPLEFT", f, "TOPLEFT", 14, -10)
+    f.keyLabIcon = icon
 end
 
 local function AddLine(f, text, color, indent)
@@ -96,113 +116,6 @@ local function CurrentSpecID()
         return KeyLab.LootTargetsDB.GetCurrentSpecID()
     end
     return nil
-end
-
-local function GetTrackedList()
-    if not (KeyLab.LootTargetsDB and KeyLab.LootTargetsDB.GetSavedTargetsForSpec) then return {} end
-    local out = {}
-    for _, item in ipairs(KeyLab.LootTargetsDB.GetSavedTargetsForSpec(CurrentSpecID()) or {}) do
-        -- Pending legacy records remain preserved in SavedVariables, but only
-        -- assigned slot Targets belong in this shopping list.
-        if item.slotInstance then table.insert(out, item) end
-    end
-    return out
-end
-
-local function GetAlternativesList()
-    if not (KeyLab.LootTargetsDB and KeyLab.LootTargetsDB.GetAllAlternativesForSpec) then return {} end
-    local out = {}
-    for _, item in ipairs(KeyLab.LootTargetsDB.GetAllAlternativesForSpec(CurrentSpecID()) or {}) do
-        if item.slotInstance then table.insert(out, item) end
-    end
-    return out
-end
-
-local function GetDashboardState()
-    if not (KeyLab.GearingAnalysis and KeyLab.GearingAnalysis.GetDashboardState) then return nil end
-    local ok, state = pcall(KeyLab.GearingAnalysis.GetDashboardState)
-    return ok and type(state) == "table" and state or nil
-end
-
-local function SlotHasCompletedMythTarget(state, slotInstance)
-    local plan = state and state.plansBySlot and state.plansBySlot[slotInstance]
-    return plan and plan.targetEquipped == true and plan.isMythTrack == true or false
-end
-
-local function GetTargetsStillNeeded(targets, state)
-    local out = {}
-    for _, item in ipairs(targets or {}) do
-        if not SlotHasCompletedMythTarget(state, item.slotInstance) then
-            table.insert(out, item)
-        end
-    end
-    return out
-end
-
-local function GetAlternativesStillNeeded(alternatives, state)
-    local out = {}
-    for _, item in ipairs(alternatives or {}) do
-        if not SlotHasCompletedMythTarget(state, item.slotInstance) then
-            table.insert(out, item)
-        end
-    end
-    return out
-end
-
-local function TrackFromTooltipData(data)
-    if type(data) ~= "table" then return nil end
-    for _, line in ipairs(data.lines or {}) do
-        local values = { line.leftText or "", line.rightText or "" }
-        for _, raw in ipairs(values) do
-            local text = tostring(raw or "")
-            text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-            local lower = string.lower(text)
-            if lower:match("myth%s+%d+/%d+") then return "Myth" end
-            if lower:match("hero%s+%d+/%d+") then return "Hero" end
-        end
-    end
-    return nil
-end
-
-local function ParseBagTrack(bagID, bagSlot)
-    if not (C_TooltipInfo and C_TooltipInfo.GetBagItem) then return nil end
-    local ok, data = pcall(C_TooltipInfo.GetBagItem, bagID, bagSlot)
-    return ok and TrackFromTooltipData(data) or nil
-end
-
-local function GetBagItems()
-    local out = {}
-    if not (C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerItemID) then
-        return out
-    end
-
-    local bagIDs, seen = { 0 }, { [0] = true }
-    local maxBag = tonumber(NUM_BAG_SLOTS) or 4
-    for bagID = 1, maxBag do
-        table.insert(bagIDs, bagID)
-        seen[bagID] = true
-    end
-    local reagentBag = Enum and Enum.BagIndex and tonumber(Enum.BagIndex.ReagentBag) or 5
-    if reagentBag and not seen[reagentBag] then table.insert(bagIDs, reagentBag) end
-
-    for _, bagID in ipairs(bagIDs) do
-        local rawSlotCount = C_Container.GetContainerNumSlots(bagID)
-        local slotCount = tonumber(rawSlotCount) or 0
-        for bagSlot = 1, slotCount do
-            -- Empty Retail bag slots may return no Lua values at all. Capture
-            -- the call first so tonumber always receives one value (nil).
-            local rawItemID = C_Container.GetContainerItemID(bagID, bagSlot)
-            local itemID = tonumber(rawItemID)
-            if itemID then
-                local track = ParseBagTrack(bagID, bagSlot)
-                local current = out[itemID]
-                if not current or track == "Myth" or (track == "Hero" and current.track ~= "Myth") then
-                    out[itemID] = { track = track }
-                end
-            end
-        end
-    end
-    return out
 end
 
 local function SortItems(items)
@@ -334,42 +247,403 @@ local function AddGroupSection(f, title, groups, bagItems, alternativeBudget)
     end
 end
 
+local function ResetCards(f)
+    f.cardIndex = 0
+    f.contentY = 0
+    for _, card in ipairs(f.cards or {}) do
+        card:Hide()
+        for _, line in ipairs(card.lines or {}) do line:Hide() end
+        for _, panel in ipairs(card.rollGroupPanels or {}) do panel:Hide() end
+    end
+end
+
+local function NewCard(f, title, accentColor)
+    f.cardIndex = (f.cardIndex or 0) + 1
+    local card = f.cards[f.cardIndex]
+    if not card then
+        card = CreateFrame("Frame", nil, f.content, "BackdropTemplate")
+        card.lines = {}
+        f.cards[f.cardIndex] = card
+    end
+    card:ClearAllPoints()
+    card:SetPoint("TOPLEFT", f.content, "TOPLEFT", 0, f.contentY or 0)
+    card:SetWidth(f.contentWidth)
+    SetBackdrop(card, CFG.colors.panel, accentColor or CFG.colors.border)
+    card.lineIndex = 0
+    card.rollGroupIndex = 0
+    for _, panel in ipairs(card.rollGroupPanels or {}) do panel:Hide() end
+    card.cursorY = -12
+    card:Show()
+
+    if title and title ~= "" then
+        card.lineIndex = 1
+        local fs = card.lines[1]
+        if not fs then
+            fs = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            fs:SetJustifyH("LEFT")
+            fs:SetWordWrap(false)
+            card.lines[1] = fs
+        end
+        fs:ClearAllPoints()
+        fs:SetPoint("TOPLEFT", card, "TOPLEFT", 14, card.cursorY)
+        fs:SetPoint("RIGHT", card, "RIGHT", -14, 0)
+        fs:SetTextColor(unpack(accentColor or CFG.colors.gold))
+        fs:SetText(title)
+        fs:Show()
+        card.cursorY = card.cursorY - 27
+    end
+    return card
+end
+
+local function AddCardLine(card, text, color, indent, template, wrap)
+    card.lineIndex = (card.lineIndex or 0) + 1
+    local fs = card.lines[card.lineIndex]
+    if not fs then
+        fs = card:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
+        fs:SetJustifyH("LEFT")
+        card.lines[card.lineIndex] = fs
+    end
+    local lineHeight = wrap and 30 or CFG.lineHeight
+    fs:ClearAllPoints()
+    fs:SetPoint("TOPLEFT", card, "TOPLEFT", 14 + (indent or 0), card.cursorY)
+    fs:SetPoint("RIGHT", card, "RIGHT", -14, 0)
+    fs:SetHeight(lineHeight)
+    fs:SetJustifyV("TOP")
+    fs:SetWordWrap(wrap == true)
+    fs:SetTextColor(unpack(color or CFG.colors.text))
+    fs:SetText(text or "")
+    fs:Show()
+    card.cursorY = card.cursorY - lineHeight
+    return fs
+end
+
+local function AddColumnLine(card, column, text, color, indent, template, wrap)
+    card.lineIndex = (card.lineIndex or 0) + 1
+    local fs = card.lines[card.lineIndex]
+    if not fs then
+        fs = card:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
+        fs:SetJustifyH("LEFT")
+        card.lines[card.lineIndex] = fs
+    end
+    local lineHeight = wrap and 30 or CFG.lineHeight
+    local gap = 18
+    local columnWidth = math.floor(((card:GetWidth() or 600) - 28 - gap) / 2)
+    local x = 14 + ((column - 1) * (columnWidth + gap))
+    local y = card.columnY[column]
+    fs:ClearAllPoints()
+    fs:SetPoint("TOPLEFT", card, "TOPLEFT", x + (indent or 0), y)
+    fs:SetSize(columnWidth - (indent or 0), lineHeight)
+    fs:SetJustifyV("TOP")
+    fs:SetWordWrap(wrap == true)
+    fs:SetTextColor(unpack(color or CFG.colors.text))
+    fs:SetText(text or "")
+    fs:Show()
+    card.columnY[column] = y - lineHeight
+    return fs
+end
+
+local function AddRollGroupPanel(card, column, group, fullWidth)
+    card.rollGroupIndex = (card.rollGroupIndex or 0) + 1
+    card.rollGroupPanels = card.rollGroupPanels or {}
+    local panel = card.rollGroupPanels[card.rollGroupIndex]
+    if not panel then
+        panel = CreateFrame("Frame", nil, card, "BackdropTemplate")
+        panel.itemLines = {}
+        panel.itemRows = {}
+        panel.title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        panel.title:SetJustifyH("LEFT")
+        panel.kind = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        panel.kind:SetJustifyH("RIGHT")
+        card.rollGroupPanels[card.rollGroupIndex] = panel
+    end
+
+    local gap = 18
+    local cardWidth = card:GetWidth() or 600
+    local columnWidth = math.floor((cardWidth - 28 - gap) / 2)
+    local panelWidth = fullWidth and (cardWidth - 28) or columnWidth
+    local x = fullWidth and 14 or (14 + ((column - 1) * (columnWidth + gap)))
+    local y = fullWidth and card.cursorY or card.columnY[column]
+    local itemCount = #(group.items or {})
+    local rowCount = fullWidth and math.ceil(itemCount / 2) or itemCount
+    local panelHeight = 42 + (math.max(1, rowCount) * CFG.lineHeight)
+    local kindColor = group.sourceType == "Raid" and CFG.colors.violet or CFG.colors.blue
+
+    panel:ClearAllPoints()
+    panel:SetPoint("TOPLEFT", card, "TOPLEFT", x, y)
+    panel:SetSize(panelWidth, panelHeight)
+    SetBackdrop(panel, {0.012, 0.025, 0.052, 0.98}, kindColor)
+
+    panel.title:ClearAllPoints()
+    panel.title:SetPoint("TOPLEFT", panel, "TOPLEFT", 11, -9)
+    panel.title:SetSize(panelWidth - 96, 20)
+    panel.title:SetTextColor(unpack(CFG.colors.activity))
+    panel.title:SetText(tostring(group.sourceName or "Current Activity"))
+
+    panel.kind:ClearAllPoints()
+    panel.kind:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -10, -11)
+    panel.kind:SetSize(78, 16)
+    panel.kind:SetTextColor(unpack(kindColor))
+    panel.kind:SetText(group.sourceType == "Raid" and "RAID" or "DUNGEON")
+
+    local itemColumnWidth = fullWidth and math.floor((panelWidth - 34) / 2) or (panelWidth - 22)
+    for index, item in ipairs(group.items or {}) do
+        local row = panel.itemRows[index]
+        if not row then
+            row = panel:CreateTexture(nil, "BACKGROUND")
+            row:SetTexture("Interface\\Buttons\\WHITE8x8")
+            panel.itemRows[index] = row
+        end
+        local line = panel.itemLines[index]
+        if not line then
+            line = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            line:SetJustifyH("LEFT")
+            line:SetWordWrap(false)
+            panel.itemLines[index] = line
+        end
+        local itemColumn = fullWidth and (((index - 1) % 2) + 1) or 1
+        local itemRow = fullWidth and math.floor((index - 1) / 2) or (index - 1)
+        local itemX = 11 + ((itemColumn - 1) * (itemColumnWidth + 12))
+        local rowY = -31 - (itemRow * CFG.lineHeight)
+        local label = tostring(item.displaySlot or item.slotName or "Gear")
+            .. " - " .. tostring(item.itemName or "Myth Item")
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", panel, "TOPLEFT", itemX - 3, rowY)
+        row:SetSize(itemColumnWidth + 6, CFG.lineHeight - 1)
+        if itemRow % 2 == 0 then
+            row:SetVertexColor(0.060, 0.100, 0.165, 0.72)
+        else
+            row:SetVertexColor(0.030, 0.060, 0.115, 0.72)
+        end
+        row:Show()
+        line:ClearAllPoints()
+        line:SetPoint("TOPLEFT", panel, "TOPLEFT", itemX, -32 - (itemRow * CFG.lineHeight))
+        line:SetSize(itemColumnWidth, CFG.lineHeight)
+        line:SetTextColor(unpack(item.isTier and CFG.colors.gold or CFG.colors.text))
+        line:SetText(label)
+        line:Show()
+    end
+    for index = itemCount + 1, #(panel.itemLines or {}) do
+        panel.itemLines[index]:Hide()
+        if panel.itemRows[index] then panel.itemRows[index]:Hide() end
+    end
+    panel:Show()
+
+    if fullWidth then
+        card.cursorY = y - panelHeight - 8
+    else
+        card.columnY[column] = y - panelHeight - 8
+    end
+end
+
+local function AddCardGap(card, height)
+    card.cursorY = card.cursorY - (height or 8)
+end
+
+local function FinishCard(f, card)
+    for index = (card.lineIndex or 0) + 1, #(card.lines or {}) do card.lines[index]:Hide() end
+    local height = math.max(54, math.abs(card.cursorY or -54) + 10)
+    card:SetHeight(height)
+    f.contentY = (f.contentY or 0) - height - 10
+    return card
+end
+
+local function AddSavedGearCard(f, title, groups, bagItems, alternativeBudget)
+    if #(groups or {}) == 0 then return end
+    local targetCount, alternativeCount = 0, 0
+    for _, group in ipairs(groups) do
+        targetCount = targetCount + #(group.targets or {})
+        alternativeCount = alternativeCount + #(group.alternatives or {})
+    end
+    local countText = tostring(targetCount) .. (targetCount == 1 and " Target" or " Targets")
+    if alternativeCount > 0 then
+        countText = countText .. "  •  " .. tostring(alternativeCount)
+            .. (alternativeCount == 1 and " Alternative" or " Alternatives")
+    end
+    local card = NewCard(f, title .. "  •  " .. countText, CFG.colors.blue)
+    AddCardLine(card, "Not owned yet. Run the activity below for the saved item.",
+        CFG.colors.muted, 0, "GameFontDisableSmall")
+    AddCardGap(card, 3)
+    local added = false
+    for _, group in ipairs(groups) do
+        local canShowAlternative = alternativeBudget.value > 0 and #(group.alternatives or {}) > 0
+        if #(group.targets or {}) > 0 or canShowAlternative then
+            if added then AddCardGap(card, 5) end
+            AddCardLine(card, tostring(group.sourceName), CFG.colors.gold, 0, "GameFontNormal")
+            for _, item in ipairs(group.targets or {}) do
+                local slotName = item.slotInstance or item.slot or "Gear"
+                local itemName = StripColorCodes(item.name or ("Item " .. tostring(item.itemID)))
+                local bagRecord = bagItems and bagItems[tonumber(item.itemID)]
+                local bagTrack = bagRecord and (bagRecord.track or item.upgradeTrack)
+                local suffix = (bagTrack == "Hero" or bagTrack == "Myth")
+                    and (" (In Bags - " .. bagTrack .. ")") or ""
+                AddCardLine(card, "•  " .. tostring(slotName) .. " - " .. itemName .. suffix,
+                    CFG.colors.text, 16)
+            end
+            for _, item in ipairs(group.alternatives or {}) do
+                if alternativeBudget.value > 0 then
+                    local slotName = item.slotInstance or item.slot or "Gear"
+                    local itemName = StripColorCodes(item.name or ("Item " .. tostring(item.itemID)))
+                    local bagRecord = bagItems and bagItems[tonumber(item.itemID)]
+                    local bagTrack = bagRecord and (bagRecord.track or item.upgradeTrack)
+                    local suffix = " (Alternative)"
+                    if bagTrack == "Hero" or bagTrack == "Myth" then
+                        suffix = suffix .. " (In Bags - " .. bagTrack .. ")"
+                    end
+                    AddCardLine(card, "◇  " .. tostring(slotName) .. " - " .. itemName .. suffix,
+                        CFG.colors.blue, 16)
+                    alternativeBudget.value = alternativeBudget.value - 1
+                    alternativeBudget.shown = alternativeBudget.shown + 1
+                end
+            end
+            added = true
+        end
+    end
+    if added then FinishCard(f, card) else card:Hide() end
+end
+
+local function GetShoppingPlan(filters)
+    if not (KeyLab.GearingAnalysis and KeyLab.GearingAnalysis.GetGearShoppingPlan) then return nil end
+    local ok, plan = pcall(KeyLab.GearingAnalysis.GetGearShoppingPlan, filters)
+    return ok and type(plan) == "table" and plan or nil
+end
+
+local function GetNebulousRollPlan(filters)
+    local shoppingPlan = GetShoppingPlan(filters)
+    return shoppingPlan and shoppingPlan.nebulousRollPlan or nil
+end
+
+local function AddNebulousRollCard(f, plan, compact)
+    if not plan or (tonumber(plan.itemCount) or 0) == 0 then return false end
+    local title = compact and "Roll for These Myth Items" or "Nebulous Voidcore Rolls"
+    local card = NewCard(f, title, CFG.colors.violet)
+    if compact then
+        AddCardLine(card,
+            "Use a Nebulous Voidcore here for a chance at these needed Myth-track slots.",
+            CFG.colors.muted, 0, "GameFontDisableSmall", true)
+    else
+        AddCardLine(card,
+            "Run these dungeons or raids, then use a Nebulous Voidcore to roll for a Myth-track item.",
+            CFG.colors.muted, 0, "GameFontDisableSmall", true)
+    end
+    AddCardLine(card, "Nebulous Voidcores Available: " .. tostring(plan.currencyCount or 0), CFG.colors.green)
+    AddCardGap(card, 4)
+
+    card.columnY = { card.cursorY, card.cursorY }
+    if compact and #(plan.groups or {}) == 1 then
+        AddRollGroupPanel(card, 1, plan.groups[1], true)
+    else
+        local columns, weights = { {}, {} }, { 0, 0 }
+        for _, group in ipairs(plan.groups or {}) do
+            local column = weights[1] <= weights[2] and 1 or 2
+            table.insert(columns[column], group)
+            weights[column] = weights[column] + 3 + #(group.items or {})
+        end
+        for column = 1, 2 do
+            for _, group in ipairs(columns[column]) do
+                AddRollGroupPanel(card, column, group, false)
+            end
+        end
+        card.cursorY = math.min(card.columnY[1], card.columnY[2])
+    end
+    FinishCard(f, card)
+    return true
+end
+
+local function CreateCloseButton(parent)
+    local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    button:SetSize(28, 28)
+    SetBackdrop(button, {0.20, 0.025, 0.025, 0.98}, CFG.colors.gold)
+    local label = button:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    label:SetPoint("CENTER", button, "CENTER", 0, 1)
+    label:SetText("X")
+    label:SetTextColor(1.0, 0.82, 0.16, 1.0)
+    button:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(0.48, 0.035, 0.025, 1.0)
+        self:SetBackdropBorderColor(1.0, 0.82, 0.16, 1.0)
+    end)
+    button:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(0.20, 0.025, 0.025, 0.98)
+        self:SetBackdropBorderColor(unpack(CFG.colors.gold))
+    end)
+    return button
+end
+
+local function GetShoppingWindowPosition()
+    if KeyLab.DB and KeyLab.DB.GetSettingTable then
+        return KeyLab.DB.GetSettingTable("gearShoppingWindowPosition")
+    end
+    KeyLabDB = type(KeyLabDB) == "table" and KeyLabDB or {}
+    KeyLabDB.settings = type(KeyLabDB.settings) == "table" and KeyLabDB.settings or {}
+    KeyLabDB.settings.gearShoppingWindowPosition =
+        type(KeyLabDB.settings.gearShoppingWindowPosition) == "table"
+            and KeyLabDB.settings.gearShoppingWindowPosition or {}
+    return KeyLabDB.settings.gearShoppingWindowPosition
+end
+
+local function ApplyShoppingWindowPosition(f)
+    local position = GetShoppingWindowPosition()
+    local x = position.userPlaced and tonumber(position.x) or 180
+    local y = position.userPlaced and tonumber(position.y) or 0
+    f:ClearAllPoints()
+    f:SetPoint("CENTER", UIParent, "CENTER", x, y)
+    f.positionApplied = true
+end
+
+local function SaveShoppingWindowPosition(f)
+    f:StopMovingOrSizing()
+    local centerX, centerY = f:GetCenter()
+    local parentX, parentY = UIParent and UIParent:GetCenter()
+    if not centerX or not centerY or not parentX or not parentY then return end
+
+    local position = GetShoppingWindowPosition()
+    position.userPlaced = true
+    position.x = centerX - parentX
+    position.y = centerY - parentY
+    ApplyShoppingWindowPosition(f)
+end
+
 local function EnsureFrame()
     if frame then return frame end
 
     frame = CreateFrame("Frame", "KeyLabGearTargetsWindow", UIParent, "BackdropTemplate")
     frame:SetSize(CFG.width, CFG.minHeight)
-    frame:SetFrameStrata("DIALOG")
+    frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    frame:SetFrameLevel(1100)
+    if frame.SetToplevel then frame:SetToplevel(true) end
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
     frame:SetMovable(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
-    frame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-    SetBackdrop(frame, CFG.colors.bg, CFG.colors.border)
+    frame:SetScript("OnDragStop", SaveShoppingWindowPosition)
+    SetBackdrop(frame, CFG.colors.bg, CFG.colors.gold)
+    AddWindowArtwork(frame)
 
     frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -14)
+    frame.title:SetPoint("TOP", frame, "TOP", 0, -17)
+    frame.title:SetSize(CFG.width - 90, 28)
+    frame.title:SetJustifyH("CENTER")
     frame.title:SetText("KeyLab Gear Targets")
     frame.title:SetTextColor(unpack(CFG.colors.gold))
 
     frame.subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    frame.subtitle:SetPoint("TOPLEFT", frame.title, "BOTTOMLEFT", 0, -4)
-    frame.subtitle:SetPoint("RIGHT", frame, "RIGHT", -44, 0)
-    frame.subtitle:SetText("Your saved shopping list while browsing groups")
+    frame.subtitle:SetPoint("TOP", frame.title, "BOTTOM", 0, -1)
+    frame.subtitle:SetSize(CFG.width - 90, 20)
+    frame.subtitle:SetJustifyH("CENTER")
+    frame.subtitle:SetText("Your saved gear plan while browsing dungeons and raids")
     frame.subtitle:SetTextColor(unpack(CFG.colors.muted))
 
-    local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+    local close = CreateCloseButton(frame)
+    close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -10)
     close:SetScript("OnClick", function()
         frame.manualOpen = false
         frame.autoOpen = false
         frame:Hide()
     end)
 
-    frame.scroll = CreateFrame("ScrollFrame", nil, frame)
-    frame.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -62)
-    frame.scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -12, 12)
+    frame.scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    frame.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -70)
+    frame.scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 12)
     frame.scroll:EnableMouseWheel(true)
     frame.scroll:SetScript("OnMouseWheel", function(self, delta)
         local current = self:GetVerticalScroll() or 0
@@ -378,74 +652,164 @@ local function EnsureFrame()
     end)
 
     frame.content = CreateFrame("Frame", nil, frame.scroll)
-    frame.content:SetWidth(CFG.width - 38)
+    frame.contentWidth = CFG.width - 100
+    frame.content:SetWidth(frame.contentWidth)
     frame.content:SetHeight(1)
     frame.scroll:SetScrollChild(frame.content)
     frame.lines = {}
+    frame.cards = {}
 
-    frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    ApplyShoppingWindowPosition(frame)
     frame:Hide()
     return frame
 end
 
+local function EnsureCompletionFrame()
+    if completionFrame then return completionFrame end
+
+    local f = CreateFrame("Frame", "KeyLabNebulousRollReminder", UIParent, "BackdropTemplate")
+    f:SetSize(650, 390)
+    f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    f:SetFrameStrata("FULLSCREEN_DIALOG")
+    f:SetFrameLevel(1200)
+    if f.SetToplevel then f:SetToplevel(true) end
+    f:SetClampedToScreen(true)
+    f:EnableMouse(true)
+    f:SetMovable(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", function(self) self:StartMoving() end)
+    f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+    SetBackdrop(f, CFG.colors.bg, CFG.colors.gold)
+    AddWindowArtwork(f)
+
+    f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    f.title:SetPoint("TOP", f, "TOP", 0, -17)
+    f.title:SetSize(560, 28)
+    f.title:SetJustifyH("CENTER")
+    f.title:SetText("Nebulous Voidcore Roll Reminder")
+    f.title:SetTextColor(unpack(CFG.colors.gold))
+
+    f.subtitle = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    f.subtitle:SetPoint("TOP", f.title, "BOTTOM", 0, -1)
+    f.subtitle:SetSize(560, 34)
+    f.subtitle:SetJustifyH("CENTER")
+    f.subtitle:SetJustifyV("TOP")
+    f.subtitle:SetWordWrap(true)
+    f.subtitle:SetTextColor(unpack(CFG.colors.muted))
+
+    local close = CreateCloseButton(f)
+    close:SetPoint("TOPRIGHT", f, "TOPRIGHT", -10, -10)
+    close:SetScript("OnClick", function() f:Hide() end)
+
+    f.scroll = CreateFrame("ScrollFrame", nil, f, "UIPanelScrollFrameTemplate")
+    f.scroll:SetPoint("TOPLEFT", f, "TOPLEFT", 18, -82)
+    f.scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -34, 16)
+    f.scroll:EnableMouseWheel(true)
+    f.scroll:SetScript("OnMouseWheel", function(self, delta)
+        local current = self:GetVerticalScroll() or 0
+        local maximum = math.max(0, (f.content:GetHeight() or 0) - (self:GetHeight() or 0))
+        self:SetVerticalScroll(math.max(0, math.min(maximum, current - (delta * 48))))
+    end)
+
+    f.content = CreateFrame("Frame", nil, f.scroll)
+    f.contentWidth = 550
+    f.content:SetSize(f.contentWidth, 1)
+    f.scroll:SetScrollChild(f.content)
+    f.cards = {}
+    f:Hide()
+    completionFrame = f
+    return f
+end
+
+local function ShowCompletionPlan(plan, subtitle)
+    if not plan or (tonumber(plan.itemCount) or 0) == 0 then return false end
+    local f = EnsureCompletionFrame()
+    ResetCards(f)
+    f.subtitle:SetText(subtitle or "This activity is complete. Check your saved Myth-item roll list.")
+    AddNebulousRollCard(f, plan, true)
+
+    local note = NewCard(f, "Before You Roll", CFG.colors.blue)
+    AddCardLine(note,
+        "This reminder only lists slots from your current Gear Dashboard plan. It does not press, move, or use any Blizzard loot controls.",
+        CFG.colors.muted, 0, "GameFontDisableSmall", true)
+    FinishCard(f, note)
+
+    local contentHeight = math.max(1, math.abs(f.contentY or 0))
+    f.content:SetHeight(contentHeight)
+    f.scroll:SetVerticalScroll(0)
+    local screenHeight = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 760
+    local maximumHeight = math.min(680, math.max(390, screenHeight - 80))
+    f:SetHeight(math.max(390, math.min(maximumHeight, 108 + contentHeight)))
+    f:Show()
+    if f.Raise then f:Raise() end
+    return true
+end
+
 function GearWindow.Refresh()
     local f = EnsureFrame()
+    local previousScroll = f.scroll and (f.scroll:GetVerticalScroll() or 0) or 0
     f.currentResultNames = nil
-    f.lineIndex = 0
+    ResetCards(f)
 
-    local allTargets = GetTrackedList()
-    local allAlternatives = GetAlternativesList()
-    local dashboardState = GetDashboardState()
-    local targets = GetTargetsStillNeeded(allTargets, dashboardState)
-    local alternatives = GetAlternativesStillNeeded(allAlternatives, dashboardState)
+    local shoppingPlan = GetShoppingPlan() or {}
+    local targets = shoppingPlan.targets or {}
+    local alternatives = shoppingPlan.alternatives or {}
+    local bagItems = shoppingPlan.bagItems or {}
     local groups = BuildTargetGroups(targets, alternatives)
-    local bagItems = GetBagItems()
     local alternativeBudget = { value = CFG.maxAlternativesShown, shown = 0 }
 
-    AddLine(f, "Saved Gear Shopping List", CFG.colors.gold)
-    AddLine(f, "Still-needed Targets and saved Alternatives, grouped by where they drop.", CFG.colors.muted)
+    local intro = NewCard(f, "Saved Gear Shopping List", CFG.colors.gold)
+    AddCardLine(intro,
+        "Still-needed Targets and saved Alternatives, grouped by where they drop.",
+        CFG.colors.muted, 0, "GameFontDisableSmall")
+    FinishCard(f, intro)
 
     if #targets == 0 and #alternatives == 0 then
-        AddBlank(f)
-        AddLine(f, "No gear is currently needed from your saved plan.", CFG.colors.muted)
-        AddLine(f, "Open Gear Targets to choose items you want to track.", CFG.colors.text)
+        local empty = NewCard(f, "Saved Targets", CFG.colors.blue)
+        AddCardLine(empty, "No gear is currently needed from your saved plan.", CFG.colors.muted)
+        AddCardLine(empty, "Open Gear Targets to choose items you want to track.", CFG.colors.text)
+        FinishCard(f, empty)
     else
-        AddGroupSection(f, "Dungeon Gear", FilterGroups(groups, "Dungeon"), bagItems, alternativeBudget)
-        AddGroupSection(f, "Raid Gear", FilterGroups(groups, "Raid"), bagItems, alternativeBudget)
-        AddGroupSection(f, "Other Saved Gear", FilterGroups(groups, "Other"), bagItems, alternativeBudget)
+        AddSavedGearCard(f, "Dungeon Gear", FilterGroups(groups, "Dungeon"), bagItems, alternativeBudget)
+        AddSavedGearCard(f, "Raid Gear", FilterGroups(groups, "Raid"), bagItems, alternativeBudget)
+        AddSavedGearCard(f, "Other Saved Gear", FilterGroups(groups, "Other"), bagItems, alternativeBudget)
     end
 
-    AddBlank(f)
-    AddLine(f, "Targets Still Needed: " .. tostring(#targets)
+    AddNebulousRollCard(f, shoppingPlan.nebulousRollPlan, false)
+
+    local summary = NewCard(f, "Plan Summary", CFG.colors.border)
+    AddCardLine(summary, "Targets Still Needed: " .. tostring(#targets)
         .. "  |  Alternatives Shown: " .. tostring(alternativeBudget.shown)
         .. " of " .. tostring(#alternatives), CFG.colors.muted)
     local hiddenAlternatives = #alternatives - alternativeBudget.shown
     if hiddenAlternatives > 0 then
-        AddLine(f, "+ " .. tostring(hiddenAlternatives) .. " more Alternative"
+        AddCardLine(summary, "+ " .. tostring(hiddenAlternatives) .. " more Alternative"
             .. (hiddenAlternatives == 1 and "" or "s") .. " saved in Gear Targets.", CFG.colors.muted)
     end
-    AddLine(f, "Equipped Myth-track Targets stay saved and are left off this list.", CFG.colors.muted)
-    HideUnusedLines(f)
+    AddCardLine(summary,
+        "Equipped Hero Targets with a Nebulous roll move to the roll list. Equipped Myth Targets stay saved and remain hidden.",
+        CFG.colors.muted, 0, "GameFontDisableSmall", true)
+    FinishCard(f, summary)
 
-    local contentHeight = math.max(1, (f.lineIndex or 0) * CFG.lineHeight)
+    local contentHeight = math.max(1, math.abs(f.contentY or 0))
     f.content:SetHeight(contentHeight)
-    f.scroll:SetVerticalScroll(0)
     local screenHeight = UIParent and UIParent.GetHeight and UIParent:GetHeight() or CFG.maxHeight + 80
     local maximumHeight = math.min(CFG.maxHeight, math.max(CFG.minHeight, screenHeight - 80))
-    local neededHeight = 82 + contentHeight
+    local neededHeight = 94 + contentHeight
     f:SetHeight(math.max(CFG.minHeight, math.min(maximumHeight, neededHeight)))
+    local maximumScroll = math.max(0, contentHeight - (f.scroll:GetHeight() or 0))
+    f.scroll:SetVerticalScroll(math.min(previousScroll, maximumScroll))
+    f.lastShoppingRefreshAt = GetTime and GetTime() or 0
 end
 
 function GearWindow.AnchorDefaultForLFG()
     local f = EnsureFrame()
-    f:ClearAllPoints()
-    f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    if not f.positionApplied then ApplyShoppingWindowPosition(f) end
 end
 
 function GearWindow.ShowManual()
     local f = EnsureFrame()
-    f:ClearAllPoints()
-    f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    if not f.positionApplied then ApplyShoppingWindowPosition(f) end
     f.manualOpen = true
     GearWindow.Refresh()
     f:Show()
@@ -464,10 +828,14 @@ end
 
 function GearWindow.ShowForLFG()
     local f = EnsureFrame()
-    local needsRefresh = not f:IsShown() or not f.autoOpen
+    local now = GetTime and GetTime() or 0
+    local needsRefresh = not f:IsShown()
+        or not f.autoOpen
+        or now == 0
+        or now - (tonumber(f.lastShoppingRefreshAt) or 0) >= 1
     f.autoOpen = true
     f.currentResultNames = nil
-    GearWindow.AnchorDefaultForLFG()
+    if not f.positionApplied then ApplyShoppingWindowPosition(f) end
     if needsRefresh then GearWindow.Refresh() end
     f:Show()
 end
@@ -487,5 +855,65 @@ function GearWindow.RefreshVisible()
     local f = EnsureFrame()
     if f:IsShown() then GearWindow.Refresh() end
 end
+
+function GearWindow.ShowCompletionForDungeon(mapID, dungeonName)
+    mapID = tonumber(mapID)
+    if not mapID then return false end
+    local source = KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetSource
+        and KeyLab.GearLootMapping.GetSource(mapID) or nil
+    local name = dungeonName or source and (source.sourceName or source.name) or "Mythic+ dungeon"
+    return ShowCompletionPlan(
+        GetNebulousRollPlan({ sourceID = mapID }),
+        tostring(name) .. " is complete. These are the Myth items in your plan for this dungeon."
+    )
+end
+
+function GearWindow.ShowCompletionForRaid(encounterID, encounterName)
+    encounterID = tonumber(encounterID)
+    if not encounterID then return false end
+    return ShowCompletionPlan(
+        GetNebulousRollPlan({ encounterID = encounterID }),
+        tostring(encounterName or "Raid boss") .. " is defeated. These are the Myth items in your plan for this boss."
+    )
+end
+
+local activeChallengeMapID
+local function ReadActiveChallengeMapID()
+    if not (C_ChallengeMode and C_ChallengeMode.GetActiveChallengeMapID) then return nil end
+    local ok, mapID = pcall(C_ChallengeMode.GetActiveChallengeMapID)
+    return ok and tonumber(mapID) or nil
+end
+
+-- Build the reminder while the addon loads so a boss kill never needs to
+-- create its buttons or frames during combat lockdown.
+EnsureCompletionFrame()
+
+local completionEvents = CreateFrame("Frame")
+completionEvents:RegisterEvent("CHALLENGE_MODE_START")
+completionEvents:RegisterEvent("CHALLENGE_MODE_COMPLETED")
+completionEvents:RegisterEvent("CHALLENGE_MODE_RESET")
+completionEvents:RegisterEvent("ENCOUNTER_END")
+completionEvents:SetScript("OnEvent", function(_, event, ...)
+    if event == "CHALLENGE_MODE_START" then
+        activeChallengeMapID = ReadActiveChallengeMapID()
+        return
+    end
+    if event == "CHALLENGE_MODE_RESET" then
+        activeChallengeMapID = nil
+        return
+    end
+    if event == "CHALLENGE_MODE_COMPLETED" then
+        local mapID = activeChallengeMapID or ReadActiveChallengeMapID()
+        activeChallengeMapID = nil
+        if mapID then GearWindow.ShowCompletionForDungeon(mapID) end
+        return
+    end
+    if event == "ENCOUNTER_END" then
+        local encounterID, encounterName, _, _, success = ...
+        if success == 1 or success == true then
+            GearWindow.ShowCompletionForRaid(encounterID, encounterName)
+        end
+    end
+end)
 
 return GearWindow

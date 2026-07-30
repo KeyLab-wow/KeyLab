@@ -16,6 +16,15 @@ local COLORS = Theme.colors or {
 }
 
 local function Lib() return KeyLab.SequencerLibrary or {} end
+local MODE_OPTIONS = {
+    {value="even_cycle",label="Even Cycle",description="Each macro receives one turn in the order shown."},
+    {value="weighted_cycle",label="Weighted Cycle",description="Macros nearer the top receive additional turns."},
+}
+local MODE_OPTIONS_WITH_MIXED = {
+    {value="mixed",label="Mixed Groups",description="This version uses more than one Macro Group cycle."},
+    {value="even_cycle",label="Even Cycle",description="Each macro receives one turn in the order shown."},
+    {value="weighted_cycle",label="Weighted Cycle",description="Macros nearer the top receive additional turns."},
+}
 local function Trim(value)
     value = tostring(value or "")
     value = value:gsub("^%s+", "")
@@ -108,6 +117,16 @@ local function Dropdown(parent,width,optionsProvider,getValue,setValue)
     dropdown.optionsProvider=optionsProvider; dropdown.getValue=getValue; dropdown.setValue=setValue
     dropdown.menu=CreateFrame("Frame",nil,UIParent,"BackdropTemplate"); dropdown.menu:SetFrameStrata("TOOLTIP"); dropdown.menu:SetFrameLevel(9000); dropdown.menu:SetWidth(width); dropdown.menu:Hide(); Style(dropdown.menu,COLORS.bg,COLORS.gold)
     dropdown.menu.rows={}; dropdown.menu.offset=1; dropdown.menu:EnableMouseWheel(true)
+    local function HideOptionTooltip()
+        if GameTooltip then GameTooltip:Hide() end
+    end
+    local function ShowOptionTooltip(owner,option)
+        if not GameTooltip or not option or not option.description then return end
+        GameTooltip:SetOwner(owner,"ANCHOR_RIGHT")
+        GameTooltip:SetText(tostring(option.label or ""),COLORS.gold[1],COLORS.gold[2],COLORS.gold[3])
+        GameTooltip:AddLine(tostring(option.description),COLORS.text[1],COLORS.text[2],COLORS.text[3],true)
+        GameTooltip:Show()
+    end
     local function PopulateMenu()
         local options=type(optionsProvider)=="function" and optionsProvider() or optionsProvider or {}
         local visible=math.min(10,math.max(1,#options)); local maxOffset=math.max(1,#options-visible+1)
@@ -124,8 +143,8 @@ local function Dropdown(parent,width,optionsProvider,getValue,setValue)
                     dropdown.menu:Hide(); if activeDropdown==dropdown then activeDropdown=nil end
                     if accepted~=false then dropdown:RefreshText() end
                 end)
-                row:SetScript("OnEnter",ApplyButtonHoverStyle)
-                row:SetScript("OnLeave",ApplyButtonRestingStyle)
+                row:SetScript("OnEnter",function(self) ApplyButtonHoverStyle(self); ShowOptionTooltip(self,self.option) end)
+                row:SetScript("OnLeave",function(self) ApplyButtonRestingStyle(self); HideOptionTooltip() end)
                 dropdown.menu.rows[rowIndex]=row
             end
             local option=options[dropdown.menu.offset+rowIndex-1]; row.option=option; row:SetShown(option~=nil)
@@ -148,8 +167,15 @@ local function Dropdown(parent,width,optionsProvider,getValue,setValue)
         activeDropdown=dropdown; dropdown.menu.offset=1; dropdown.menu:ClearAllPoints(); dropdown.menu:SetPoint("TOPLEFT",dropdown,"BOTTOMLEFT",0,-2); PopulateMenu(); dropdown.menu:Show()
     end)
     dropdown:SetScript("OnHide",function() dropdown.menu:Hide(); if activeDropdown==dropdown then activeDropdown=nil end end)
-    dropdown:SetScript("OnEnter",ApplyButtonHoverStyle)
-    dropdown:SetScript("OnLeave",ApplyButtonRestingStyle)
+    dropdown:SetScript("OnEnter",function(self)
+        ApplyButtonHoverStyle(self)
+        local options=type(self.optionsProvider)=="function" and self.optionsProvider() or self.optionsProvider or {}
+        local current=self.getValue and self.getValue() or nil
+        for _,option in ipairs(options) do
+            if option.value==current then ShowOptionTooltip(self,option); break end
+        end
+    end)
+    dropdown:SetScript("OnLeave",function(self) ApplyButtonRestingStyle(self); HideOptionTooltip() end)
     dropdown.RefreshText=function(self)
         local options=type(self.optionsProvider)=="function" and self.optionsProvider() or self.optionsProvider or {}
         local current=self.getValue and self.getValue() or nil
@@ -194,14 +220,14 @@ local EXAMPLE_SEQUENCES={
         activeVersionId="__keylab_example_disc_4_default",versionOrder={"__keylab_example_disc_4_default","__keylab_example_disc_4_sba"},
         versions={
             __keylab_example_disc_4_default={
-                id="__keylab_example_disc_4_default",name="Version Default",mode="priority",blocks={
+                id="__keylab_example_disc_4_default",name="Version Default",mode="weighted_cycle",blocks={
                     {enabled=true,macroText="/castsequence [@target, nochanneling] Shadow Word: Pain, Mind Blast"},
                     {enabled=true,macroText="/cast [@target, nochanneling] Penance"},
                     {enabled=true,macroText="/cast [@target, nochanneling] Smite"},
                 },
             },
             __keylab_example_disc_4_sba={
-                id="__keylab_example_disc_4_sba",name="SBA",mode="sequential",blocks={
+                id="__keylab_example_disc_4_sba",name="SBA",mode="even_cycle",blocks={
                     {enabled=true,macroText="/cast [@target, nochanneling] Single-Button Assistant"},
                 },
             },
@@ -212,7 +238,7 @@ local EXAMPLE_SEQUENCES={
         activeVersionId="__keylab_example_bm_pgup_default",versionOrder={"__keylab_example_bm_pgup_default"},
         versions={
             __keylab_example_bm_pgup_default={
-                id="__keylab_example_bm_pgup_default",name="Version Default",mode="sequential",blocks={
+                id="__keylab_example_bm_pgup_default",name="Version Default",mode="even_cycle",blocks={
                     {enabled=true,macroText="/petpassive\n/petfollow\n/stopattack\n/use [@pet] Dash"},
                 },
             },
@@ -223,7 +249,7 @@ local EXAMPLE_SEQUENCES={
         activeVersionId="__keylab_example_bm_4_testing",versionOrder={"__keylab_example_bm_4_testing"},
         versions={
             __keylab_example_bm_4_testing={
-                id="__keylab_example_bm_4_testing",name="Testing",mode="priority",blocks={
+                id="__keylab_example_bm_4_testing",name="Testing",mode="weighted_cycle",blocks={
                     {enabled=true,macroText="/petattack\n/startattack\n/castsequence reset=target Hunter's Mark, nil\n/cast [mod:ctrl,@player] Binding Shot; [@target] Bestial Wrath"},
                     {enabled=true,macroText="/use [nopet, nodead] Call Pet 1\n/use [pet, dead] Revive Pet\n/castsequence reset=target Hunter's Mark, nil\n/cast [mod:ctrl,@player] Binding Shot; Wild Thrash"},
                     {enabled=true,macroText="/use [nopet, nodead] Call Pet 1\n/use [pet, dead] Revive Pet\n/castsequence reset=target Hunter's Mark, nil\n/cast [mod:ctrl,@player] Binding Shot; Kill Command"},
@@ -300,7 +326,7 @@ function Sequencer:RefreshFooter()
         return
     end
     local runtime=self.draft and Lib().GetRuntime and Lib().GetRuntime(self.draft.id) or nil
-    self.footerRuntime:SetText("Runtime: "..(runtime and "Active" or "Idle").."   |   Last Block: "..tostring(runtime and runtime.lastBlock or "-").."   |   "..(self:HasUnsavedChanges() and "Unsaved" or "Saved"))
+    self.footerRuntime:SetText("Runtime: "..(runtime and "Active" or "Idle").."   |   "..(self:HasUnsavedChanges() and "Unsaved" or "Saved"))
     Color(self.footerRuntime,self:HasUnsavedChanges() and COLORS.yellow or COLORS.muted)
 end
 function Sequencer:MarkDirty(message)
@@ -394,12 +420,12 @@ function Sequencer:RefreshMacroValidation()
     ButtonAccent(self.macroAddButton); ButtonAccent(self.macroSaveButton)
     if self.viewOnly then
         self.characterCount:SetText(tostring(#value).." / 255 characters"); Color(self.characterCount,COLORS.muted)
-        self.validationText:SetText("Read-only example block. Select the blocks below to explore how the sequence is arranged."); Color(self.validationText,COLORS.green)
+        self.validationText:SetText("Read-only example macro. Select the macros below to explore how the sequence is arranged."); Color(self.validationText,COLORS.green)
         return
     end
     if Trim(value)=="" then
         self.characterCount:SetText(tostring(#value).." / 255 characters"); Color(self.characterCount,COLORS.muted)
-        self.validationText:SetText("Enter a macro block. Add becomes available when the block is ready."); Color(self.validationText,COLORS.muted)
+        self.validationText:SetText("Enter a macro. Add becomes available when the macro is ready."); Color(self.validationText,COLORS.muted)
         return
     end
     local valid,message
@@ -407,11 +433,11 @@ function Sequencer:RefreshMacroValidation()
     self.characterCount:SetText(tostring(#value).." / 255 characters")
     Color(self.characterCount,#value>255 and COLORS.red or #value>220 and COLORS.yellow or COLORS.muted)
     if valid and not self.selectedBlockIndex then
-        self.validationText:SetText("Ready to add. Choose Add to place this macro in Sequence Blocks."); Color(self.validationText,COLORS.green); ButtonAccent(self.macroAddButton,COLORS.green,COLORS.green)
+        self.validationText:SetText("Ready to add. Choose Add to place this macro in the sequence."); Color(self.validationText,COLORS.green); ButtonAccent(self.macroAddButton,COLORS.green,COLORS.green)
     elseif valid and self.editorChanged then
-        self.validationText:SetText("Ready. Choose Save to update this block, or Add to make a new one."); Color(self.validationText,COLORS.green); ButtonAccent(self.macroSaveButton,COLORS.green,COLORS.green); ButtonAccent(self.macroAddButton,COLORS.green,COLORS.green)
+        self.validationText:SetText("Ready. Choose Save to update this macro, or Add to make a new one."); Color(self.validationText,COLORS.green); ButtonAccent(self.macroSaveButton,COLORS.green,COLORS.green); ButtonAccent(self.macroAddButton,COLORS.green,COLORS.green)
     elseif valid then
-        self.validationText:SetText("Block selected. Edit it and choose Save, or choose Clear to start a new block."); Color(self.validationText,COLORS.green)
+        self.validationText:SetText("Macro selected. Edit it and choose Save, or choose Clear to start a new macro."); Color(self.validationText,COLORS.green)
     else self.validationText:SetText("Invalid: "..tostring(message)); Color(self.validationText,COLORS.red) end
 end
 function Sequencer:ClearMacroEditor()
@@ -425,26 +451,29 @@ function Sequencer:AddMacroBlock()
     local value=self.macroEdit:GetText() or ""
     local valid,message=Lib().ValidateMacroText(value)
     if not valid then self:SetStatus(message,"error"); return end
-    if #(version.blocks or {})>=(Lib().MAX_BLOCKS or 50) then self:SetStatus("This version already has 50 blocks.","error"); return end
-    version.blocks=version.blocks or {}; table.insert(version.blocks,{enabled=true,macroText=value})
-    self.selectedBlockIndex=#version.blocks; self.editorBaseline=value; self.editorChanged=false; self:MarkDirty("Macro block added."); self:RefreshEditor()
+    if #(version.blocks or {})>=(Lib().MAX_BLOCKS or 50) then self:SetStatus("This version already has 50 macros.","error"); return end
+    version.blocks=version.blocks or {}
+    local previous=version.blocks[#version.blocks]
+    local mode=Lib().GetBlockMode and Lib().GetBlockMode(version,previous) or version.mode or "even_cycle"
+    table.insert(version.blocks,{enabled=true,macroText=value,mode=mode})
+    self.selectedBlockIndex=#version.blocks; self.editorBaseline=value; self.editorChanged=false; self:MarkDirty("Macro added."); self:RefreshEditor()
 end
 function Sequencer:SaveMacroBlock()
     if self.viewOnly then self:SetStatus("Reference examples are read-only.","error"); return end
-    local block=self:CurrentBlock(); if not block then self:SetStatus("Select a block to update.","error"); return end
+    local block=self:CurrentBlock(); if not block then self:SetStatus("Select a macro to update.","error"); return end
     local value=self.macroEdit:GetText() or ""; local valid,message=Lib().ValidateMacroText(value)
     if not valid then self:SetStatus(message,"error"); return end
     local enabled=block.enabled~=false
-    self:CurrentVersion().blocks[self.selectedBlockIndex]={enabled=enabled,macroText=value}
-    self.editorBaseline=value; self.editorChanged=false; self:MarkDirty("Selected macro block updated."); self:RefreshEditor()
+    block.enabled=enabled; block.macroText=value; block.commands=nil
+    self.editorBaseline=value; self.editorChanged=false; self:MarkDirty("Selected macro updated."); self:RefreshEditor()
 end
 function Sequencer:DeleteMacroBlock()
     if self.viewOnly then self:SetStatus("Reference examples are read-only.","error"); return end
     local version=self:CurrentVersion(); local index=self.selectedBlockIndex
-    if not version or not index or not version.blocks[index] then self:SetStatus("Select a block to delete.","error"); return end
-    Confirm("KEYLAB_SEQUENCE_DELETE_BLOCK","Delete block "..tostring(index).."?",function()
+    if not version or not index or not version.blocks[index] then self:SetStatus("Select a macro to delete.","error"); return end
+    Confirm("KEYLAB_SEQUENCE_DELETE_BLOCK","Delete macro "..tostring(index).."?",function()
         table.remove(version.blocks,index); Sequencer.selectedBlockIndex=nil; Sequencer:SetEditorText("")
-        Sequencer:MarkDirty("Macro block deleted."); Sequencer:RefreshEditor()
+        Sequencer:MarkDirty("Macro deleted."); Sequencer:RefreshEditor()
     end)
 end
 function Sequencer:SelectBlock(index)
@@ -459,7 +488,7 @@ function Sequencer:MoveBlock(index,direction)
     if not version or not version.blocks[index] or not version.blocks[other] then return end
     version.blocks[index],version.blocks[other]=version.blocks[other],version.blocks[index]
     if self.selectedBlockIndex==index then self.selectedBlockIndex=other elseif self.selectedBlockIndex==other then self.selectedBlockIndex=index end
-    self:MarkDirty("Block order changed."); self:RefreshBlockRows()
+    self:MarkDirty("Macro order changed."); self:RefreshBlockRows()
 end
 
 function Sequencer:AcquireBlockRow(poolIndex)
@@ -467,9 +496,20 @@ function Sequencer:AcquireBlockRow(poolIndex)
     local row=CreateFrame("Frame",nil,self.blocksContent); row:SetWidth(626)
     row.number=CreateFrame("Frame",nil,row,"BackdropTemplate"); row.number:SetSize(34,34); Style(row.number,COLORS.buttonBg,COLORS.gold)
     row.number:SetPoint("LEFT",4,0); row.numberText=Text(row.number,"","GameFontNormal",14,COLORS.gold,"CENTER"); row.numberText:SetAllPoints(); row.numberText:SetJustifyV("MIDDLE")
-    row.enabled=CreateFrame("CheckButton",nil,row,"UICheckButtonTemplate"); row.enabled:SetSize(24,24); row.enabled:SetPoint("LEFT",50,0)
-    row.enabledLabel=Text(row,"Enabled","GameFontHighlightSmall",11,COLORS.text); row.enabledLabel:SetPoint("LEFT",76,0); row.enabledLabel:SetSize(54,18); row.enabledLabel:SetJustifyV("MIDDLE")
-    row.card=CreateFrame("Button",nil,row,"BackdropTemplate"); row.card:SetPoint("TOPLEFT",136,0); row.card:SetPoint("BOTTOMRIGHT",0,0); Style(row.card,COLORS.card or COLORS.panel,COLORS.softBorder or COLORS.border)
+    row.enabled=CreateFrame("CheckButton",nil,row,"UICheckButtonTemplate"); row.enabled:SetSize(24,24); row.enabled:SetPoint("TOPLEFT",42,-4)
+    row.enabledLabel=Text(row,"Enabled","GameFontHighlightSmall",10,COLORS.text); row.enabledLabel:SetPoint("TOPLEFT",68,-8); row.enabledLabel:SetSize(66,18); row.enabledLabel:SetJustifyV("MIDDLE")
+    row.modeDropdown=Dropdown(row,96,MODE_OPTIONS,function() return row.mode end,function(value)
+        if Sequencer.viewOnly then Sequencer:SetStatus("Reference examples are read-only.","error"); return false end
+        local version=Sequencer:CurrentVersion()
+        local setter=Lib().SetBlockGroupMode
+        if not setter then Sequencer:SetStatus("Macro Group controls are unavailable.","error"); return false end
+        local okay,message=setter(version,row.index,row.index,value)
+        if not okay then Sequencer:SetStatus(message or "That macro mode could not be updated.","error"); return false end
+        Sequencer:MarkDirty("Macro "..tostring(row.index).." mode changed.")
+        Sequencer:RefreshEditor()
+        return true
+    end); row.modeDropdown:SetPoint("BOTTOMLEFT",38,4)
+    row.card=CreateFrame("Button",nil,row,"BackdropTemplate"); row.card:SetPoint("TOPLEFT",142,0); row.card:SetPoint("BOTTOMRIGHT",0,0); Style(row.card,COLORS.card or COLORS.panel,COLORS.softBorder or COLORS.border)
     row.textScroll=CreateFrame("ScrollFrame",nil,row.card); row.textScroll:SetPoint("TOPLEFT",10,-7); row.textScroll:SetPoint("BOTTOMRIGHT",-48,7); row.textScroll:EnableMouse(true); row.textScroll:EnableMouseWheel(true)
     row.textChild=CreateFrame("Frame",nil,row.textScroll); row.textChild:SetWidth(420); row.textScroll:SetScrollChild(row.textChild)
     row.macroText=Text(row.textChild,"","ChatFontNormal",11,COLORS.text); row.macroText:SetPoint("TOPLEFT",0,0); row.macroText:SetWidth(420); row.macroText:SetNonSpaceWrap(false)
@@ -481,7 +521,7 @@ function Sequencer:AcquireBlockRow(poolIndex)
     row.card:SetScript("OnClick",select); row.textScroll:SetScript("OnMouseDown",select)
     row.enabled:SetScript("OnClick",function(box)
         local version=Sequencer:CurrentVersion(); local block=version and version.blocks[row.index]
-        if block then block.enabled=box:GetChecked()==true; Sequencer:MarkDirty("Block enabled state changed."); Sequencer:RefreshBlockRows() end
+        if block then block.enabled=box:GetChecked()==true; Sequencer:MarkDirty("Macro enabled state changed."); Sequencer:RefreshBlockRows() end
     end)
     row.enabledLabel:EnableMouse(true); row.enabledLabel:SetScript("OnMouseDown",function() row.enabled:Click() end)
     row.textScroll:SetScript("OnMouseWheel",function(scroll,delta)
@@ -497,22 +537,58 @@ function Sequencer:AcquireBlockRow(poolIndex)
     end)
     self.blockRows[poolIndex]=row; return row
 end
+
+function Sequencer:AcquireBlockGroupHeader(poolIndex)
+    self.blockGroupHeaders=self.blockGroupHeaders or {}
+    if self.blockGroupHeaders[poolIndex] then return self.blockGroupHeaders[poolIndex] end
+    local header=CreateFrame("Frame",nil,self.blocksContent,"BackdropTemplate"); header:SetSize(626,28)
+    Style(header,COLORS.buttonBg,COLORS.gold)
+    header.title=Text(header,"Macro Group","GameFontHighlightSmall",11,COLORS.gold); header.title:SetPoint("LEFT",10,0); header.title:SetSize(270,24); header.title:SetJustifyV("MIDDLE")
+    header.modeLabel=Text(header,"Mode","GameFontHighlightSmall",10,COLORS.muted,"RIGHT"); header.modeLabel:SetPoint("RIGHT",-160,0); header.modeLabel:SetSize(70,24); header.modeLabel:SetJustifyV("MIDDLE")
+    header.modeDropdown=Dropdown(header,145,MODE_OPTIONS,function() return header.mode end,function(value)
+        if Sequencer.viewOnly then Sequencer:SetStatus("Reference examples are read-only.","error"); return false end
+        local version=Sequencer:CurrentVersion()
+        local setter=Lib().SetBlockGroupMode
+        if not setter then Sequencer:SetStatus("Macro Group controls are unavailable.","error"); return false end
+        local okay,message=setter(version,header.startIndex,header.endIndex,value)
+        if not okay then Sequencer:SetStatus(message or "That macro group could not be updated.","error"); return false end
+        Sequencer:MarkDirty("Macro Group "..tostring(header.groupIndex).." mode changed.")
+        Sequencer:RefreshEditor()
+        return true
+    end)
+    header.modeDropdown:SetPoint("RIGHT",-8,0)
+    self.blockGroupHeaders[poolIndex]=header
+    return header
+end
+
 function Sequencer:RefreshBlockRows()
     if not self.blocksContent then return end
     local version=self:CurrentVersion(); local blocks=version and version.blocks or {}; local y=0
-    for index,block in ipairs(blocks) do
-        local row=self:AcquireBlockRow(index); row.index=index; row:Show(); row:ClearAllPoints(); row:SetPoint("TOPLEFT",0,-y)
-        local macroText=Lib().GetBlockText and Lib().GetBlockText(block) or Lib().GenerateBlock(block) or "Invalid block"
-        local lines=LineCount(macroText); local visible=math.min(4,math.max(1,lines)); local height=math.max(50,18+(visible*14))
-        row:SetHeight(height); row.numberText:SetText(tostring(index)); row.enabled:SetChecked(block.enabled~=false); row.macroText:SetText(macroText)
-        SetControlEnabled(row.enabled,not self.viewOnly)
-        row.textChild:SetHeight(math.max(height-14,lines*14+4)); row.textScroll:SetVerticalScroll(0); row.longText=lines>4; row.innerTrack:SetShown(row.longText)
-        if row.card.SetBackdropBorderColor then row.card:SetBackdropBorderColor(unpack(index==self.selectedBlockIndex and COLORS.gold or (COLORS.softBorder or COLORS.border))) end
-        row.up:SetShown(index>1); row.down:SetShown(index<#blocks); SetControlEnabled(row.up,not self.viewOnly); SetControlEnabled(row.down,not self.viewOnly); y=y+height+8
+    local groups=Lib().GetBlockGroups and Lib().GetBlockGroups(version) or {}
+    if #groups==0 and #blocks>0 then groups={{mode=version.mode or "even_cycle",startIndex=1,endIndex=#blocks,blockCount=#blocks}} end
+    for groupIndex,group in ipairs(groups) do
+        local header=self:AcquireBlockGroupHeader(groupIndex); header.groupIndex=groupIndex; header.startIndex=group.startIndex; header.endIndex=group.endIndex; header.mode=group.mode
+        header:Show(); header:ClearAllPoints(); header:SetPoint("TOPLEFT",0,-y)
+        local range=group.startIndex==group.endIndex and ("Macro "..tostring(group.startIndex)) or ("Macros "..tostring(group.startIndex).."–"..tostring(group.endIndex))
+        header.title:SetText("Macro Group "..tostring(groupIndex).."  •  "..range)
+        SetControlEnabled(header.modeDropdown,not self.viewOnly); header.modeDropdown:RefreshText(); y=y+34
+        for index=group.startIndex,group.endIndex do
+            local block=blocks[index]
+            local row=self:AcquireBlockRow(index); row.index=index; row:Show(); row:ClearAllPoints(); row:SetPoint("TOPLEFT",0,-y)
+            local macroText=Lib().GetBlockText and Lib().GetBlockText(block) or Lib().GenerateBlock(block) or "Invalid macro"
+            local lines=LineCount(macroText); local visible=math.min(4,math.max(1,lines)); local height=math.max(66,18+(visible*14))
+            row:SetHeight(height); row.numberText:SetText(tostring(index)); row.enabled:SetChecked(block.enabled~=false); row.macroText:SetText(macroText)
+            row.mode=Lib().GetBlockMode and Lib().GetBlockMode(version,block) or block.mode or version.mode or "even_cycle"
+            SetControlEnabled(row.enabled,not self.viewOnly); SetControlEnabled(row.modeDropdown,not self.viewOnly); row.modeDropdown:RefreshText()
+            row.textChild:SetHeight(math.max(height-14,lines*14+4)); row.textScroll:SetVerticalScroll(0); row.longText=lines>4; row.innerTrack:SetShown(row.longText)
+            if row.card.SetBackdropBorderColor then row.card:SetBackdropBorderColor(unpack(index==self.selectedBlockIndex and COLORS.gold or (COLORS.softBorder or COLORS.border))) end
+            row.up:SetShown(index>1); row.down:SetShown(index<#blocks); SetControlEnabled(row.up,not self.viewOnly); SetControlEnabled(row.down,not self.viewOnly); y=y+height+8
+        end
     end
     for index=#blocks+1,#(self.blockRows or {}) do self.blockRows[index]:Hide() end
+    for index=#groups+1,#(self.blockGroupHeaders or {}) do self.blockGroupHeaders[index]:Hide() end
     self.blocksContent:SetHeight(math.max(1,y)); self.blocksEmpty:SetShown(#blocks==0)
-    if self.blockCountText then self.blockCountText:SetText(tostring(#blocks).." / 50 blocks") end
+    if self.blockCountText then self.blockCountText:SetText(tostring(#blocks).." / 50 macros in sequence  •  "..tostring(#groups).." group"..(#groups==1 and "" or "s")) end
 end
 
 function Sequencer:NewSequence()
@@ -613,7 +689,8 @@ function Sequencer:RefreshVersionRows()
     for index=#order+1,#(self.versionRows or {}) do self.versionRows[index]:Hide() end
     self.versionsContent:SetHeight(math.max(1,y))
     local version=self:CurrentVersion(); local blockCount=version and #(version.blocks or {}) or 0
-    self.versionSummary:SetText(tostring(#order).." / 20 versions\n"..tostring(blockCount).." / 50 blocks\n"..tostring(version and (Lib().MODE_NAMES[version.mode] or version.mode) or "No mode"))
+    local mode=version and Lib().GetVersionModeSummary and Lib().GetVersionModeSummary(version) or (version and version.mode)
+    self.versionSummary:SetText(tostring(#order).." / 20 versions\n"..tostring(blockCount).." / 50 macros in sequence\n"..tostring(version and (Lib().MODE_NAMES[mode] or mode) or "No mode"))
 end
 
 local function CapturedBinding(key)
@@ -674,7 +751,7 @@ function Sequencer:RefreshEditor()
     SetControlEnabled(self.macroEdit,editable); SetControlEnabled(self.macroClearButton,editable); SetControlEnabled(self.macroAddButton,editable); SetControlEnabled(self.macroSaveButton,editable); SetControlEnabled(self.macroDeleteButton,editable)
     SetControlEnabled(self.modeDropdown,editable); SetControlEnabled(self.versionNewButton,editable); SetControlEnabled(self.versionRenameButton,editable); SetControlEnabled(self.versionDuplicateButton,editable); SetControlEnabled(self.versionDeleteButton,editable); SetControlEnabled(self.versionActivateButton,editable)
     SetControlEnabled(self.resetSequenceButton,editable); SetControlEnabled(self.saveChangesButton,editable)
-    if self.macroEditorTitle then self.macroEditorTitle:SetText(self.viewOnly and "Reference Macro Block" or "Create or Edit Macro Block") end
+    if self.macroEditorTitle then self.macroEditorTitle:SetText(self.viewOnly and "Reference Macro" or "Create or Edit Macro") end
     if self.versionsTitle then self.versionsTitle:SetText(self.viewOnly and "Example Versions" or "Versions") end
     self:RefreshHeader(); self.modeDropdown:RefreshText(); self:RefreshMacroValidation(); self:RefreshBlockRows(); self:RefreshVersionRows(); self:RefreshFooter()
 end
@@ -777,7 +854,7 @@ function Sequencer:BuildTop(frame)
 end
 function Sequencer:BuildMacroEditor(parent)
     local panel=Panel(parent,0,-92,680,204); self.macroPanel=panel
-    local title=Text(panel,"Create or Edit Macro Block","GameFontNormal",15,COLORS.gold); title:SetPoint("TOPLEFT",12,-10); title:SetSize(410,20); self.macroEditorTitle=title
+    local title=Text(panel,"Create or Edit Macro","GameFontNormal",15,COLORS.gold); title:SetPoint("TOPLEFT",12,-10); title:SetSize(410,20); self.macroEditorTitle=title
     self.characterCount=Text(panel,"0 / 255 characters","GameFontHighlightSmall",11,COLORS.muted,"RIGHT"); self.characterCount:SetPoint("TOPRIGHT",-12,-12); self.characterCount:SetSize(190,18)
     local shell=Panel(panel,12,-36,656,112,COLORS.bg,COLORS.softBorder or COLORS.border)
     local scroll=CreateFrame("ScrollFrame",nil,shell,"UIPanelScrollFrameTemplate"); scroll:SetPoint("TOPLEFT",8,-7); scroll:SetPoint("BOTTOMRIGHT",-26,7)
@@ -821,7 +898,7 @@ function Sequencer:BuildMacroEditor(parent)
     end)
     edit:SetScript("OnCursorChanged",function(_,x,y,w,h) caret:ClearAllPoints(); caret:SetPoint("TOPLEFT",edit,"TOPLEFT",(x or 0)+1,y or 0); caret:SetHeight(math.max(12,h or 14)); caret:SetShown(edit:HasFocus()); local offset=scroll:GetVerticalScroll(); local height=scroll:GetHeight(); if -(y or 0)<offset then scroll:SetVerticalScroll(math.max(0,-(y or 0))) elseif -(y or 0)+(h or 14)>offset+height then scroll:SetVerticalScroll(-(y or 0)+(h or 14)-height) end end)
     self.macroEdit=edit
-    self.validationText=Text(panel,"Enter a macro block. Add becomes available when the block is ready.","GameFontHighlightSmall",11,COLORS.muted); self.validationText:SetPoint("TOPLEFT",14,-154); self.validationText:SetSize(430,38)
+    self.validationText=Text(panel,"Enter a macro. Add becomes available when the macro is ready.","GameFontHighlightSmall",11,COLORS.muted); self.validationText:SetPoint("TOPLEFT",14,-154); self.validationText:SetSize(430,38)
     local clear=Button(panel,"Clear",58,function() Sequencer:ClearMacroEditor() end); clear:SetPoint("BOTTOMRIGHT",-210,10)
     local add=Button(panel,"Add",58,function() Sequencer:AddMacroBlock() end); add:SetPoint("BOTTOMRIGHT",-146,10)
     local save=Button(panel,"Save",58,function() Sequencer:SaveMacroBlock() end); save:SetPoint("BOTTOMRIGHT",-82,10)
@@ -837,14 +914,25 @@ function Sequencer:ScrollBlocks(delta)
 end
 function Sequencer:BuildBlocks(parent)
     local panel=Panel(parent,0,-306,680,306); self.blocksPanel=panel
-    local title=Text(panel,"Sequence Blocks","GameFontNormal",15,COLORS.gold); title:SetPoint("TOPLEFT",12,-10)
-    local modeLabel=Text(panel,"Mode","GameFontHighlightSmall",11,COLORS.muted); modeLabel:SetPoint("TOPRIGHT",-160,-13)
-    self.modeDropdown=Dropdown(panel,135,{{value="sequential",label="Sequential"},{value="priority",label="Priority"},{value="reverse",label="Reverse Priority"}},function() local v=Sequencer:CurrentVersion(); return v and v.mode end,function(value) local v=Sequencer:CurrentVersion(); if v then v.mode=value; Sequencer:MarkDirty("Sequence mode changed."); Sequencer:RefreshEditor() end end)
+    local title=Text(panel,"Sequence of Macros","GameFontNormal",15,COLORS.gold); title:SetPoint("TOPLEFT",12,-10)
+    local modeLabel=Text(panel,"Set All Macros","GameFontHighlightSmall",11,COLORS.muted); modeLabel:SetPoint("TOPRIGHT",-160,-13)
+    self.modeDropdown=Dropdown(panel,135,MODE_OPTIONS_WITH_MIXED,function()
+        local v=Sequencer:CurrentVersion()
+        return v and Lib().GetVersionModeSummary and Lib().GetVersionModeSummary(v) or (v and v.mode)
+    end,function(value)
+        if value=="mixed" then return false end
+        local v=Sequencer:CurrentVersion(); if not v then return false end
+        local setter=Lib().SetAllBlockModes
+        if not setter then Sequencer:SetStatus("Macro Group controls are unavailable.","error"); return false end
+        local okay,message=setter(v,value)
+        if not okay then Sequencer:SetStatus(message or "The macro modes could not be changed.","error"); return false end
+        Sequencer:MarkDirty("All macro groups changed to "..tostring(Lib().MODE_NAMES[value] or value).."."); Sequencer:RefreshEditor(); return true
+    end)
     self.modeDropdown:SetPoint("TOPRIGHT",-12,-7)
     local scroll=CreateFrame("ScrollFrame",nil,panel,"UIPanelScrollFrameTemplate"); scroll:SetPoint("TOPLEFT",10,-42); scroll:SetPoint("BOTTOMRIGHT",-30,28); scroll:EnableMouseWheel(true); scroll:SetScript("OnMouseWheel",function(_,delta) Sequencer:ScrollBlocks(delta) end); self.blocksScroll=scroll
     local content=CreateFrame("Frame",nil,scroll); content:SetWidth(626); content:SetHeight(1); scroll:SetScrollChild(content); self.blocksContent=content
     self.blocksEmpty=Text(panel,"Enter a supported macro above, then choose Add.","GameFontHighlightSmall",12,COLORS.muted,"CENTER"); self.blocksEmpty:SetPoint("CENTER",0,-8); self.blocksEmpty:SetSize(610,30)
-    self.blockCountText=Text(panel,"0 / 50 blocks","GameFontHighlightSmall",10,COLORS.muted); self.blockCountText:SetPoint("BOTTOMLEFT",12,8)
+    self.blockCountText=Text(panel,"0 / 50 macros in sequence","GameFontHighlightSmall",10,COLORS.muted); self.blockCountText:SetPoint("BOTTOMLEFT",12,8)
 end
 function Sequencer:BuildVersions(parent)
     local panel=Panel(parent,690,-92,216,520); self.versionsPanel=panel
@@ -857,7 +945,7 @@ function Sequencer:BuildVersions(parent)
     local delete=Button(panel,"Delete",60,function() Sequencer:DeleteVersion() end); delete:SetPoint("BOTTOMLEFT",10,100)
     local activate=Button(panel,"Activate Selected",132,function() Sequencer:ActivateVersion() end); activate:SetPoint("BOTTOMRIGHT",-10,100)
     self.versionNewButton=new; self.versionRenameButton=rename; self.versionDuplicateButton=duplicate; self.versionDeleteButton=delete; self.versionActivateButton=activate
-    self.versionSummary=Text(panel,"0 / 20 versions\n0 / 50 blocks\nSequential","GameFontHighlightSmall",11,COLORS.muted); self.versionSummary:SetPoint("BOTTOMLEFT",12,16); self.versionSummary:SetSize(190,68)
+    self.versionSummary=Text(panel,"0 / 20 versions\n0 / 50 macros in sequence\nEven Cycle","GameFontHighlightSmall",11,COLORS.muted); self.versionSummary:SetPoint("BOTTOMLEFT",12,16); self.versionSummary:SetSize(190,68)
 end
 function Sequencer:BuildEditor(frame)
     local view=CreateFrame("Frame",nil,frame); view:SetPoint("TOPLEFT",18,-112); view:SetPoint("BOTTOMRIGHT",-18,16); self.views.editor=view
@@ -878,7 +966,7 @@ function Sequencer:BuildEditor(frame)
     local delete=Button(bindingPanel,"Delete",70,function() Sequencer:ClearBinding() end); delete:SetPoint("TOPLEFT",188,-29); self.bindingDeleteButton=delete
     self:BuildMacroEditor(view); self:BuildBlocks(view); self:BuildVersions(view)
     local footer=Panel(view,0,-622,906,62)
-    self.footerRuntime=Text(footer,"Runtime: Idle   |   Last Block: -   |   Saved","GameFontHighlightSmall",11,COLORS.muted); self.footerRuntime:SetPoint("TOPLEFT",12,-10); self.footerRuntime:SetSize(590,18)
+    self.footerRuntime=Text(footer,"Runtime: Idle   |   Saved","GameFontHighlightSmall",11,COLORS.muted); self.footerRuntime:SetPoint("TOPLEFT",12,-10); self.footerRuntime:SetSize(590,18)
     local reset=Button(footer,"Reset Sequence",104,function() if Sequencer.draft and not Sequencer.viewOnly then local ok,message=Lib().ResetSequence(Sequencer.draft.id,"editor Reset Sequence"); Sequencer:SetStatus(message,ok and "success" or "error"); Sequencer:RefreshFooter() end end); reset:SetPoint("BOTTOMLEFT",10,8); self.resetSequenceButton=reset
     self.statusText=Text(footer,"Ready.","GameFontHighlightSmall",10,COLORS.yellow); self.statusText:SetPoint("BOTTOMLEFT",122,11); self.statusText:SetSize(570,18)
     local save=Button(footer,"Save Changes",132,function() Sequencer:SaveDraft() end,30); save:SetPoint("RIGHT",-10,0); self.saveChangesButton=save
@@ -905,15 +993,15 @@ local INFORMATION_SECTIONS={
         title="1. Welcome to the KeyLab Macro Sequencer",
         body=InfoJoin({
             InfoHeading("What It Does"),
-            "Create a complete rotation by arranging individual macros into a sequence. Then bind the sequence to a keyboard key or mouse button.\n\nEach physical press tries one planned block. KeyLab never presses keys, chooses abilities, or decides what is best for you.",
+            "Create a complete rotation by arranging individual macros into a sequence. Then bind the sequence to a keyboard key or mouse button.\n\nEach physical press tries one planned macro. KeyLab never presses keys, chooses abilities, or decides what is best for you.",
             InfoTip(),
-            "KeyLab chooses which saved block to try. World of Warcraft decides whether that block can run.",
+            "KeyLab chooses which saved macro to try. World of Warcraft decides whether that macro can run.",
         }),
     },
     {
         title="2. One Press, One Step",
         body=InfoJoin({
-            "Each full keyboard or mouse-button press moves the sequence forward by one step.\n\nThis works whether WoW casts on key-down or key-up. Only the active part of the press can run the block. The other part is ignored.\n\nHolding a key does not create more presses. Every step needs a new physical press.",
+            "Each full keyboard or mouse-button press moves the sequence forward by one step.\n\nThis works whether WoW casts on key-down or key-up. Only the active part of the press can run the macro. The other part is ignored.\n\nHolding a key does not create more presses. Every step needs a new physical press.",
             InfoHeading("Important"),
             "A step is used when KeyLab tries it, even if the action cannot run because of:\n"..InfoList({
                 "The Global Cooldown",
@@ -923,29 +1011,29 @@ local INFORMATION_SECTIONS={
                 "Range or line of sight",
                 "A missing item",
                 "Another WoW rule",
-            }).."\n\nKeyLab does not check the result, retry the block, or choose a different action.",
+            }).."\n\nKeyLab does not check the result, retry the macro, or choose a different action.",
         }),
     },
     {
-        title="3. Sequence Blocks",
+        title="3. Sequence of Macros",
         body=InfoJoin({
-            "A sequence contains one or more macro blocks. Each block may contain several supported WoW macro lines, up to 255 characters total.",
+            "A sequence contains one or more macros. Each macro may contain several supported WoW macro lines, up to 255 characters total.",
             InfoHeading("Example"),
             "/startattack\n/petattack\n/autoshot\n/cast [mod:ctrl,@player] Binding Shot; [@target] Kill Command",
-            "One press tries the whole selected block. WoW checks its commands, conditions, targets, cooldowns, and other rules.\n\nUse the arrows to move a block. Turn off Enabled to keep a block saved without using it.\n\nThe Sequence menu also includes read-only examples. You can study them, but you cannot edit, bind, save, activate, or run them.",
+            "One press tries the whole selected macro. WoW checks its commands, conditions, targets, cooldowns, and other rules.\n\nUse the arrows to move a macro. Turn off Enabled to keep a macro saved without using it.\n\nThe Sequence menu also includes read-only examples. You can study them, but you cannot edit, bind, save, activate, or run them.",
         }),
     },
     {
-        title="4. Sequence Modes",
+        title="4. Macro Groups and Modes",
         body=InfoJoin({
-            InfoHeading("Sequential"),
-            "Tries each enabled block in order, then starts again.\n\n1 -> 2 -> 3 -> 4 -> 1\n\nThis is the simplest and most predictable mode.",
-            InfoHeading("Priority"),
-            "Returns to earlier blocks more often as it moves through the sequence. Put actions you want tried more often near the beginning.\n\nLong Priority sequences may feel repetitive.",
-            InfoHeading("Reverse Priority"),
-            "Works in the opposite direction and returns to later blocks more often.",
+            InfoHeading("Macro Groups"),
+            "Adjacent macros with the same mode form a Macro Group. Each group finishes its cycle before the next group begins.\n\nExample: Macro 1 uses Even Cycle and Macros 2–4 use Weighted Cycle.\n\n1 -> 2 -> 2 -> 3 -> 2 -> 3 -> 4 -> repeat",
+            InfoHeading("Even Cycle"),
+            "Each macro receives one turn in the order shown.\n\n1 -> 2 -> 3 -> 4 -> 1\n\nThis is the simplest and most predictable cycle.",
+            InfoHeading("Weighted Cycle"),
+            "Macros nearer the top receive additional turns. Put actions you want tried more often near the beginning.\n\nLong Weighted Cycles may feel repetitive.",
             InfoTip(),
-            "Start with Sequential. If you use Priority or Reverse Priority, begin with a few blocks and add more only if the sequence still feels smooth.",
+            "Use Set All Macros when the whole version should share one mode. Use each Macro Group menu when part of the sequence needs a different mode.",
         }),
     },
     {
@@ -977,7 +1065,7 @@ local INFORMATION_SECTIONS={
     {
         title="7. Macro Conditions",
         body=InfoJoin({
-            "WoW macro conditions can change what a block tries.",
+            "WoW macro conditions can change what a macro tries.",
             InfoHeading("Example"),
             "/cast [mod:ctrl,@player] Binding Shot; [@target] Kill Command",
             "Hold Ctrl to try Binding Shot at your location. Without Ctrl, the macro tries Kill Command on your target.\n\nCommon modifiers:\n\n[mod:ctrl]\n[mod:shift]\n[mod:alt]\n\nWoW reads all targets and conditions. If a combination is not valid, it will not run.",
@@ -1001,7 +1089,7 @@ local INFORMATION_SECTIONS={
                 "Whether a spell enters the spell queue",
                 "Whether the action runs",
             }),
-            "Pressing faster cannot bypass these rules. It can move past blocks while their actions are unavailable.",
+            "Pressing faster cannot bypass these rules. It can move past macros while their actions are unavailable.",
             InfoTip(),
             "A steady rhythm near your Global Cooldown is usually easier to follow than pressing as fast as possible.",
         }),
@@ -1011,7 +1099,7 @@ local INFORMATION_SECTIONS={
         body=InfoJoin({
             "Your saved sequence can run in combat, but WoW does not allow protected setup changes during combat.\n\nWhile in combat, you cannot:\n"..InfoList({
                 "Open the Sequencer Editor",
-                "Add, edit, delete, turn on, turn off, or move blocks",
+                "Add, edit, delete, turn on, turn off, or move macros",
                 "Change the sequence mode",
                 "Activate another version",
                 "Add or change a binding",
@@ -1115,7 +1203,7 @@ function Sequencer:Create(parent)
     Theme.CreateTabHeader(
         frame,
         "Macro Sequencer",
-        "Build class and spec Macro Sequences from the exact macro blocks you want to use."
+        "Build class and spec Macro Sequences from the exact macros you want to use."
     )
     self:BuildTop(frame); self:BuildEditor(frame); self:BuildBindingList(frame); self:BuildInformation(frame); self:BuildRecycleBin(frame)
     self:LoadSequence(nil); self:SetView("editor")

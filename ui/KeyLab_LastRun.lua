@@ -477,6 +477,13 @@ local function MetricLowerIsBetter(metricKey)
     return info and info.higherIsBetter == false
 end
 
+local function LegendUsesLowest(metricKey)
+    -- The Survival Pressure legend describes the pressure seen during the run,
+    -- so Avoidable Damage should call out the highest pull even though lower is
+    -- better when the same metric is used for performance comparisons.
+    return metricKey ~= "avoidableDamageTaken" and MetricLowerIsBetter(metricKey)
+end
+
 local function MetricKeyList(metrics)
     local list = {}
     for _, metric in ipairs(metrics or {}) do
@@ -760,10 +767,10 @@ local function AddPullHoverTarget(card, x, graphTopY, graphBottomY, width, sessi
     return hit
 end
 
-local function BestSessionForMetric(sessions, metricKey)
+local function LegendSessionForMetric(sessions, metricKey)
     local bestSession = nil
     local bestValue = nil
-    local lowerIsBetter = MetricLowerIsBetter(metricKey)
+    local lowerIsBetter = LegendUsesLowest(metricKey)
 
     for _, session in ipairs(sessions or {}) do
         local value = SessionMetric(session, metricKey)
@@ -929,8 +936,13 @@ local function BuildPullGraph(parent, state, profile, yOffset)
     for index, metricKey in ipairs(metricKeys) do
         local metric = GRAPH_METRICS[metricKey] or { label = metricKey, color = MetricColor(metricKey) }
         local y = -72 - ((index - 1) * legendSpacing)
-        local _, bestValue = BestSessionForMetric(sessions, metricKey)
-        local bestLabel = MetricLowerIsBetter(metricKey) and "Lowest: " or "Best: "
+        local _, bestValue = LegendSessionForMetric(sessions, metricKey)
+        local bestLabel
+        if metricKey == "avoidableDamageTaken" then
+            bestLabel = "Highest: "
+        else
+            bestLabel = LegendUsesLowest(metricKey) and "Lowest: " or "Best: "
+        end
 
         DrawLine(card, legendX, y, legendX + 28, y, metric.color, 2)
         AddLine(card, GraphLegendLabel(profile, metricKey), legendX, y - legendLabelOffset, 104, COLORS.gold, "GameFontNormal")

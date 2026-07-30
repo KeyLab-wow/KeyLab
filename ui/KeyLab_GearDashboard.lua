@@ -38,11 +38,14 @@ local CENTER_WIDTH = 292
 local SLOT_HEIGHT = 72
 local SPACING = Theme.spacing or { card = 14, column = 12, slotCard = 10 }
 local HEADER = Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16 }
-local SLOT_GAP = SPACING.slotCard
+local SLOT_GAP = 8
 local CARD_GAP = SPACING.card
 local BADGE_HEIGHT = 16
 local REFRESH_DEBOUNCE_SECONDS = 0.35
 local ALT_ROW_HEIGHT = 26
+local ALTERNATIVES_HEIGHT = 390
+local FOOTER_HEIGHT = 78
+local FOOTER_BOTTOM_INSET = 10
 
 local TRACK_COLORS = {
     Unranked = COLORS.gray,
@@ -438,17 +441,18 @@ function GearDashboard:Build()
     self:BuildTierCard(self.tierCard)
 
     local alternativesY = tierY - 210 - CARD_GAP
-    self.alternativesCard = MakeCard(self.frame, centerX, alternativesY, CENTER_WIDTH, 404, "Alternative Items")
+    self.alternativesCard = MakeCard(self.frame, centerX, alternativesY, CENTER_WIDTH, ALTERNATIVES_HEIGHT, "Alternative Items")
     self:BuildAlternativesCard(self.alternativesCard)
 
-    local footerY = topY - (7 * (SLOT_HEIGHT + SLOT_GAP)) - SLOT_HEIGHT - CARD_GAP
-    self.currencyCard = MakeCard(self.frame, leftX, footerY, SLOT_WIDTH, 78, "Crests & Seasonal Currency")
+    local frameHeight = tonumber(self.frame:GetHeight()) or 820
+    local footerY = -(frameHeight - FOOTER_BOTTOM_INSET - FOOTER_HEIGHT)
+    self.currencyCard = MakeCard(self.frame, leftX, footerY, SLOT_WIDTH, FOOTER_HEIGHT, "Crests & Seasonal Currency")
     self.currencyCard.title:ClearAllPoints()
     self.currencyCard.title:SetPoint("TOP", self.currencyCard, "TOP", 0, -5)
     self.currencyCard.title:SetSize(SLOT_WIDTH - 20, 14)
     self:BuildCurrencyCard(self.currencyCard)
 
-    self.progressCard = MakeCard(self.frame, rightX, footerY, SLOT_WIDTH, 78, "Gear Target Progress")
+    self.progressCard = MakeCard(self.frame, rightX, footerY, SLOT_WIDTH, FOOTER_HEIGHT, "Gear Target Progress")
     self.progressCard.title:SetPoint("TOP", self.progressCard, "TOP", 0, -7)
     self.progressBar = MakeProgressBar(self.progressCard, 16, -31, 284, 14)
     self.progressText = MakeText(self.progressCard, "0 / 0 Targets Equipped", "GameFontDisableSmall", 9, COLORS.text)
