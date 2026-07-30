@@ -21,17 +21,22 @@ local MAX_BLOCK_CHARS = 255
 local MAX_LOOP_POSITIONS = (MAX_BLOCKS * (MAX_BLOCKS + 1)) / 2
 local RECYCLE_SECONDS = 30 * 24 * 60 * 60
 local MODIFIER_BUDGET_OVERHEAD = 16
+local MODE_EVEN_CYCLE = "even_cycle"
+local MODE_WEIGHTED_CYCLE = "weighted_cycle"
+local MODE_SCHEMA_VERSION = 2
 
 Library.MAX_SEQUENCES = MAX_SEQUENCES
 Library.MAX_VERSIONS = MAX_VERSIONS
 Library.MAX_BLOCKS = MAX_BLOCKS
 Library.MAX_BLOCK_CHARS = MAX_BLOCK_CHARS
 Library.RECYCLE_SECONDS = RECYCLE_SECONDS
+Library.MODE_EVEN_CYCLE = MODE_EVEN_CYCLE
+Library.MODE_WEIGHTED_CYCLE = MODE_WEIGHTED_CYCLE
 
 local MODE_NAMES = {
-    sequential = "Sequential",
-    priority = "Priority",
-    reverse = "Reverse Priority",
+    [MODE_EVEN_CYCLE] = "Even Cycle",
+    [MODE_WEIGHTED_CYCLE] = "Weighted Cycle",
+    mixed = "Mixed Groups",
 }
 
 local MODIFIER_NAMES = { CTRL = true, SHIFT = true, ALT = true }
@@ -149,9 +154,17 @@ end
 
 local function NormalizeMode(value)
     value = Trim(value):lower():gsub("[%s_-]+", "")
-    if value == "sequential" or value == "seq" then return "sequential" end
-    if value == "priority" or value == "prio" then return "priority" end
-    if value == "reverse" or value == "reversepriority" or value == "rev" then return "reverse" end
+    if value == "evencycle" or value == "even" or value == "sequential" or value == "seq" then
+        return MODE_EVEN_CYCLE
+    end
+    if value == "weightedcycle" or value == "weighted" or value == "priority" or value == "prio" then
+        return MODE_WEIGHTED_CYCLE
+    end
+    -- Reverse Priority is retired. Old saved values quietly move to the only
+    -- remaining weighted mode instead of leaving a sequence invalid.
+    if value == "reverse" or value == "reversepriority" or value == "rev" then
+        return MODE_WEIGHTED_CYCLE
+    end
     return nil
 end
 
@@ -196,13 +209,51 @@ local function CurrentOwner()
     return classFile .. ":" .. tostring(specID), classFile, localizedClass or classFile, specID, specName
 end
 
+local function NormalizeStoredVersion(version)
+    if type(version) ~= "table" then return end
+    version.mode = NormalizeMode(version.mode) or MODE_EVEN_CYCLE
+    for _, block in ipairs(version.blocks or {}) do
+        if type(block) == "table" and block.mode ~= nil then
+            block.mode = NormalizeMode(block.mode) or version.mode
+        end
+    end
+end
+
+local function NormalizeStoredSequence(sequence)
+    if type(sequence) ~= "table" then return end
+    for _, version in pairs(sequence.versions or {}) do
+        NormalizeStoredVersion(version)
+    end
+end
+
+local function MigrateStoredModes(db)
+    if (tonumber(db.schemaVersion) or 1) >= MODE_SCHEMA_VERSION then return end
+    for _, collection in pairs(db.collections or {}) do
+        if type(collection) == "table" then
+            for _, sequence in pairs(collection.sequences or {}) do
+                NormalizeStoredSequence(sequence)
+            end
+            for _, entry in ipairs(collection.recycleBin or {}) do
+                if type(entry) == "table" then
+                    if entry.type == "sequence" then
+                        NormalizeStoredSequence(entry.data)
+                    elseif entry.type == "version" then
+                        NormalizeStoredVersion(entry.data)
+                    end
+                end
+            end
+        end
+    end
+    db.schemaVersion = MODE_SCHEMA_VERSION
+end
+
 local function EnsureRoot()
     KeyLabDB = type(KeyLabDB) == "table" and KeyLabDB or {}
     KeyLabDB.sequencerLibrary = type(KeyLabDB.sequencerLibrary) == "table" and KeyLabDB.sequencerLibrary or {}
     local db = KeyLabDB.sequencerLibrary
-    db.schemaVersion = 1
     db.collections = type(db.collections) == "table" and db.collections or {}
     db.idCounter = tonumber(db.idCounter) or 0
+    MigrateStoredModes(db)
     return db
 end
 
@@ -285,7 +336,7 @@ local function DefaultVersion(name)
     return {
         id = NewID("version"),
         name = Trim(name) ~= "" and Trim(name) or "Version Default",
-        mode = "sequential",
+        mode = MODE_EVEN_CYCLE,
         blocks = {},
         modifierKey = nil,
         modifierCommand = nil,
@@ -322,10 +373,10 @@ local function ValidateBracketGroups(value, modifierKeys)
 end
 
 local function ValidateMacroText(text)
-    if type(text) ~= "string" then return nil, "Enter a supported WoW macro block." end
-    if #text == 0 or Trim(text) == "" then return nil, "Enter a supported WoW macro block." end
+    if type(text) ~= "string" then return nil, "Enter a supported WoW macro." end
+    if #text == 0 or Trim(text) == "" then return nil, "Enter a supported WoW macro." end
     if #text > MAX_BLOCK_CHARS then
-        return nil, "This macro block uses " .. tostring(#text) .. " of 255 characters."
+        return nil, "This macro uses " .. tostring(#text) .. " of 255 characters."
     end
 
     local normalized = text:gsub("\r\n", "\n"):gsub("\r", "\n")
@@ -387,7 +438,7 @@ local function ValidateMacroText(text)
         end
     end
     if primaryCount < 1 then
-        return nil, "Each enabled block must contain at least one /cast, /use, or /castsequence action."
+        return nil, "Each enabled macro must contain at least one /cast, /use, or /castsequence action."
     end
     local orderedModifiers = {}
     for _, key in ipairs({ "CTRL", "SHIFT", "ALT" }) do
@@ -534,11 +585,11 @@ local function GenerateBlock(block)
         table.insert(lines, line)
     end
     if primaryCount ~= 1 then
-        return nil, "Each enabled block must contain exactly one /cast, /use, or Once Until Reset primary action."
+        return nil, "Each enabled macro must contain exactly one /cast, /use, or Once Until Reset primary action."
     end
     local text = table.concat(lines, "\n")
     if #text > MAX_BLOCK_CHARS then
-        return nil, "The generated block uses " .. tostring(#text) .. " of 255 characters."
+        return nil, "The generated macro uses " .. tostring(#text) .. " of 255 characters."
     end
     return text
 end
@@ -558,42 +609,120 @@ local function GenerateModifier(version)
 end
 
 local function BuildLoop(mode, blockCount)
+    mode = NormalizeMode(mode)
     local loop = {}
-    if mode == "sequential" then
+    if mode == MODE_EVEN_CYCLE then
+        -- Proven Sequential algorithm, renamed only.
         for index = 1, blockCount do table.insert(loop, index) end
-    elseif mode == "priority" then
+    elseif mode == MODE_WEIGHTED_CYCLE then
+        -- Proven Priority algorithm, renamed only.
         for depth = 1, blockCount do
             for index = 1, depth do table.insert(loop, index) end
-        end
-    elseif mode == "reverse" then
-        for depth = 1, blockCount do
-            for index = depth, 1, -1 do table.insert(loop, index) end
         end
     end
     return loop
 end
 
+local function GetBlockMode(version, block)
+    return NormalizeMode(type(block) == "table" and block.mode or nil)
+        or NormalizeMode(type(version) == "table" and version.mode or nil)
+        or MODE_EVEN_CYCLE
+end
+
+local function GetBlockGroups(version)
+    local groups = {}
+    local blocks = type(version) == "table" and version.blocks or {}
+    local current
+    for sourceIndex, block in ipairs(blocks or {}) do
+        local mode = GetBlockMode(version, block)
+        if not current or current.mode ~= mode then
+            current = {
+                mode = mode,
+                startIndex = sourceIndex,
+                endIndex = sourceIndex,
+                blockCount = 0,
+            }
+            table.insert(groups, current)
+        end
+        current.endIndex = sourceIndex
+        current.blockCount = current.blockCount + 1
+    end
+    return groups
+end
+
+local function GetVersionModeSummary(version)
+    local groups = GetBlockGroups(version)
+    if #groups == 0 then
+        return NormalizeMode(type(version) == "table" and version.mode or nil) or MODE_EVEN_CYCLE
+    end
+    local firstMode = groups[1].mode
+    for index = 2, #groups do
+        if groups[index].mode ~= firstMode then return "mixed" end
+    end
+    return firstMode
+end
+
+local function SetBlockGroupMode(version, startIndex, endIndex, mode)
+    if type(version) ~= "table" then return false, "Choose a version first." end
+    mode = NormalizeMode(mode)
+    if not mode then return false, "Choose Even Cycle or Weighted Cycle." end
+    local blocks = version.blocks or {}
+    startIndex = math.max(1, tonumber(startIndex) or 1)
+    endIndex = math.min(#blocks, tonumber(endIndex) or startIndex)
+    if startIndex > endIndex then return false, "That macro group is empty." end
+    for index = startIndex, endIndex do
+        if type(blocks[index]) == "table" then blocks[index].mode = mode end
+    end
+    if GetVersionModeSummary(version) ~= "mixed" then version.mode = mode end
+    return true
+end
+
+local function SetAllBlockModes(version, mode)
+    if type(version) ~= "table" then return false, "Choose a version first." end
+    mode = NormalizeMode(mode)
+    if not mode then return false, "Choose Even Cycle or Weighted Cycle." end
+    version.mode = mode
+    for _, block in ipairs(version.blocks or {}) do
+        if type(block) == "table" then block.mode = mode end
+    end
+    return true
+end
+
 local function ValidateVersion(version)
     if type(version) ~= "table" then return nil, "The selected version is missing." end
     local mode = NormalizeMode(version.mode)
-    if not mode then return nil, "Choose Sequential, Priority, or Reverse Priority." end
+    if not mode then return nil, "Choose Even Cycle or Weighted Cycle." end
     local blocks = {}
     local sourceIndexes = {}
+    local groups = {}
+    local currentGroup
     local inlineModifierSet = {}
-    if #(version.blocks or {}) > MAX_BLOCKS then return nil, "A version may contain at most 50 action blocks." end
+    if #(version.blocks or {}) > MAX_BLOCKS then return nil, "A version may contain at most 50 macros." end
     for sourceIndex, block in ipairs(version.blocks or {}) do
+        local blockMode = GetBlockMode(version, block)
+        if not currentGroup or currentGroup.mode ~= blockMode then
+            currentGroup = {
+                mode = blockMode,
+                startIndex = sourceIndex,
+                endIndex = sourceIndex,
+                compactIndexes = {},
+            }
+            table.insert(groups, currentGroup)
+        end
+        currentGroup.endIndex = sourceIndex
         local text, message, disabled = GenerateBlock(block)
-        if not text and not disabled then return nil, "Block " .. tostring(sourceIndex) .. ": " .. tostring(message) end
+        if not text and not disabled then return nil, "Macro " .. tostring(sourceIndex) .. ": " .. tostring(message) end
         if not disabled then
             table.insert(blocks, text)
             table.insert(sourceIndexes, sourceIndex)
+            table.insert(currentGroup.compactIndexes, #blocks)
             if type(block.macroText) == "string" then
                 local _, _, modifiers = ValidateMacroText(block.macroText)
                 for _, key in ipairs(modifiers or {}) do inlineModifierSet[key] = true end
             end
         end
     end
-    if #blocks == 0 then return nil, "Enable and complete at least one action block." end
+    if #blocks == 0 then return nil, "Enable and complete at least one macro." end
     local modifierText, modifierError, modifierKey = GenerateModifier(version)
     if modifierError then return nil, "Global Modifier Action: " .. modifierError end
     if modifierText then
@@ -603,7 +732,7 @@ local function ValidateVersion(version)
         for index, text in ipairs(blocks) do
             local effective = #text + #modifierText + MODIFIER_BUDGET_OVERHEAD
             if effective > MAX_BLOCK_CHARS then
-                return nil, "Block " .. tostring(sourceIndexes[index]) .. " uses " .. tostring(effective)
+                return nil, "Macro " .. tostring(sourceIndexes[index]) .. " uses " .. tostring(effective)
                     .. " of 255 effective characters with the Global Modifier Action."
             end
         end
@@ -612,14 +741,33 @@ local function ValidateVersion(version)
     for _, key in ipairs({ "CTRL", "SHIFT", "ALT" }) do
         if inlineModifierSet[key] then table.insert(inlineModifierKeys, key) end
     end
+    local loop = {}
+    local enabledGroups = {}
+    for _, group in ipairs(groups) do
+        if #group.compactIndexes > 0 then
+            local localLoop = BuildLoop(group.mode, #group.compactIndexes)
+            for _, localIndex in ipairs(localLoop) do
+                table.insert(loop, group.compactIndexes[localIndex])
+            end
+            table.insert(enabledGroups, {
+                mode = group.mode,
+                startIndex = group.startIndex,
+                endIndex = group.endIndex,
+                enabledBlockCount = #group.compactIndexes,
+                loopLength = #localLoop,
+            })
+        end
+    end
     return {
         mode = mode,
+        modeSummary = GetVersionModeSummary(version),
         blocks = blocks,
         sourceIndexes = sourceIndexes,
+        groups = enabledGroups,
         modifierText = modifierText,
         modifierKey = modifierKey,
         inlineModifierKeys = inlineModifierKeys,
-        loop = BuildLoop(mode, #blocks),
+        loop = loop,
     }
 end
 
@@ -632,6 +780,12 @@ Library.GetBlockText = function(block)
 end
 Library.ValidateVersion = ValidateVersion
 Library.BuildLoop = BuildLoop
+Library.NormalizeMode = NormalizeMode
+Library.GetBlockMode = GetBlockMode
+Library.GetBlockGroups = GetBlockGroups
+Library.GetVersionModeSummary = GetVersionModeSummary
+Library.SetBlockGroupMode = SetBlockGroupMode
+Library.SetAllBlockModes = SetAllBlockModes
 Library.DeepCopy = DeepCopy
 Library.DefaultBlock = DefaultBlock
 Library.DefaultCommand = DefaultCommand
@@ -1512,7 +1666,7 @@ local function MigratePrototype()
         local oldVersion = old.versions[oldName]
         if type(oldVersion) == "table" then
             local version = DefaultVersion("Version " .. oldName)
-            version.mode = NormalizeMode(oldVersion.mode) or "sequential"
+            version.mode = NormalizeMode(oldVersion.mode) or MODE_EVEN_CYCLE
             version.blocks = {}
             for _, text in ipairs(oldVersion.blocks or {}) do
                 local block = ParsePrototypeBlock(text)
