@@ -539,8 +539,8 @@ function Capture.GetEquippedSlot(slotName, force)
     return CopyTable(SLOT_CACHE[slotName] or EmptySlot(slotName))
 end
 
-function Capture.GetEquippedSlots(slotNames)
-    local forceAll = DIRTY_ALL_SLOTS
+function Capture.GetEquippedSlots(slotNames, force)
+    local forceAll = force == true or DIRTY_ALL_SLOTS
     local out = {}
     for _, slotName in ipairs(slotNames or {}) do
         out[slotName] = Capture.GetEquippedSlot(slotName, forceAll)
@@ -680,6 +680,52 @@ function Capture.GetBagItemCount(itemID)
         if ok then return tonumber(count) or 0 end
     end
     return nil
+end
+
+local function GetBagTooltipTrack(bagID, bagSlot)
+    if not (C_TooltipInfo and C_TooltipInfo.GetBagItem) then return nil end
+    local ok, data = pcall(C_TooltipInfo.GetBagItem, bagID, bagSlot)
+    if not ok or type(data) ~= "table" then return nil end
+    local upgrade = ParseUpgrade(TooltipDataToLines(data))
+    return upgrade and upgrade.track or nil
+end
+
+function Capture.GetOwnedBagItems()
+    local out = {}
+    if not (C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerItemID) then
+        return out
+    end
+
+    local bagIDs, seen = { 0 }, { [0] = true }
+    local maxBag = tonumber(NUM_BAG_SLOTS) or 4
+    for bagID = 1, maxBag do
+        table.insert(bagIDs, bagID)
+        seen[bagID] = true
+    end
+    local reagentBag = Enum and Enum.BagIndex and tonumber(Enum.BagIndex.ReagentBag) or 5
+    if reagentBag and not seen[reagentBag] then table.insert(bagIDs, reagentBag) end
+
+    for _, bagID in ipairs(bagIDs) do
+        local rawSlotCount = C_Container.GetContainerNumSlots(bagID)
+        local slotCount = tonumber(rawSlotCount) or 0
+        for bagSlot = 1, slotCount do
+            local rawItemID = C_Container.GetContainerItemID(bagID, bagSlot)
+            local itemID = tonumber(rawItemID)
+            if itemID then
+                local track = GetBagTooltipTrack(bagID, bagSlot)
+                local current = out[itemID]
+                if not current or track == "Myth" or (track == "Hero" and current.track ~= "Myth") then
+                    out[itemID] = {
+                        itemID = itemID,
+                        track = track,
+                        bagID = bagID,
+                        bagSlot = bagSlot,
+                    }
+                end
+            end
+        end
+    end
+    return out
 end
 
 function Capture.GetCurrencySnapshot()
