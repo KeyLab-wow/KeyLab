@@ -372,7 +372,34 @@ local function ValidateBracketGroups(value, modifierKeys)
     return withoutGroups
 end
 
-local function ValidateMacroText(text)
+local function IsKnownSpellAction(action)
+    local spellName = Trim(action):gsub("^!", "")
+    if spellName == "" then return false end
+
+    if C_Spell and C_Spell.GetSpellInfo then
+        local ok, info = pcall(C_Spell.GetSpellInfo, spellName)
+        if ok and info and Trim(info.name) ~= "" then return true end
+    end
+    if GetSpellInfo then
+        local ok, name = pcall(GetSpellInfo, spellName)
+        if ok and Trim(name) ~= "" then return true end
+    end
+    return false
+end
+
+local function MatchesSequenceName(action, draftSequenceName)
+    local wanted = Trim(action):gsub("^!", ""):lower()
+    if wanted == "" or wanted == "nil" or IsKnownSpellAction(action) then return false end
+    if Trim(draftSequenceName):lower() == wanted then return true end
+
+    local collection = EnsureCollection(false)
+    for _, sequence in pairs(collection and collection.sequences or {}) do
+        if Trim(sequence and sequence.name):lower() == wanted then return true end
+    end
+    return false
+end
+
+local function ValidateMacroText(text, draftSequenceName)
     if type(text) ~= "string" then return nil, "Enter a supported WoW macro." end
     if #text == 0 or Trim(text) == "" then return nil, "Enter a supported WoW macro." end
     if #text > MAX_BLOCK_CHARS then
@@ -410,6 +437,9 @@ local function ValidateMacroText(text)
                     if Trim(clause) == "" then
                         return nil, "Line " .. tostring(lineNumber) .. ": every /" .. command .. " clause requires an action."
                     end
+                    if command == "cast" and MatchesSequenceName(clause, draftSequenceName) then
+                        return nil, "Line " .. tostring(lineNumber) .. ": a KeyLab sequence cannot be cast by name. Add the spell directly."
+                    end
                 end
             elseif command == "castsequence" then
                 if plain == "" then
@@ -429,6 +459,9 @@ local function ValidateMacroText(text)
                     for action in (clause .. ","):gmatch("(.-),") do
                         if Trim(action) == "" then
                             return nil, "Line " .. tostring(lineNumber) .. ": every /castsequence step requires an action."
+                        end
+                        if MatchesSequenceName(action, draftSequenceName) then
+                            return nil, "Line " .. tostring(lineNumber) .. ": a KeyLab sequence cannot be used as a /castsequence action. Add the spell directly."
                         end
                     end
                 end
@@ -1191,6 +1224,14 @@ function Library.SaveSequence(sequenceDraft)
         if not version then return false, "A saved version is missing." end
         version.name = Trim(version.name)
         if version.name == "" then return false, "Every version needs a name." end
+        for blockIndex, block in ipairs(version.blocks or {}) do
+            if block and block.enabled ~= false and type(block.macroText) == "string" then
+                local valid, validationMessage = ValidateMacroText(block.macroText, sequenceDraft.name)
+                if not valid then
+                    return false, tostring(version.name) .. ": Macro " .. tostring(blockIndex) .. ": " .. tostring(validationMessage)
+                end
+            end
+        end
         local _, message = ValidateVersion(version)
         if message then return false, tostring(version.name) .. ": " .. tostring(message) end
         version.updatedAt = Now()
