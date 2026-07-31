@@ -1,5 +1,162 @@
 # KeyLab Changelog
 
+## Version 1.8.119 - Help Shape KeyLab
+
+Released July 31, 2026
+
+- Added a highlighted Help Shape KeyLab invitation to the Home tab.
+- Made it easier for players to share ideas and feature requests through CurseForge comments.
+- Kept tracking, gear, capture, and Macro Sequencer behavior unchanged.
+
+## Version 1.8.118 - Group Finder Helper Controls
+
+Released July 31, 2026
+
+- Added an enabled-by-default setting for automatically showing the Group Finder Helper.
+- Added a manual Open Group Finder Helper button when automatic opening is disabled.
+- Closing the helper now keeps it closed for the rest of the current Group Finder session.
+- Made the helper resizable and saved both its position and size between sessions.
+
+## Version 1.8.117 - Macro Input Safeguards
+
+Released July 30, 2026
+
+- Reinforced Macro Sequencer validation so `/click`, `/run`, `/script`, and `/dump` remain unavailable.
+- Prevented KeyLab sequence names from being saved as `/cast` or `/castsequence` actions while continuing to allow real WoW spell names.
+- Kept the proven one-press advancement behavior and cycle mathematics unchanged.
+- Restored crisp top borders on expandable Information cards while scrolling.
+
+## Version 1.8.116 - Safer Personal Backups
+
+Released July 30, 2026
+
+- Replaced the in-addon data transfer tools with clear instructions for manually backing up KeyLab before moving to a new computer or reinstalling Windows.
+- Kept the protected full Reset option and expanded its confirmation so players know that Macro Sequences, bindings, and Recycle Bin entries are included.
+- Reset now safely clears active Macro Sequence bindings and will not run during combat.
+- Removed an unused archived Macro Sequencer UI file from the release folder.
+
+## Version 1.8.115 - Macro Sequence Mapping
+
+Released July 30, 2026
+
+- Refined Macro Sequencer mapping and configuration summaries for macros and cycle groups.
+- Simplified the editor status area so saved sequence structure is easier to review.
+- Kept stable sequence IDs, bindings, versions, saved macros, and the proven secure execution behavior unchanged.
+
+## Version 1.8.114 - Macro Cycle Mapping
+
+Released July 30, 2026
+
+- Updated Macro Sequencer cycle mapping and saved-data compatibility.
+- Migrated active and recycled sequence versions to the current two-cycle model.
+- Retired the unused third cycle path while preserving the exact proven press patterns.
+- Moved the immutable diagnostic prototype beside the production addon so release packages contain only the current Macro Sequencer.
+
+## Version 1.8.113 - Movable LFG Gear List
+
+Released July 29, 2026
+
+- Stopped LFG page updates from moving the Gear Targets popup back to its starting position.
+- Made the popup remember where the player places it, including after a reload.
+- Kept the current scroll position steady while the LFG page refreshes.
+- Moved the first-open position slightly right of center so Blizzard's group settings remain easier to reach.
+
+## Version 1.8.112 - Clearer Voidcore Roll List
+
+Released July 29, 2026
+
+- Removed the misleading slot total beside the Nebulous Voidcore Rolls heading.
+- Gave every dungeon and raid its own outlined card within the roll list.
+- Brightened activity names, shaded alternating item rows, and added right-side scroll controls for faster scanning.
+
+## Version 1.8.111 - Equipped Myth Roll Protection
+
+Released July 29, 2026
+
+- Prevented equipped Myth-track ring and trinket Targets from appearing in Nebulous Voidcore rolls when another Hero-track copy is in the bags.
+- Made the equipped item's track take priority over duplicate bag copies when building the roll plan.
+- Kept the regular shopping list, saved Targets, Gear Dashboard, capture, and UI layers unchanged.
+
+## Version 1.8.110 - Live Shopping List Refresh
+
+Released July 29, 2026
+
+- Kept the LFG shopping list based on the shared Gear Dashboard analysis and saved Gear Targets.
+- Refreshed the rendered shopping list while browsing LFG so previously displayed equipped ring or trinket rows do not remain on screen.
+- Kept equipment capture, ownership decisions, saved Targets, Alternatives, and gear records in their existing layers.
+
+## Version 1.8.109 - Equipped Target Recognition
+
+Released July 29, 2026
+
+- Fixed equipped Myth-track ring Targets appearing in the LFG dungeon and raid shopping popup.
+- Applied the same ownership protection to both Trinket slots.
+- Made ownership follow the actual equipped item, even when World of Warcraft swaps the numbered ring or trinket position.
+- Refreshed current equipment before building the shopping plan so recently changed gear is recognized.
+- Added the KeyLab background artwork and key logo to both gear reminder windows.
+- Improved card headings, Target and Alternative lines, roll counts, colors, and spacing.
+- Kept saved Targets, Alternatives, gear records, and loot controls unchanged.
+
+## Version 1.8.108 - Compact Gear Reminders
+
+Released July 29, 2026
+
+- Changed the Nebulous Voidcore roll lists to a balanced two-column layout.
+- Moved equipped Hero-track Targets out of the ordinary dungeon list when they belong in the Nebulous roll list.
+- Added a visible mouse-wheel scroll reminder along the right side when more content is available.
+- Added a high-contrast KeyLab-styled X button to both gear reminder windows.
+- Kept the roll analysis, completion triggers, capture flow, and saved records unchanged.
+
+## Version 1.8.107 - Nebulous Roll Reminders
+
+Released July 29, 2026
+
+- Added a separate Nebulous Voidcore Rolls section to the Gear Targets shopping window, grouped by dungeon and raid.
+- Labeled selected Tier slots as `Tier Item` so their Myth-item rolls are easy to recognize.
+- Added a KeyLab-styled reminder after a Mythic+ dungeon is completed or a raid boss is defeated, showing only the relevant rolls for that activity.
+- Kept the reminders read-only and separate from Blizzard loot controls, encounter capture, and saved gear records.
+
+## Version 1.8.106 - Gear Dashboard Bottom Spacing
+
+Released July 29, 2026
+
+- Moved the Crests & Seasonal Currency and Gear Target Progress cards fully inside the Gear Dashboard panel.
+- Added a consistent bottom margin across the left, center, and right dashboard columns.
+- Kept all gear analysis, Voidcore guidance, and saved gear records unchanged.
+
+## Version 1.8.105 - Nebulous Voidcore Guidance
+
+Released July 29, 2026
+
+- Added `Nebulous Voidcore Avail - Roll for Myth Item` guidance to every Hero-track item when a Nebulous Voidcore is owned.
+- Removed the incorrect requirement for a Hero item to already be fully upgraded before showing its Nebulous option.
+- Kept Ascendant Voidcores restricted to fully upgraded 6/6 Hero- or Myth-track eligible weapons and trinkets.
+- Clarified that Nebulous Voidcores roll for an item while Ascendant Voidcores upgrade an eligible owned item.
+- Kept the existing Tier, dungeon, raid, and saved Target sources unchanged.
+
+## Version 1.8.104 - KeyLab Logo Orientation
+
+Released July 29, 2026
+
+- Corrected the KeyLab header logo so the key points toward the upper right like the original logo.
+- Preserved the existing transparent gold icon and main-window background artwork.
+
+## Version 1.8.103 - Highest Avoidable Damage
+
+Released July 29, 2026
+
+- Changed the M+ Last Run Survival Pressure legend to show the highest Avoidable Damage pull instead of the lowest.
+- Kept the pull graph, captured records, and performance-ranking rules unchanged.
+
+## Version 1.8.102 - Sequencer Block Groups
+
+Released July 28, 2026
+
+- Added Block Groups so different parts of one Macro Sequence version can use different modes.
+- Added a mode menu to every block and a shared mode menu for each adjacent group.
+- Added a live press-order preview so the complete prepared loop can be checked before saving.
+- Preserved existing sequences as one group using their saved mode and left the proven secure execution engine unchanged.
+
 ## Version 1.8.101 - Main Window Artwork
 
 Released July 28, 2026

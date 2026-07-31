@@ -319,6 +319,7 @@ function KeyLab.UI:Create()
 
     local titleIcon = header:CreateTexture(nil, "ARTWORK", nil, 1)
     titleIcon:SetTexture("Interface\\AddOns\\KeyLab\\Assets\\KeyLabKeyIcon.tga")
+    titleIcon:SetTexCoord(0, 1, 1, 0)
     titleIcon:SetSize(58, 58)
     titleIcon:SetPoint("LEFT", header, "LEFT", 14, 0)
     self.titleIcon = titleIcon

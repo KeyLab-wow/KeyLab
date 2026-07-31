@@ -140,52 +140,6 @@ local function Initialize()
     end
 end
 
-local function ResetAll()
-    if KeyLab.SequencerLibrary and KeyLab.SequencerLibrary.PrepareForAddonReset then
-        KeyLab.SequencerLibrary.PrepareForAddonReset()
-    end
-    if KeyLab.SequencerPrototype and KeyLab.SequencerPrototype.PrepareForAddonReset then
-        KeyLab.SequencerPrototype.PrepareForAddonReset()
-    end
-
-    if KeyLab.DB and KeyLab.DB.ResetAll then
-        KeyLab.DB.ResetAll()
-    else
-        KeyLabDB = {
-            version = KeyLab.version or "0.1.4",
-            trackingSince = date("%B %Y"),
-            settings = { completedMythicPlusOnly = true, contentMode = "mplus" },
-            encounters = {},
-            raidEncounters = {},
-            raidNights = {},
-            builds = {},
-            lootTargets = {},
-            lootTargetStatuses = {},
-            gearTargets = {},
-            tierSets = {},
-            statGoals = {},
-            statGoalMatcherResults = {},
-            activityCounts = { schemaVersion = 1, characters = {} },
-        }
-    end
-
-    KeyLab.ResetGearingRuntimeState()
-
-    if KeyLab.Capture and KeyLab.Capture.Sessions and KeyLab.Capture.Sessions.ResetCaptureDB then
-        KeyLab.Capture.Sessions.ResetCaptureDB()
-    else
-        KeyLabCaptureDB = {
-            version = KeyLab.version or "0.1.4",
-            active = false,
-            completedSeen = false,
-            interrupted = false,
-        }
-    end
-
-    KeyLab.RefreshTabs()
-    Print("All KeyLab data reset.")
-end
-
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("ADDON_LOADED")
 
@@ -281,7 +235,11 @@ SlashCmdList["KEYLAB"] = function(msg)
     end
 
     if msg == "reset" then
-        ResetAll()
+        if KeyLab.ShowResetJournalDataConfirmation then
+            KeyLab:ShowResetJournalDataConfirmation()
+        else
+            Print("Reset confirmation is not available.")
+        end
         return
     end
 
