@@ -25,6 +25,7 @@ local DB_VERSION = "0.1.8"
 local DEFAULT_SETTINGS = {
     completedMythicPlusOnly = true,
     contentMode = "mplus",
+    autoShowGroupFinderHelper = true,
 }
 
 local function EnsureTable(parent, key)
