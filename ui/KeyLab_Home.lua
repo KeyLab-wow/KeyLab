@@ -225,16 +225,16 @@ function HOME:Create(parent)
     local releaseNoteHeight = 132
     local releaseNote = MakePanel(frame, CFG.x, y, width, releaseNoteHeight, false)
 
-    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.115", 14, COLORS.title, "LEFT")
+    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.119", 14, COLORS.title, "LEFT")
     releaseTitle:SetPoint("TOPLEFT", releaseNote, "TOPLEFT", 14, -12)
     releaseTitle:SetSize(280, 18)
 
     local releaseBody = MakeText(
         releaseNote,
-        "Released July 30, 2026\n\n" ..
-        "- Refined Macro Sequencer mapping and configuration summaries.\n" ..
-        "- Simplified the editor status area for easier review.\n" ..
-        "- Existing sequences, bindings, and secure execution stay unchanged.",
+        "Released July 31, 2026\n\n" ..
+        "- Added a highlighted Help Shape KeyLab invitation to Home.\n" ..
+        "- Made it easier to share ideas and feature requests through CurseForge.\n" ..
+        "- Kept tracking, gear, and Macro Sequencer behavior unchanged.",
         11,
         COLORS.muted,
         "LEFT"
@@ -243,6 +243,25 @@ function HOME:Create(parent)
     releaseBody:SetSize(width - 28, 92)
 
     y = y - releaseNoteHeight - gap
+
+    local feedbackHeight = 102
+    local feedback = MakePanel(frame, CFG.x, y, width, feedbackHeight, true)
+
+    local feedbackTitle = MakeText(feedback, "Help Shape KeyLab", 15, COLORS.warning, "LEFT")
+    feedbackTitle:SetPoint("TOPLEFT", feedback, "TOPLEFT", 16, -13)
+    feedbackTitle:SetSize(width - 32, 20)
+
+    local feedbackBody = MakeText(
+        feedback,
+        "Have an idea, feature request, or something you would like KeyLab to do? Visit the KeyLab page on CurseForge and leave a comment. I read every suggestion, and your feedback helps guide what comes next.",
+        12,
+        COLORS.text,
+        "LEFT"
+    )
+    feedbackBody:SetPoint("TOPLEFT", feedbackTitle, "BOTTOMLEFT", 0, -9)
+    feedbackBody:SetSize(width - 32, 54)
+
+    y = y - feedbackHeight - gap
 
     local required = MakePanel(frame, pairX, y, halfW, 170, true)
 

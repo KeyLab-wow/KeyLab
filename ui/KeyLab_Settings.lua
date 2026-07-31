@@ -1,6 +1,6 @@
 -- KeyLab_Settings.lua
 -- Settings tab for KeyLab / M+ Journal
--- Purpose: simple local journal data controls and credits.
+-- Purpose: backup guidance, protected reset controls, and credits.
 
 local ADDON_NAME, KeyLab = ...
 KeyLab = KeyLab or {}
@@ -121,22 +121,6 @@ local function RegisterResetPopup()
     -- Reset confirmation is registered by KeyLab_JournalData.lua.
 end
 
-local function ExportJournalData()
-    if KeyLab.ShowExportPopup then
-        KeyLab:ShowExportPopup()
-    else
-        Print("Export system is not available.")
-    end
-end
-
-local function ImportJournalData()
-    if KeyLab.ShowImportPopup then
-        KeyLab:ShowImportPopup()
-    else
-        Print("Import system is not available.")
-    end
-end
-
 -- =========================================================
 -- CONTENT BUILDERS
 -- =========================================================
@@ -156,40 +140,126 @@ local function MakeDataAction(parent, y, title, description, buttonText, buttonC
     MakeButton(parent, buttonText, 640, y + 2, 210, onClick)
 end
 
+local function MakeBackupInstructions(parent, y)
+    local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    card:SetPoint("TOPLEFT", parent, "TOPLEFT", CONTENT_PAD, y)
+    card:SetSize(862, 184)
+    SetBackdrop(card, COLORS.box, COLORS.border)
+
+    local title = MakeText(
+        card,
+        "Moving to a New Computer or Reinstalling Windows",
+        "GameFontNormal",
+        FONT_ACTION_TITLE,
+        COLORS.gold,
+        "LEFT"
+    )
+    title:SetPoint("TOPLEFT", card, "TOPLEFT", 14, -12)
+    title:SetPoint("RIGHT", card, "RIGHT", -14, 0)
+    title:SetHeight(18)
+
+    local body = MakeText(
+        card,
+        "KeyLab keeps its data in WoW's SavedVariables folder.\n\n"
+        .. "1. Close World of Warcraft completely.\n"
+        .. "2. Open World of Warcraft\\_retail_\\WTF\\Account\\<Your Account>\\SavedVariables.\n"
+        .. "3. Copy KeyLab.lua and, if present, KeyLab.lua.bak somewhere safe.\n"
+        .. "4. With WoW closed on the new installation, place the copied file(s) back in that same folder before starting the game.\n\n"
+        .. "This keeps your journal, gear plans, Practice sessions, settings, and personal Macro Sequences. KeyLab does not import backup text inside the addon.",
+        "GameFontHighlightSmall",
+        FONT_BODY,
+        COLORS.text,
+        "LEFT"
+    )
+    body:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+    body:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -14, 12)
+end
+
+local function BuildGroupFinderSettings(parent, y)
+    local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    card:SetPoint("TOPLEFT", parent, "TOPLEFT", CONTENT_PAD, y)
+    card:SetSize(862, 104)
+    SetBackdrop(card, COLORS.box, COLORS.border)
+
+    local check = CreateFrame("CheckButton", nil, card, "UICheckButtonTemplate")
+    check:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -13)
+    check:SetSize(24, 24)
+
+    local label = MakeText(
+        card,
+        "Automatically Show Group Finder Helper",
+        "GameFontNormal",
+        FONT_ACTION_TITLE,
+        COLORS.text,
+        "LEFT"
+    )
+    label:SetPoint("LEFT", check, "RIGHT", 5, 0)
+    label:SetSize(430, 22)
+
+    local description = MakeText(
+        card,
+        "Show your saved gear shopping list while browsing Premade Group dungeons and raids. If you close it, it stays closed until you leave Group Finder.",
+        "GameFontHighlightSmall",
+        FONT_BODY,
+        COLORS.muted,
+        "LEFT"
+    )
+    description:SetPoint("TOPLEFT", card, "TOPLEFT", 17, -48)
+    description:SetSize(590, 42)
+
+    local openButton = MakeButton(card, "Open Group Finder Helper", 635, -39, 205, function()
+        if not (KeyLab.LFGTooltips and KeyLab.LFGTooltips.OpenManual
+            and KeyLab.LFGTooltips.OpenManual()) then
+            Print("Group Finder Helper is not available yet.")
+        end
+    end)
+
+    local function RefreshControl()
+        local enabled = true
+        if KeyLab.LFGTooltips and KeyLab.LFGTooltips.IsAutoShowEnabled then
+            enabled = KeyLab.LFGTooltips.IsAutoShowEnabled()
+        elseif KeyLab.DB and KeyLab.DB.GetSetting then
+            enabled = KeyLab.DB.GetSetting("autoShowGroupFinderHelper", true) ~= false
+        end
+        check:SetChecked(enabled)
+        if enabled then openButton:Hide() else openButton:Show() end
+    end
+
+    check:SetScript("OnClick", function(button)
+        local enabled = button:GetChecked() == true
+        if KeyLab.LFGTooltips and KeyLab.LFGTooltips.SetAutoShowEnabled then
+            KeyLab.LFGTooltips.SetAutoShowEnabled(enabled)
+        elseif KeyLab.DB and KeyLab.DB.SetSetting then
+            KeyLab.DB.SetSetting("autoShowGroupFinderHelper", enabled)
+        end
+        RefreshControl()
+    end)
+
+    RefreshControl()
+    return RefreshControl
+end
+
 local function BuildSettings(content)
     local y = -6
 
-    MakeSectionHeader(content, "Data Management", y)
+    MakeSectionHeader(content, "Group Finder Helper", y)
     y = y - 50
 
-    MakeDataAction(
-        content,
-        y,
-        "Export Journal Data",
-        "Copy your saved KeyLab data for backup or transfer.",
-        "Export Journal Data",
-        nil,
-        ExportJournalData
-    )
-    y = y - ROW_GAP
+    local refreshGroupFinder = BuildGroupFinderSettings(content, y)
+    y = y - 104 - SECTION_GAP
+
+    MakeSectionHeader(content, "Back Up or Move KeyLab", y)
+    y = y - 50
+
+    MakeBackupInstructions(content, y)
+    y = y - 204
 
     MakeDataAction(
         content,
         y,
-        "Import Journal Data",
-        "Load KeyLab data that you exported earlier.",
-        "Import Journal Data",
-        nil,
-        ImportJournalData
-    )
-    y = y - ROW_GAP
-
-    MakeDataAction(
-        content,
-        y,
-        "Delete / Reset Journal Data",
-        "Permanently delete all saved KeyLab data for every character. This cannot be undone.",
-        "Delete / Reset Data",
+        "Reset KeyLab",
+        "Permanently delete all KeyLab data, including Macro Sequences, bindings, and the Recycle Bin. This cannot be undone.",
+        "Reset All KeyLab Data",
         "danger",
         function()
             if KeyLab.ShowResetJournalDataConfirmation then
@@ -245,6 +315,7 @@ local function BuildSettings(content)
     y = y - 104
 
     content:SetHeight(math.abs(y) + 40)
+    return refreshGroupFinder
 end
 
 -- =========================================================
@@ -261,7 +332,7 @@ function Settings:Create(parent)
     Theme.CreateTabHeader(
         frame,
         "Settings",
-        "Choose how KeyLab behaves and manage your saved journal data."
+        "Find backup instructions or reset your saved KeyLab data."
     )
 
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
@@ -273,10 +344,10 @@ function Settings:Create(parent)
     content:SetHeight(660)
     scroll:SetScrollChild(content)
 
-    BuildSettings(content)
+    local refreshGroupFinder = BuildSettings(content)
 
     function frame:Refresh()
-        -- Placeholder for future settings refresh if needed.
+        if refreshGroupFinder then refreshGroupFinder() end
     end
 
     return frame

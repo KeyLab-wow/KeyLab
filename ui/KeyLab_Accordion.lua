@@ -92,6 +92,15 @@ function Accordion.Create(content, options)
         Size(header, width, headerHeight)
         SetBackdrop(header, Color(colors, "panel"), Color(colors, "border"))
 
+        -- A BackdropTemplate's one-pixel top edge can fade when its ScrollFrame
+        -- lands between physical pixels. Keep a separate snapped edge above the
+        -- backdrop so every collapsed card retains the same crisp top line.
+        local topEdge = header:CreateTexture(nil, "OVERLAY", nil, 7)
+        Point(topEdge, "TOPLEFT", header, "TOPLEFT", 0, 0)
+        Point(topEdge, "TOPRIGHT", header, "TOPRIGHT", 0, 0)
+        Height(topEdge, 1)
+        topEdge:SetColorTexture(unpack(Color(colors, "border")))
+
         local indicator = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
         indicator:SetFont(STANDARD_TEXT_FONT, 16, "")
         indicator:SetPoint("LEFT", header, "LEFT", 14, 0)
@@ -126,6 +135,7 @@ function Accordion.Create(content, options)
         section.header = header
         section.indicator = indicator
         section.title = title
+        section.topEdge = topEdge
         section.body = body
         section.bodyText = bodyText
         controller.sections[index] = section
@@ -136,6 +146,7 @@ function Accordion.Create(content, options)
         end)
         header:SetScript("OnEnter", function(self)
             self:SetBackdropBorderColor(unpack(Color(colors, "hover")))
+            topEdge:SetColorTexture(unpack(Color(colors, "hover")))
             if colors.hoverBg then self:SetBackdropColor(unpack(colors.hoverBg)) end
             title:SetTextColor(unpack(Color(colors, "gold")))
         end)
@@ -143,6 +154,7 @@ function Accordion.Create(content, options)
             local active = controller.openIndex == index
             self:SetBackdropColor(unpack(Color(colors, "panel")))
             self:SetBackdropBorderColor(unpack(active and Color(colors, "gold") or Color(colors, "border")))
+            topEdge:SetColorTexture(unpack(active and Color(colors, "gold") or Color(colors, "border")))
             title:SetTextColor(unpack(active and Color(colors, "gold") or Color(colors, "text")))
         end)
     end
@@ -156,6 +168,7 @@ function Accordion.Create(content, options)
             section.indicator:SetText(expanded and "-" or "+")
             section.title:SetTextColor(unpack(expanded and Color(colors, "gold") or Color(colors, "text")))
             section.header:SetBackdropBorderColor(unpack(expanded and Color(colors, "gold") or Color(colors, "border")))
+            section.topEdge:SetColorTexture(unpack(expanded and Color(colors, "gold") or Color(colors, "border")))
             y = y - headerHeight
 
             section.body:ClearAllPoints()

@@ -429,7 +429,7 @@ function Sequencer:RefreshMacroValidation()
         return
     end
     local valid,message
-    if Lib().ValidateMacroText then valid,message=Lib().ValidateMacroText(value) else message="Validation is unavailable." end
+    if Lib().ValidateMacroText then valid,message=Lib().ValidateMacroText(value,self.draft and self.draft.name) else message="Validation is unavailable." end
     self.characterCount:SetText(tostring(#value).." / 255 characters")
     Color(self.characterCount,#value>255 and COLORS.red or #value>220 and COLORS.yellow or COLORS.muted)
     if valid and not self.selectedBlockIndex then
@@ -449,7 +449,7 @@ function Sequencer:AddMacroBlock()
     if self.viewOnly then self:SetStatus("Reference examples are read-only.","error"); return end
     local version=self:CurrentVersion(); if not version then self:SetStatus("Choose a version first.","error"); return end
     local value=self.macroEdit:GetText() or ""
-    local valid,message=Lib().ValidateMacroText(value)
+    local valid,message=Lib().ValidateMacroText(value,self.draft and self.draft.name)
     if not valid then self:SetStatus(message,"error"); return end
     if #(version.blocks or {})>=(Lib().MAX_BLOCKS or 50) then self:SetStatus("This version already has 50 macros.","error"); return end
     version.blocks=version.blocks or {}
@@ -461,7 +461,7 @@ end
 function Sequencer:SaveMacroBlock()
     if self.viewOnly then self:SetStatus("Reference examples are read-only.","error"); return end
     local block=self:CurrentBlock(); if not block then self:SetStatus("Select a macro to update.","error"); return end
-    local value=self.macroEdit:GetText() or ""; local valid,message=Lib().ValidateMacroText(value)
+    local value=self.macroEdit:GetText() or ""; local valid,message=Lib().ValidateMacroText(value,self.draft and self.draft.name)
     if not valid then self:SetStatus(message,"error"); return end
     local enabled=block.enabled~=false
     block.enabled=enabled; block.macroText=value; block.commands=nil
@@ -1001,7 +1001,7 @@ local INFORMATION_SECTIONS={
     {
         title="2. One Press, One Step",
         body=InfoJoin({
-            "Each full keyboard or mouse-button press moves the sequence forward by one step.\n\nThis works whether WoW casts on key-down or key-up. Only the active part of the press can run the macro. The other part is ignored.\n\nHolding a key does not create more presses. Every step needs a new physical press.",
+            "Each full keyboard or mouse-button press tries one KeyLab macro and then moves the sequence forward by one step.\n\nA macro cannot call another macro, an action-bar button, or another KeyLab sequence. This works whether WoW casts on key-down or key-up. Only the active part of the press can run the macro. The other part is ignored.\n\nHolding a key does not create more presses. Every step needs a new physical press.",
             InfoHeading("Important"),
             "A step is used when KeyLab tries it, even if the action cannot run because of:\n"..InfoList({
                 "The Global Cooldown",
@@ -1122,7 +1122,7 @@ local INFORMATION_SECTIONS={
                 "Sequence importing, exporting, or sharing",
                 "Lua or script execution",
             }),
-            "/run, /script, /dump, and /click are not supported.\n\nEvery action needs a direct player press. WoW always decides whether it can run.",
+            "/run, /script, /dump, and /click are not supported. KeyLab sequence names cannot be entered as cast actions.\n\nEvery action must name the spell or item directly and needs a direct player press. WoW always decides whether it can run.",
         }),
     },
     {

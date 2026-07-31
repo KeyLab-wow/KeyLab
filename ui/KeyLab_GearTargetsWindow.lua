@@ -18,6 +18,8 @@ Purpose:
 
 local CFG = {
     width = 760,
+    minWidth = 620,
+    maxWidth = 1100,
     minHeight = 390,
     maxHeight = 760,
     lineHeight = 19,
@@ -580,6 +582,26 @@ local function GetShoppingWindowPosition()
     return KeyLabDB.settings.gearShoppingWindowPosition
 end
 
+local function Clamp(value, minimum, maximum)
+    value = tonumber(value) or minimum
+    return math.max(minimum, math.min(maximum, value))
+end
+
+local function UpdateShoppingWindowLayout(f, width, height)
+    width = tonumber(width) or f:GetWidth() or CFG.width
+    height = tonumber(height) or f:GetHeight() or CFG.minHeight
+    if f.backgroundArtwork then
+        f.backgroundArtwork:SetTexCoord(
+            0, math.min(1, width / 2048),
+            0, math.min(1, height / 1024)
+        )
+    end
+    if f.content then
+        f.contentWidth = math.max(520, width - 100)
+        f.content:SetWidth(f.contentWidth)
+    end
+end
+
 local function ApplyShoppingWindowPosition(f)
     local position = GetShoppingWindowPosition()
     local x = position.userPlaced and tonumber(position.x) or 180
@@ -587,6 +609,17 @@ local function ApplyShoppingWindowPosition(f)
     f:ClearAllPoints()
     f:SetPoint("CENTER", UIParent, "CENTER", x, y)
     f.positionApplied = true
+end
+
+local function ApplyShoppingWindowGeometry(f)
+    local position = GetShoppingWindowPosition()
+    local width = position.userSized
+        and Clamp(position.width, CFG.minWidth, CFG.maxWidth) or CFG.width
+    local height = position.userSized
+        and Clamp(position.height, CFG.minHeight, CFG.maxHeight) or CFG.minHeight
+    f:SetSize(width, height)
+    ApplyShoppingWindowPosition(f)
+    UpdateShoppingWindowLayout(f, width, height)
 end
 
 local function SaveShoppingWindowPosition(f)
@@ -602,6 +635,23 @@ local function SaveShoppingWindowPosition(f)
     ApplyShoppingWindowPosition(f)
 end
 
+local function SaveShoppingWindowSize(f)
+    f:StopMovingOrSizing()
+    local centerX, centerY = f:GetCenter()
+    local parentX, parentY = UIParent and UIParent:GetCenter()
+    local position = GetShoppingWindowPosition()
+    position.userSized = true
+    position.width = Clamp(f:GetWidth(), CFG.minWidth, CFG.maxWidth)
+    position.height = Clamp(f:GetHeight(), CFG.minHeight, CFG.maxHeight)
+    if centerX and centerY and parentX and parentY then
+        position.userPlaced = true
+        position.x = centerX - parentX
+        position.y = centerY - parentY
+    end
+    ApplyShoppingWindowGeometry(f)
+    if GearWindow.Refresh then GearWindow.Refresh() end
+end
+
 local function EnsureFrame()
     if frame then return frame end
 
@@ -613,22 +663,32 @@ local function EnsureFrame()
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
     frame:SetMovable(true)
+    frame:SetResizable(true)
+    if frame.SetResizeBounds then
+        frame:SetResizeBounds(CFG.minWidth, CFG.minHeight, CFG.maxWidth, CFG.maxHeight)
+    else
+        if frame.SetMinResize then frame:SetMinResize(CFG.minWidth, CFG.minHeight) end
+        if frame.SetMaxResize then frame:SetMaxResize(CFG.maxWidth, CFG.maxHeight) end
+    end
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
     frame:SetScript("OnDragStop", SaveShoppingWindowPosition)
+    frame:SetScript("OnSizeChanged", UpdateShoppingWindowLayout)
     SetBackdrop(frame, CFG.colors.bg, CFG.colors.gold)
     AddWindowArtwork(frame)
 
     frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    frame.title:SetPoint("TOP", frame, "TOP", 0, -17)
-    frame.title:SetSize(CFG.width - 90, 28)
+    frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 50, -17)
+    frame.title:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -50, -17)
+    frame.title:SetHeight(28)
     frame.title:SetJustifyH("CENTER")
     frame.title:SetText("KeyLab Gear Targets")
     frame.title:SetTextColor(unpack(CFG.colors.gold))
 
     frame.subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    frame.subtitle:SetPoint("TOP", frame.title, "BOTTOM", 0, -1)
-    frame.subtitle:SetSize(CFG.width - 90, 20)
+    frame.subtitle:SetPoint("TOPLEFT", frame.title, "BOTTOMLEFT", 0, -1)
+    frame.subtitle:SetPoint("TOPRIGHT", frame.title, "BOTTOMRIGHT", 0, -1)
+    frame.subtitle:SetHeight(20)
     frame.subtitle:SetJustifyH("CENTER")
     frame.subtitle:SetText("Your saved gear plan while browsing dungeons and raids")
     frame.subtitle:SetTextColor(unpack(CFG.colors.muted))
@@ -636,6 +696,9 @@ local function EnsureFrame()
     local close = CreateCloseButton(frame)
     close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -10)
     close:SetScript("OnClick", function()
+        if KeyLab.LFGTooltips and KeyLab.LFGTooltips.DismissForCurrentSession then
+            KeyLab.LFGTooltips.DismissForCurrentSession()
+        end
         frame.manualOpen = false
         frame.autoOpen = false
         frame:Hide()
@@ -659,7 +722,21 @@ local function EnsureFrame()
     frame.lines = {}
     frame.cards = {}
 
-    ApplyShoppingWindowPosition(frame)
+    local resizeGrip = CreateFrame("Button", nil, frame)
+    resizeGrip:SetSize(18, 18)
+    resizeGrip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
+    resizeGrip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    resizeGrip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    resizeGrip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    resizeGrip:SetScript("OnMouseDown", function(_, button)
+        if button == "LeftButton" then frame:StartSizing("BOTTOMRIGHT") end
+    end)
+    resizeGrip:SetScript("OnMouseUp", function(_, button)
+        if button == "LeftButton" then SaveShoppingWindowSize(frame) end
+    end)
+    frame.resizeGrip = resizeGrip
+
+    ApplyShoppingWindowGeometry(frame)
     frame:Hide()
     return frame
 end
@@ -796,7 +873,10 @@ function GearWindow.Refresh()
     local screenHeight = UIParent and UIParent.GetHeight and UIParent:GetHeight() or CFG.maxHeight + 80
     local maximumHeight = math.min(CFG.maxHeight, math.max(CFG.minHeight, screenHeight - 80))
     local neededHeight = 94 + contentHeight
-    f:SetHeight(math.max(CFG.minHeight, math.min(maximumHeight, neededHeight)))
+    local position = GetShoppingWindowPosition()
+    if not position.userSized then
+        f:SetHeight(math.max(CFG.minHeight, math.min(maximumHeight, neededHeight)))
+    end
     local maximumScroll = math.max(0, contentHeight - (f.scroll:GetHeight() or 0))
     f.scroll:SetVerticalScroll(math.min(previousScroll, maximumScroll))
     f.lastShoppingRefreshAt = GetTime and GetTime() or 0
@@ -804,12 +884,12 @@ end
 
 function GearWindow.AnchorDefaultForLFG()
     local f = EnsureFrame()
-    if not f.positionApplied then ApplyShoppingWindowPosition(f) end
+    if not f.positionApplied then ApplyShoppingWindowGeometry(f) end
 end
 
 function GearWindow.ShowManual()
     local f = EnsureFrame()
-    if not f.positionApplied then ApplyShoppingWindowPosition(f) end
+    if not f.positionApplied then ApplyShoppingWindowGeometry(f) end
     f.manualOpen = true
     GearWindow.Refresh()
     f:Show()
@@ -835,7 +915,7 @@ function GearWindow.ShowForLFG()
         or now - (tonumber(f.lastShoppingRefreshAt) or 0) >= 1
     f.autoOpen = true
     f.currentResultNames = nil
-    if not f.positionApplied then ApplyShoppingWindowPosition(f) end
+    if not f.positionApplied then ApplyShoppingWindowGeometry(f) end
     if needsRefresh then GearWindow.Refresh() end
     f:Show()
 end
