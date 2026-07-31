@@ -83,14 +83,14 @@ local function EmptySlot(slotName)
     }
 end
 
-local function GetEquippedSlots()
+local function GetEquippedSlots(force)
     local names = {}
     for _, slotName in ipairs(Analysis.LeftSlots) do table.insert(names, slotName) end
     for _, slotName in ipairs(Analysis.RightSlots) do table.insert(names, slotName) end
-    if Capture().GetEquippedSlots then return Capture().GetEquippedSlots(names) or {} end
+    if Capture().GetEquippedSlots then return Capture().GetEquippedSlots(names, force == true) or {} end
     local out = {}
     for _, slotName in ipairs(names) do
-        out[slotName] = Capture().GetEquippedSlot and Capture().GetEquippedSlot(slotName) or EmptySlot(slotName)
+        out[slotName] = Capture().GetEquippedSlot and Capture().GetEquippedSlot(slotName, force == true) or EmptySlot(slotName)
     end
     return out
 end
@@ -246,14 +246,16 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
     local catalystItem = slot.itemID and masterDatabaseItem == false and not explicitlyCrafted and hasUpgradeTrack or false
     local craftedItem = slot.itemID and (explicitlyCrafted or (masterDatabaseItem == false and not hasUpgradeTrack)) or false
     local voidforgedItem = slot.voidforgedDetected == true or slot.ascendantVoidforgedDetected == true
+    local voidforgeRules = GearingDB().Voidforge or {}
+    local ascendantRankReady = upgradeRank == tonumber(voidforgeRules.requiredRank or 6)
+        and upgradeMaxRank == tonumber(voidforgeRules.requiredMaxRank or 6)
     local voidforgeAvailable = not voidforgedItem
         and slot.voidforgeCandidate == true
+        and ascendantRankReady
         and (tonumber(resources.ascendantVoidcores) or 0) > 0
     local isHeroTrack = trackName == "Hero"
     local isMythTrack = trackName == "Myth"
-    local isMaxRank = upgradeRank and upgradeMaxRank and upgradeRank >= upgradeMaxRank
     local nebulousAvailable = isHeroTrack
-        and isMaxRank
         and (tonumber(resources.nebulousVoidcores) or 0) > 0
     local upgradeAction = UpgradeAction(slot)
     local action
@@ -263,9 +265,9 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
     elseif tierNeeded then
         action = slot.itemID and "Catalyst for Tier" or "Find a Tier base item"
     elseif voidforgeAvailable then
-        action = "Ascendant Voidcore Available"
+        action = "Ascendant Voidcore Avail - Upgrade Item"
     elseif nebulousAvailable then
-        action = "Nebulous Voidcore Available"
+        action = "Nebulous Voidcore Avail - Roll for Myth Item"
     elseif voidforgedItem then
         action = isHeroTrack and "Ascendant Voidforged - Upgrade to Myth" or "Ascendant Voidforged"
     elseif tierChecked then
@@ -353,6 +355,298 @@ local function BuildAlternatives(specID)
     return out
 end
 
+local function AddUniqueNumber(list, seen, value)
+    value = tonumber(value)
+    if not value or seen[value] then return end
+    seen[value] = true
+    table.insert(list, value)
+end
+
+local function GetSourceEncounterIDs(specID, sourceID, slotName, itemID)
+    local out, seen = {}, {}
+    sourceID = tonumber(sourceID)
+    itemID = tonumber(itemID)
+    if not sourceID then return out end
+
+    local function AddFromItem(item)
+        local source = item and item.sources and item.sources[sourceID]
+        for _, encounterID in ipairs(source and source.encounterIDs or {}) do
+            AddUniqueNumber(out, seen, encounterID)
+        end
+    end
+
+    if itemID and Mapping().GetItem then
+        AddFromItem(Mapping().GetItem(itemID, specID, nil, sourceID))
+    elseif Mapping().GetItemsForSpecSource then
+        local wantedSlot = Mapping().GetBaseSlotName and Mapping().GetBaseSlotName(slotName) or slotName
+        for _, item in ipairs(Mapping().GetItemsForSpecSource(specID, sourceID) or {}) do
+            local itemSlot = Mapping().GetBaseSlotName and Mapping().GetBaseSlotName(item.slot) or item.slot
+            if itemSlot == wantedSlot then AddFromItem(item) end
+        end
+    end
+
+    table.sort(out)
+    return out
+end
+
+local function GetNebulousPlanSources(plan, specID, season)
+    local out, seen = {}, {}
+    local function AddSource(source)
+        local descriptor = SourceDescriptor(source)
+        local key = descriptor and tostring(descriptor.sourceID or "")
+        if descriptor and descriptor.sourceID and not seen[key] then
+            seen[key] = true
+            table.insert(out, descriptor)
+        end
+    end
+
+    for _, source in ipairs(plan.guidanceSources or {}) do AddSource(source) end
+
+    if #out == 0 and plan.itemID and Mapping().GetItemSources then
+        for _, source in ipairs(Mapping().GetItemSources(plan.itemID, specID) or {}) do AddSource(source) end
+    end
+
+    if #out == 0 and Mapping().GetCatalystSourcesForSlot then
+        for _, source in ipairs(Mapping().GetCatalystSourcesForSlot(specID, plan.slotName, season) or {}) do
+            AddSource(source)
+        end
+    end
+
+    table.sort(out, function(a, b)
+        if a.sourceType ~= b.sourceType then return a.sourceType == "Dungeon" end
+        return tostring(a.name or "") < tostring(b.name or "")
+    end)
+    return out
+end
+
+local function NebulousItemLabel(plan)
+    if plan.tierChecked then return "Tier Item", true end
+    local target = plan.target
+    local name = target and (target.name or target.itemNameClean)
+    if name and name ~= "" then return tostring(name), false end
+    return "Myth Item", false
+end
+
+local function BuildNebulousRollPlan(filters)
+    filters = filters or {}
+    local state = Analysis.GetDashboardState()
+    local specID = tonumber(state and state.specID)
+    local currencyCount = tonumber(state and state.resources and state.resources.nebulousVoidcores) or 0
+    local sourceFilter = tonumber(filters.sourceID or filters.mapID or filters.instanceID)
+    local encounterFilter = tonumber(filters.encounterID)
+    local groupsByKey, groups = {}, {}
+
+    if not specID or specID == 0 or currencyCount <= 0 then
+        return {
+            specID = specID or 0,
+            specName = state and state.specName or "Current Spec",
+            currencyCount = currencyCount,
+            groups = groups,
+            itemCount = 0,
+        }
+    end
+
+    local slotOrder = {}
+    for index, slotName in ipairs(Analysis.LeftSlots) do slotOrder[slotName] = index end
+    local offset = #Analysis.LeftSlots
+    for index, slotName in ipairs(Analysis.RightSlots) do slotOrder[slotName] = offset + index end
+
+    local itemCount = 0
+    local seenItems = {}
+    local function AddRollItem(slotName, displaySlot, label, isTier, targetItemID, currentItemID, sources)
+        local encounterItemID = isTier and nil or (targetItemID or currentItemID)
+        for _, source in ipairs(sources or {}) do
+            local descriptor = SourceDescriptor(source)
+            local sourceID = descriptor and tonumber(descriptor.sourceID)
+            if sourceID then
+                local encounterIDs = GetSourceEncounterIDs(
+                    specID,
+                    sourceID,
+                    slotName,
+                    encounterItemID
+                )
+                local encounterMatches = not encounterFilter
+                if encounterFilter then
+                    for _, encounterID in ipairs(encounterIDs) do
+                        if encounterID == encounterFilter then encounterMatches = true break end
+                    end
+                end
+
+                if (not sourceFilter or sourceID == sourceFilter) and encounterMatches then
+                    local groupKey = tostring(descriptor.sourceType or "Other") .. ":" .. tostring(sourceID)
+                    local group = groupsByKey[groupKey]
+                    if not group then
+                        group = {
+                            sourceID = sourceID,
+                            sourceName = descriptor.name,
+                            sourceType = descriptor.sourceType,
+                            encounterIDs = {},
+                            items = {},
+                        }
+                        groupsByKey[groupKey] = group
+                        table.insert(groups, group)
+                    end
+                    local groupEncounterSeen = {}
+                    for _, value in ipairs(group.encounterIDs) do groupEncounterSeen[value] = true end
+                    for _, value in ipairs(encounterIDs) do AddUniqueNumber(group.encounterIDs, groupEncounterSeen, value) end
+
+                    local itemKey = groupKey .. ":" .. tostring(slotName) .. ":" .. tostring(label)
+                    if not seenItems[itemKey] then
+                        seenItems[itemKey] = true
+                        table.insert(group.items, {
+                            slotName = slotName,
+                            displaySlot = displaySlot or slotName,
+                            itemName = label,
+                            isTier = isTier,
+                            targetItemID = targetItemID,
+                            currentItemID = currentItemID,
+                            encounterIDs = encounterIDs,
+                        })
+                        itemCount = itemCount + 1
+                    end
+                end
+            end
+        end
+    end
+
+    for slotName, plan in pairs(state.plansBySlot or {}) do
+        if plan.nebulousAvailable == true and not plan.offHandBlocked then
+            local label, isTier = NebulousItemLabel(plan)
+            AddRollItem(
+                plan.slotName,
+                plan.displayName,
+                label,
+                isTier,
+                plan.target and plan.target.itemID or nil,
+                plan.itemID,
+                GetNebulousPlanSources(plan, specID, state.season)
+            )
+        end
+    end
+
+    for _, owned in ipairs(filters.ownedHeroTargets or {}) do
+        local slotName = owned.slotInstance or owned.slotName or owned.slot
+        local itemID = tonumber(owned.itemID)
+        local currentPlan = slotName and state.plansBySlot and state.plansBySlot[slotName]
+        local alreadyRepresented = currentPlan
+            and currentPlan.nebulousAvailable == true
+            and tonumber(currentPlan.target and currentPlan.target.itemID) == itemID
+        if slotName and itemID and not alreadyRepresented then
+            local isTier = currentPlan and currentPlan.tierChecked == true or false
+            local label = isTier and "Tier Item"
+                or tostring(owned.name or owned.itemName or owned.itemNameClean or ("Item " .. tostring(itemID)))
+            local sources = {}
+            if isTier and Mapping().GetCatalystSourcesForSlot then
+                sources = Mapping().GetCatalystSourcesForSlot(specID, slotName, state.season) or {}
+            elseif owned.sourceID and Mapping().GetSource then
+                local source = Mapping().GetSource(owned.sourceID)
+                if source then sources = { source } end
+            elseif Mapping().GetItemSources then
+                sources = Mapping().GetItemSources(itemID, specID) or {}
+            end
+            AddRollItem(slotName, slotName, label, isTier, itemID, nil, sources)
+        end
+    end
+
+    table.sort(groups, function(a, b)
+        if a.sourceType ~= b.sourceType then return a.sourceType == "Dungeon" end
+        return tostring(a.sourceName or "") < tostring(b.sourceName or "")
+    end)
+    for _, group in ipairs(groups) do
+        table.sort(group.encounterIDs)
+        table.sort(group.items, function(a, b)
+            local orderA = slotOrder[a.slotName] or 99
+            local orderB = slotOrder[b.slotName] or 99
+            if orderA ~= orderB then return orderA < orderB end
+            return tostring(a.itemName or "") < tostring(b.itemName or "")
+        end)
+    end
+
+    return {
+        specID = specID,
+        specName = state.specName,
+        currencyCount = currencyCount,
+        groups = groups,
+        itemCount = itemCount,
+    }
+end
+
+local function GetSavedShoppingItems(getterName)
+    local getter = Targets()[getterName]
+    if not getter then return {} end
+    local specID = select(1, CurrentSpec())
+    local out = {}
+    for _, item in ipairs(getter(specID) or {}) do
+        if item.slotInstance then table.insert(out, item) end
+    end
+    return out
+end
+
+local function FindEquippedItemPlan(itemID, dashboardState)
+    itemID = tonumber(itemID)
+    if not itemID then return nil end
+    for _, plan in pairs(dashboardState and dashboardState.plansBySlot or {}) do
+        if tonumber(plan and plan.itemID) == itemID then return plan end
+    end
+    return nil
+end
+
+local function ShoppingItemIsOwned(item, dashboardState, bagItems)
+    local itemID = tonumber(item and item.itemID)
+    if not itemID then return false end
+    if bagItems and bagItems[itemID] then return true end
+    return FindEquippedItemPlan(itemID, dashboardState) ~= nil
+end
+
+local function BuildGearShoppingPlan(filters)
+    filters = filters or {}
+    -- The LFG shopping popup must always classify against what is equipped
+    -- right now. This also avoids false "still needed" rows after WoW swaps
+    -- interchangeable Finger or Trinket slot positions.
+    local dashboardState = Analysis.GetDashboardState(true)
+    local bagItems = Capture().GetOwnedBagItems and Capture().GetOwnedBagItems() or {}
+    local allTargets = GetSavedShoppingItems("GetSavedTargetsForSpec")
+    local allAlternatives = GetSavedShoppingItems("GetAllAlternativesForSpec")
+    local targets, alternatives, ownedHeroTargets = {}, {}, {}
+
+    for _, item in ipairs(allTargets) do
+        if ShoppingItemIsOwned(item, dashboardState, bagItems) then
+            local bagRecord = bagItems[tonumber(item.itemID)]
+            local equippedPlan = FindEquippedItemPlan(item.itemID, dashboardState)
+            -- What the player has equipped is the deciding copy. A lower-track
+            -- duplicate in the bags must not make an equipped Myth Target look
+            -- eligible for a Nebulous Voidcore roll.
+            local ownedTrack = equippedPlan and equippedPlan.trackName
+                or bagRecord and bagRecord.track
+            if ownedTrack == "Hero" then
+                table.insert(ownedHeroTargets, item)
+            end
+        else
+            table.insert(targets, item)
+        end
+    end
+    for _, item in ipairs(allAlternatives) do
+        if not ShoppingItemIsOwned(item, dashboardState, bagItems) then
+            table.insert(alternatives, item)
+        end
+    end
+
+    local rollFilters = {}
+    for key, value in pairs(filters) do rollFilters[key] = value end
+    rollFilters.ownedHeroTargets = ownedHeroTargets
+
+    return {
+        specID = dashboardState and dashboardState.specID or 0,
+        specName = dashboardState and dashboardState.specName or "Current Spec",
+        targets = targets,
+        alternatives = alternatives,
+        bagItems = bagItems,
+        nebulousRollPlan = BuildNebulousRollPlan(rollFilters),
+        ownedTargetCount = #allTargets - #targets,
+        ownedAlternativeCount = #allAlternatives - #alternatives,
+    }
+end
+
 local function BuildProgress(specID, slotsByName)
     local total, equipped = 0, 0
     if not Targets().GetTargetForSlot then return { total = 0, equipped = 0 } end
@@ -380,12 +674,12 @@ local function EmptyDashboardState(message)
     }
 end
 
-local function BuildDashboardState()
+local function BuildDashboardState(forceEquipped)
     local specID, specName = CurrentSpec()
     local season = CurrentSeason()
     local tierState = TierDB().GetState and TierDB().GetState(season) or { slots = {}, count = 0, complete = false }
     local resources = GetUpgradeResources()
-    local slotsByName = GetEquippedSlots()
+    local slotsByName = GetEquippedSlots(forceEquipped == true)
     local mainHand = slotsByName["Main Hand"] or EmptySlot("Main Hand")
     local mainHandBlocksOffHand = Capture().IsTwoHandOrRangedWeapon and Capture().IsTwoHandOrRangedWeapon(mainHand)
         and specID ~= 72 and not (slotsByName["Off Hand"] and slotsByName["Off Hand"].itemID)
@@ -421,16 +715,24 @@ local function BuildDashboardState()
     }
 end
 
-function Analysis.GetDashboardState()
+function Analysis.GetDashboardState(forceEquipped)
     if dashboardStateBusy then return lastDashboardState or EmptyDashboardState("Refreshing") end
     dashboardStateBusy = true
-    local ok, state = pcall(BuildDashboardState)
+    local ok, state = pcall(BuildDashboardState, forceEquipped == true)
     dashboardStateBusy = false
     if ok and type(state) == "table" then
         lastDashboardState = state
         return state
     end
     return lastDashboardState or EmptyDashboardState("Gear Dashboard could not refresh yet.")
+end
+
+function Analysis.GetNebulousRollPlan(filters)
+    return BuildNebulousRollPlan(filters)
+end
+
+function Analysis.GetGearShoppingPlan(filters)
+    return BuildGearShoppingPlan(filters)
 end
 
 function Analysis.InvalidateCache()
@@ -448,7 +750,8 @@ function Analysis.GetLogicSummary()
         "Tier guidance has source priority until four manually selected Tier slots are complete.",
         "Hero-track Tier and Catalyst items keep their Dungeon and Raid upgrade-source guidance until they reach Myth.",
         "Items outside the Master Item Database with an upgrade track are treated as Catalyst items; items without a track are crafted.",
-        "Nebulous and Ascendant availability appears only when the required currency or bag item is owned.",
+        "Nebulous availability appears for every Hero-track item when a Nebulous Voidcore is owned, regardless of its current upgrade rank.",
+        "Ascendant availability appears only for a fully upgraded 6/6 Hero- or Myth-track eligible weapon or trinket when an Ascendant Voidcore is owned.",
         "Ascendant Voidforged weapons and trinkets retain their Hero or Myth base track at the upgraded item level.",
         "Saved Target sources are shown after Tier guidance is complete or not relevant, and are hidden once the equipped item is Myth track.",
         "No item scoring, priority-slot scoring, polish reminders, or overall gear score is calculated.",
