@@ -20,12 +20,13 @@ SavedVariables:
 - KeyLabDB
 ]]
 
-local DB_VERSION = "0.1.8"
+local DB_VERSION = "0.1.9"
 
 local DEFAULT_SETTINGS = {
     completedMythicPlusOnly = true,
     contentMode = "mplus",
     autoShowGroupFinderHelper = true,
+    autoMinimizeForBlizzardPanels = true,
 }
 
 local function EnsureTable(parent, key)
@@ -58,6 +59,7 @@ function DB.Initialize()
     EnsureTable(KeyLabDB, "practiceSessions")
     EnsureTable(KeyLabDB, "performanceLeaderboards")
     EnsureTable(KeyLabDB, "activityCounts")
+    EnsureTable(KeyLabDB, "craftedPlans")
 
     for key, value in pairs(DEFAULT_SETTINGS) do
         if KeyLabDB.settings[key] == nil then
@@ -160,6 +162,7 @@ function DB.ResetAll()
         practiceSessions = {},
         performanceLeaderboards = {},
         activityCounts = { schemaVersion = 1, characters = {} },
+        craftedPlans = {},
         seasonJournalSchemaVersion = 1,
     }
 
