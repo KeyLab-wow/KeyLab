@@ -1296,20 +1296,25 @@ local function BuildSelectedItems(assignments, itemSource, ownedRecords, specID)
         local itemID = tonumber(assignment.itemID)
         local record = itemSource == "owned" and ownedRecords and ownedRecords[itemID]
             or mapping and mapping.GetItem and mapping.GetItem(itemID, specID, nil, assignment.sourceID)
+        local requiresUpgrade = assignment.requiresUpgrade == true
+        if record then requiresUpgrade = record.requiresUpgrade == true end
         table.insert(selected, {
             slotInstance = assignment.slotInstance,
             itemID = itemID,
-            name = assignment.name or record and record.name or ("Item " .. tostring(itemID or "?")),
-            sourceName = assignment.sourceName or record and record.sourceName or "",
-            itemLink = assignment.itemLink or record and (record.itemLink or record.link),
+            -- A search option can represent several items with an identical
+            -- stat pattern. Resolve display details from the item ID that was
+            -- actually assigned, not from the option's representative item.
+            name = record and record.name or assignment.name or ("Item " .. tostring(itemID or "?")),
+            sourceName = record and record.sourceName or assignment.sourceName or "",
+            itemLink = record and (record.itemLink or record.link) or assignment.itemLink,
             matcherStats = CopyStats(assignment.matcherStats or record and record.matcherStats),
             currentStats = CopyStats(record and (record.currentOwnedStats or record.ownedStats) or assignment.matcherStats),
-            upgradeTrack = assignment.upgradeTrack or record and record.upgradeTrack,
-            upgradeRank = assignment.upgradeRank or record and record.upgradeRank,
-            upgradeMaxRank = assignment.upgradeMaxRank or record and record.upgradeMaxRank,
-            itemLevel = tonumber(assignment.itemLevel or record and record.itemLevel),
-            projectedItemLevel = tonumber(assignment.projectedItemLevel or record and record.projectedItemLevel),
-            requiresUpgrade = assignment.requiresUpgrade == true or record and record.requiresUpgrade == true or false,
+            upgradeTrack = record and record.upgradeTrack or assignment.upgradeTrack,
+            upgradeRank = record and record.upgradeRank or assignment.upgradeRank,
+            upgradeMaxRank = record and record.upgradeMaxRank or assignment.upgradeMaxRank,
+            itemLevel = tonumber(record and record.itemLevel or assignment.itemLevel),
+            projectedItemLevel = tonumber(record and record.projectedItemLevel or assignment.projectedItemLevel),
+            requiresUpgrade = requiresUpgrade,
         })
     end
     table.sort(selected, function(a, b)
@@ -1321,6 +1326,33 @@ local function BuildSelectedItems(assignments, itemSource, ownedRecords, specID)
         return aOrder == bOrder and tostring(a.name) < tostring(b.name) or aOrder < bOrder
     end)
     return selected
+end
+
+local function RefreshSelectedItemDetails(result)
+    if type(result) ~= "table" or type(result.selectedItems) ~= "table" then return result end
+    local recordsByID = {}
+    for _, record in ipairs(result.matchedItemRecords or {}) do
+        local itemID = tonumber(record and record.itemID)
+        if itemID then recordsByID[itemID] = record end
+    end
+    local mapping = KeyLab.GearLootMapping
+    for _, item in ipairs(result.selectedItems) do
+        local itemID = tonumber(item and item.itemID)
+        local record = itemID and recordsByID[itemID]
+            or itemID and mapping and mapping.GetItem and mapping.GetItem(itemID, result.specID)
+        if record then
+            item.name = record.name or item.name
+            item.sourceName = record.sourceName or item.sourceName
+            item.itemLink = record.itemLink or record.link or item.itemLink
+            item.upgradeTrack = record.upgradeTrack or item.upgradeTrack
+            item.upgradeRank = record.upgradeRank or item.upgradeRank
+            item.upgradeMaxRank = record.upgradeMaxRank or item.upgradeMaxRank
+            item.itemLevel = tonumber(record.itemLevel) or item.itemLevel
+            item.projectedItemLevel = tonumber(record.projectedItemLevel) or item.projectedItemLevel
+            if record.requiresUpgrade ~= nil then item.requiresUpgrade = record.requiresUpgrade == true end
+        end
+    end
+    return result
 end
 
 local function BuildResult(specID, itemType, itemSource, ownedRecords, best, goals, projection, estimate, mode, positions, unmatchedSlots, snapshot)
@@ -1509,7 +1541,8 @@ function Matcher.GetResult(specID)
     local result = GetSavedResults()[specID]
     local currentStyle = KeyLab.StatGoalsDB and KeyLab.StatGoalsDB.GetMatchStyle and KeyLab.StatGoalsDB.GetMatchStyle(specID) or "balanced"
     local resultStyle = result and (result.matchStyle == "priority" and "priority" or "balanced") or nil
-    return result and result.scoringModel == "character_percent_slot_aware_v4" and resultStyle == currentStyle and result or nil
+    return result and result.scoringModel == "character_percent_slot_aware_v4" and resultStyle == currentStyle
+        and RefreshSelectedItemDetails(result) or nil
 end
 
 function Matcher.GetCurrentShares()
@@ -1661,6 +1694,30 @@ function Matcher.RunDevelopmentRegressionTests()
         mapping.GetItemStats = originalGetItemStats
         Check("master normalization regression completed", normalizedOK == true)
         if not normalizedOK then table.insert(failures, "master normalization error: " .. tostring(normalizedError)) end
+    end
+
+    if mapping and type(mapping.GetItem) == "function" then
+        local originalGetItem = mapping.GetItem
+        local distinctOK, distinctError = pcall(function()
+            mapping.GetItem = function(itemID)
+                local records = {
+                    [101] = { itemID = 101, name = "First Trinket", sourceName = "Dungeon One", itemLevel = 246 },
+                    [202] = { itemID = 202, name = "Second Trinket", sourceName = "Dungeon Two", itemLevel = 276 },
+                }
+                return records[tonumber(itemID)]
+            end
+            local assignments = {
+                { slotInstance = "Trinket 1", itemID = 101, name = "First Trinket", sourceName = "Dungeon One" },
+                { slotInstance = "Trinket 2", itemID = 202, name = "First Trinket", sourceName = "Dungeon One" },
+            }
+            local chosen = BuildSelectedItems(assignments, "master", nil, 1)
+            Check("duplicate-stat trinkets keep distinct names", chosen[1] and chosen[1].name == "First Trinket"
+                and chosen[2] and chosen[2].name == "Second Trinket")
+            Check("duplicate-stat trinkets keep distinct sources", chosen[2] and chosen[2].sourceName == "Dungeon Two")
+        end)
+        mapping.GetItem = originalGetItem
+        Check("distinct trinket result regression completed", distinctOK == true)
+        if not distinctOK then table.insert(failures, "distinct trinket result error: " .. tostring(distinctError)) end
     end
 
     return #failures == 0, string.format("%d passed, %d failed%s", passed, #failures,
