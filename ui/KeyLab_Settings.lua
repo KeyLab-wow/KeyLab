@@ -175,6 +175,57 @@ local function MakeBackupInstructions(parent, y)
     body:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -14, 12)
 end
 
+local function BuildWindowSettings(parent, y)
+    local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    card:SetPoint("TOPLEFT", parent, "TOPLEFT", CONTENT_PAD, y)
+    card:SetSize(862, 104)
+    SetBackdrop(card, COLORS.box, COLORS.border)
+
+    local check = CreateFrame("CheckButton", nil, card, "UICheckButtonTemplate")
+    check:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -13)
+    check:SetSize(24, 24)
+
+    local label = MakeText(
+        card,
+        "Automatically Minimize for WoW Windows",
+        "GameFontNormal",
+        FONT_ACTION_TITLE,
+        COLORS.text,
+        "LEFT"
+    )
+    label:SetPoint("LEFT", check, "RIGHT", 5, 0)
+    label:SetSize(500, 22)
+
+    local description = MakeText(
+        card,
+        "When a regular WoW window opens, KeyLab switches to its menu-only view. KeyLab helper and results popups stay visible.",
+        "GameFontHighlightSmall",
+        FONT_BODY,
+        COLORS.muted,
+        "LEFT"
+    )
+    description:SetPoint("TOPLEFT", card, "TOPLEFT", 17, -48)
+    description:SetSize(820, 42)
+
+    local function RefreshControl()
+        local enabled = true
+        if KeyLab.DB and KeyLab.DB.GetSetting then
+            enabled = KeyLab.DB.GetSetting("autoMinimizeForBlizzardPanels", true) ~= false
+        end
+        check:SetChecked(enabled)
+    end
+
+    check:SetScript("OnClick", function(button)
+        if KeyLab.DB and KeyLab.DB.SetSetting then
+            KeyLab.DB.SetSetting("autoMinimizeForBlizzardPanels", button:GetChecked() == true)
+        end
+        RefreshControl()
+    end)
+
+    RefreshControl()
+    return RefreshControl
+end
+
 local function BuildGroupFinderSettings(parent, y)
     local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", CONTENT_PAD, y)
@@ -241,6 +292,12 @@ end
 
 local function BuildSettings(content)
     local y = -6
+
+    MakeSectionHeader(content, "Window Behavior", y)
+    y = y - 50
+
+    local refreshWindow = BuildWindowSettings(content, y)
+    y = y - 104 - SECTION_GAP
 
     MakeSectionHeader(content, "Group Finder Helper", y)
     y = y - 50
@@ -315,7 +372,10 @@ local function BuildSettings(content)
     y = y - 104
 
     content:SetHeight(math.abs(y) + 40)
-    return refreshGroupFinder
+    return function()
+        if refreshWindow then refreshWindow() end
+        if refreshGroupFinder then refreshGroupFinder() end
+    end
 end
 
 -- =========================================================
@@ -332,7 +392,7 @@ function Settings:Create(parent)
     Theme.CreateTabHeader(
         frame,
         "Settings",
-        "Find backup instructions or reset your saved KeyLab data."
+        "Choose KeyLab options, find backup instructions, or reset your saved data."
     )
 
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
@@ -344,10 +404,10 @@ function Settings:Create(parent)
     content:SetHeight(660)
     scroll:SetScrollChild(content)
 
-    local refreshGroupFinder = BuildSettings(content)
+    local refreshSettings = BuildSettings(content)
 
     function frame:Refresh()
-        if refreshGroupFinder then refreshGroupFinder() end
+        if refreshSettings then refreshSettings() end
     end
 
     return frame

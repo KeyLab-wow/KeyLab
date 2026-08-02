@@ -165,6 +165,33 @@ local function MakeSmallButton(parent, text, width, height)
     return button
 end
 
+local function StyleGearTargetControlButton(button)
+    if not button then return end
+    local normal = {0.055, 0.095, 0.170, 0.98}
+    local hover = {0.095, 0.180, 0.310, 1.00}
+    local pressed = {0.175, 0.145, 0.070, 1.00}
+
+    if button.label then
+        button.label:ClearAllPoints()
+        button.label:SetPoint("CENTER", button, "CENTER", 0, -1)
+        button.label:SetJustifyV("MIDDLE")
+    end
+
+    button:SetBackdropColor(unpack(normal))
+    button:HookScript("OnEnter", function(self)
+        self:SetBackdropColor(unpack(hover))
+    end)
+    button:HookScript("OnLeave", function(self)
+        self:SetBackdropColor(unpack(normal))
+    end)
+    button:HookScript("OnMouseDown", function(self)
+        self:SetBackdropColor(unpack(pressed))
+    end)
+    button:HookScript("OnMouseUp", function(self)
+        self:SetBackdropColor(unpack(self:IsMouseOver() and hover or normal))
+    end)
+end
+
 local function MakeActionButton(parent, text, width, height)
     local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
     button:SetSize(width or 164, height or 26)
@@ -188,12 +215,14 @@ local function MakeSearchBox(parent, width, height, placeholderText)
     box:SetSize(width or 180, height or 22)
     box:SetAutoFocus(false)
     box:SetJustifyH("LEFT")
+    if box.SetJustifyV then box:SetJustifyV("MIDDLE") end
     box:SetMaxLetters(64)
     box:SetFontObject("GameFontHighlightSmall")
     if box.SetTextInsets then box:SetTextInsets(8, 8, 0, 0) end
     box.placeholder = MakeText(box, placeholderText or "", "GameFontDisableSmall", nil, CFG.colors.muted)
-    box.placeholder:SetPoint("LEFT", box, "LEFT", 8, 0)
+    box.placeholder:SetPoint("LEFT", box, "LEFT", 8, -1)
     box.placeholder:SetSize((width or 180) - 16, 18)
+    box.placeholder:SetJustifyV("MIDDLE")
     box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     return box
 end
@@ -522,8 +551,9 @@ function GearTargets:MakeHeaderButton(parent, key)
     local label = column.label .. " [Sort]"
     if self.sortKey == key then label = label .. (self.sortAscending == false and " v" or " ^") end
     button.label = MakeText(button, label, "GameFontDisableSmall", nil, CFG.colors.gold)
-    button.label:SetPoint("LEFT", button, "LEFT", 4, 0)
+    button.label:SetPoint("LEFT", button, "LEFT", 4, -1)
     button.label:SetSize(column.width - 8, 18)
+    button.label:SetJustifyV("MIDDLE")
     button:SetScript("OnClick", function()
         if GearTargets.sortKey == key then GearTargets.sortAscending = not GearTargets.sortAscending
         else GearTargets.sortKey = key; GearTargets.sortAscending = true end
@@ -1517,8 +1547,7 @@ function GearTargets:Create(parent)
     matcherTitle:SetSize(230, 18)
     self.refreshStatsButton = MakeSmallButton(matcherPanel, "Refresh Current Stats", 134, 22)
     self.refreshStatsButton:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 260, -7)
-    self.refreshStatsButton.label:ClearAllPoints()
-    self.refreshStatsButton.label:SetPoint("CENTER", self.refreshStatsButton, "CENTER", 0, -1)
+    StyleGearTargetControlButton(self.refreshStatsButton)
     self.refreshStatsButton:SetScript("OnClick", function()
         GearTargets:RefreshCurrentStats(true)
     end)
@@ -1541,6 +1570,7 @@ function GearTargets:Create(parent)
     self.matcherState:SetWordWrap(true)
     self.matcherResultsButton = MakeSmallButton(matcherStatusCard, "Results", 78, 26)
     self.matcherResultsButton:SetPoint("RIGHT", matcherStatusCard, "RIGHT", -8, 0)
+    StyleGearTargetControlButton(self.matcherResultsButton)
     self.matcherResultsButton:SetFrameLevel(matcherStatusCard:GetFrameLevel() + 5)
     self.matcherResultsButton:EnableMouse(true)
     self.matcherResultsButton:RegisterForClicks("LeftButtonUp")

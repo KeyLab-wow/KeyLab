@@ -22,6 +22,17 @@ local COLORS = {
     muted = {0.680, 0.730, 0.820, 1.0},
 }
 
+local ITEM_LEVEL_COLORS = {
+    [246] = {0.64, 0.21, 0.93, 1}, -- Epic / purple
+    [201] = {0.00, 0.44, 0.87, 1}, -- Rare / blue
+    [175] = {0.12, 1.00, 0.00, 1}, -- Uncommon / green
+    [165] = {0.00, 0.44, 0.87, 1}, -- Rare / blue
+}
+
+local function ItemLevelColor(itemLevel)
+    return ITEM_LEVEL_COLORS[tonumber(itemLevel)] or COLORS.text
+end
+
 local function SetBackdrop(frame, background, border)
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
@@ -58,6 +69,127 @@ end
 
 local function Join(parts)
     return table.concat(parts, "\n\n")
+end
+
+local function Button(parent, label, width, height)
+    local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    button:SetSize(width or 120, height or 28)
+    SetBackdrop(button, COLORS.body, COLORS.border)
+    button.text = Text(button, label or "Button", "GameFontHighlightSmall", 11, COLORS.text)
+    button.text:SetAllPoints(button)
+    button.text:SetJustifyH("CENTER")
+    button.text:SetJustifyV("MIDDLE")
+    button:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(0.060, 0.095, 0.160, 0.98)
+        self:SetBackdropBorderColor(unpack(COLORS.gold))
+        self.text:SetTextColor(unpack(COLORS.gold))
+    end)
+    button:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(unpack(COLORS.body))
+        self:SetBackdropBorderColor(unpack(self.selected and COLORS.gold or COLORS.border))
+        self.text:SetTextColor(unpack(self.selected and COLORS.gold or COLORS.text))
+    end)
+    button.SetSelected = function(self, selected)
+        self.selected = selected == true
+        self:GetScript("OnLeave")(self)
+    end
+    return button
+end
+
+local function EditBox(parent, width)
+    local box = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
+    box:SetSize(width or 180, 26)
+    box:SetAutoFocus(false)
+    box:SetFontObject("GameFontHighlightSmall")
+    box:SetTextInsets(8, 8, 2, 2)
+    SetBackdrop(box, COLORS.body, COLORS.border)
+    box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    return box
+end
+
+local activeDropdown
+local function Dropdown(parent, width, optionsProvider, getValue, setValue)
+    local dropdown = Button(parent, "", width or 170, 26)
+    dropdown.text:ClearAllPoints()
+    dropdown.text:SetPoint("LEFT", 8, 0)
+    dropdown.text:SetPoint("RIGHT", -24, 0)
+    dropdown.text:SetJustifyH("LEFT")
+    dropdown.arrow = Text(dropdown, "v", "GameFontNormal", 12, COLORS.gold)
+    dropdown.arrow:SetPoint("RIGHT", -7, 0)
+    dropdown.arrow:SetJustifyV("MIDDLE")
+    dropdown.optionsProvider, dropdown.getValue, dropdown.setValue = optionsProvider, getValue, setValue
+    dropdown.menu = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    dropdown.menu:SetFrameStrata("TOOLTIP")
+    dropdown.menu:SetFrameLevel(9000)
+    dropdown.menu:SetWidth(width or 170)
+    dropdown.menu:Hide()
+    SetBackdrop(dropdown.menu, COLORS.bg, COLORS.gold)
+    dropdown.menu.rows, dropdown.menu.offset = {}, 1
+    dropdown.menu:EnableMouseWheel(true)
+
+    local function Populate()
+        local options = type(optionsProvider) == "function" and optionsProvider() or optionsProvider or {}
+        local visible = math.min(10, math.max(1, #options))
+        local maxOffset = math.max(1, #options - visible + 1)
+        dropdown.menu.offset = math.max(1, math.min(dropdown.menu.offset or 1, maxOffset))
+        dropdown.menu:SetHeight((visible * 25) + 4)
+        for index = 1, 10 do
+            local row = dropdown.menu.rows[index]
+            if not row then
+                row = Button(dropdown.menu, "", (width or 170) - 4, 23)
+                row.text:SetJustifyH("LEFT")
+                row.text:ClearAllPoints()
+                row.text:SetPoint("LEFT", 6, 0)
+                row.text:SetPoint("RIGHT", -5, 0)
+                row:SetScript("OnClick", function(self)
+                    if self.option and setValue then setValue(self.option.value, self.option) end
+                    dropdown.menu:Hide()
+                    if activeDropdown == dropdown then activeDropdown = nil end
+                    dropdown:RefreshText()
+                end)
+                dropdown.menu.rows[index] = row
+            end
+            local option = options[dropdown.menu.offset + index - 1]
+            row.option = option
+            row:SetShown(option ~= nil)
+            if option then
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", 2, -2 - ((index - 1) * 25))
+                row.text:SetText(option.label or "")
+            end
+        end
+    end
+    dropdown.menu:SetScript("OnMouseWheel", function(_, delta)
+        local options = type(optionsProvider) == "function" and optionsProvider() or optionsProvider or {}
+        local visible = math.min(10, math.max(1, #options))
+        dropdown.menu.offset = math.max(1, math.min(math.max(1, #options - visible + 1), (dropdown.menu.offset or 1) - delta))
+        Populate()
+    end)
+    dropdown:SetScript("OnClick", function()
+        if dropdown.menu:IsShown() then dropdown.menu:Hide(); activeDropdown = nil; return end
+        if activeDropdown and activeDropdown.menu then activeDropdown.menu:Hide() end
+        activeDropdown = dropdown
+        dropdown.menu.offset = 1
+        dropdown.menu:ClearAllPoints()
+        dropdown.menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
+        Populate()
+        dropdown.menu:Show()
+    end)
+    dropdown:SetScript("OnHide", function()
+        dropdown.menu:Hide()
+        if activeDropdown == dropdown then activeDropdown = nil end
+    end)
+    dropdown.RefreshText = function(self)
+        local options = type(optionsProvider) == "function" and optionsProvider() or optionsProvider or {}
+        local current = getValue and getValue() or nil
+        for _, option in ipairs(options) do
+            if option.value == current then self.text:SetText(option.label or ""); return end
+        end
+        self.text:SetText(options[1] and options[1].label or "None")
+    end
+    dropdown:RefreshText()
+    return dropdown
 end
 
 local SECTIONS = {
@@ -182,6 +314,282 @@ local SECTIONS = {
     },
 }
 
+function GearPlanning:RefreshRecipeEditor()
+    if not self.craftedView then return end
+    local analysis, plans = KeyLab.CraftingAnalysis, KeyLab.CraftedPlansDB
+    local recipe = analysis and analysis.GetRecipe and analysis.GetRecipe(self.selectedRecipeID) or nil
+    self.recipeEditorEmpty:SetShown(not recipe)
+    self.recipeEditorContent:SetShown(recipe ~= nil)
+    if not recipe then return end
+    local plan = plans.GetPlan(recipe.recipeID)
+    self.recipeTitle:SetText(recipe.name or "Crafted Item")
+    self.recipeTitle:SetTextColor(unpack(ItemLevelColor(recipe.iLvlMin)))
+    self.recipeMeta:SetText("Item Level " .. tostring(recipe.iLvlMin or "-") .. "  |  "
+        .. (recipe.slot or "Gear") .. "  |  "
+        .. tostring((KeyLab.CraftedRecipeDatabase.professionNames or {})[recipe.professionID] or "Profession"))
+    self.planButton.text:SetText(plan and "Remove from Plan" or "Add to Plan")
+    self.planButton:SetSelected(plan ~= nil)
+    self.reagentHint:SetText(plan
+        and "Required materials are added automatically. Choose any optional reagents you want."
+        or "Add this item to your plan. Required materials will be added automatically.")
+
+    local displayRows = analysis.GetRecipeDisplayRows(recipe.recipeID)
+    for index, row in ipairs(self.reagentRows) do
+        local display = displayRows[index]
+        row:SetShown(display ~= nil)
+        if display then
+            row.recipeID, row.slotIndex = recipe.recipeID, display.slotIndex
+            if display.kind == "required" or display.kind == "requiredCurrency" then
+                row.title:SetText(tostring(display.quantity or 0) .. " x " .. tostring(display.title or "Material"))
+                row.title:SetTextColor(unpack(COLORS.text))
+            elseif display.kind == "power" then
+                row.title:SetText(tostring(display.title or "Power") .. "  |  " .. tostring(display.quantity or 80) .. " crests needed")
+                row.title:SetTextColor(unpack(COLORS.gold))
+            elseif display.kind == "heraldry" then
+                row.title:SetText(tostring(display.title or "Competitor's Heraldry") .. "  |  Need " .. tostring(display.quantity or 1))
+                row.title:SetTextColor(0.35, 0.95, 0.50, 1)
+            else
+                row.title:SetText(tostring(display.title or "Optional Reagent") .. "  |cFF80ADEFOptional|r")
+                row.title:SetTextColor(unpack(COLORS.text))
+            end
+            row.detail:SetText(display.detail or "")
+            row.dropdown:SetShown(display.kind == "optional")
+            if display.kind == "optional" then
+                row.dropdown:SetEnabled(plan ~= nil)
+                row.dropdown:SetAlpha(plan and 1 or 0.45)
+                row.dropdown:RefreshText()
+            end
+        end
+    end
+    local height = math.max(250, #displayRows * 66)
+    self.reagentContent:SetHeight(height)
+end
+
+function GearPlanning:RefreshRecipes()
+    if not self.craftedView then return end
+    local analysis = KeyLab.CraftingAnalysis
+    self.filteredRecipes = analysis and analysis.GetRecipes and analysis.GetRecipes({
+        search = self.recipeSearch,
+        slot = self.slotFilter,
+        professionID = self.professionFilter,
+        weaponType = self.weaponTypeFilter,
+        armorType = self.armorTypeFilter,
+        iLvlMin = self.itemLevelFilter,
+        isPvP = self.pvpFilter,
+        plannedOnly = self.plannedOnly,
+        currentCharacterOnly = false,
+    }) or {}
+    local pageSize = #self.recipeRows
+    local maxPage = math.max(1, math.ceil(#self.filteredRecipes / pageSize))
+    self.recipePage = math.max(1, math.min(self.recipePage or 1, maxPage))
+    local plans = KeyLab.CraftedPlansDB
+    for rowIndex, row in ipairs(self.recipeRows) do
+        local recipe = self.filteredRecipes[((self.recipePage - 1) * pageSize) + rowIndex]
+        row.recipe = recipe
+        row:SetShown(recipe ~= nil)
+        if recipe then
+            row.name:SetText(recipe.name or "Crafted Item")
+            row.name:SetTextColor(unpack(ItemLevelColor(recipe.iLvlMin)))
+            row.meta:SetText("iLvl " .. tostring(recipe.iLvlMin or "-") .. "  |  "
+                .. (recipe.slot or "Gear") .. "  |  "
+                .. tostring((KeyLab.CraftedRecipeDatabase.professionNames or {})[recipe.professionID] or "Profession"))
+            local planned = plans and plans.IsPlanned and plans.IsPlanned(recipe.recipeID)
+            row.status:SetText(planned and "PLANNED" or "")
+            row.status:SetTextColor(unpack(planned and COLORS.gold or COLORS.muted))
+            row:SetBackdropBorderColor(unpack(recipe.recipeID == self.selectedRecipeID and COLORS.gold or COLORS.border))
+        end
+    end
+    self.recipeCount:SetText(string.format("%d item(s)  |  Page %d / %d", #self.filteredRecipes, self.recipePage, maxPage))
+    self.recipeBack:SetEnabled(self.recipePage > 1)
+    self.recipeNext:SetEnabled(self.recipePage < maxPage)
+    local count = plans and plans.GetPlans and #plans.GetPlans() or 0
+    self.planCount:SetText(count .. " item(s) in your crafted plan")
+    self:RefreshRecipeEditor()
+end
+
+function GearPlanning:BuildGuideView(parent)
+    local view = CreateFrame("Frame", nil, parent)
+    view:SetAllPoints(parent)
+    local scroll = CreateFrame("ScrollFrame", nil, view, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", view, "TOPLEFT", 0, 0)
+    scroll:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", -18, 0)
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(900, 520)
+    scroll:SetScrollChild(content)
+    self.accordion = KeyLab.UI.Accordion.Create(content, {
+        sections = SECTIONS, colors = COLORS, width = 874, left = 8, minHeight = 520,
+    })
+    return view
+end
+
+function GearPlanning:BuildCraftedView(parent)
+    local view = CreateFrame("Frame", nil, parent)
+    view:SetAllPoints(parent)
+    self.craftedView = view
+
+    local filters = CreateFrame("Frame", nil, view, "BackdropTemplate")
+    filters:SetPoint("TOPLEFT", 0, 0); filters:SetPoint("TOPRIGHT", 0, 0); filters:SetHeight(132)
+    SetBackdrop(filters, COLORS.panel, COLORS.border)
+    local searchLabel = Text(filters, "Search Crafted Gear", nil, 11, COLORS.muted); searchLabel:SetPoint("TOPLEFT", 14, -10)
+    self.searchBox = EditBox(filters, 255); self.searchBox:SetPoint("TOPLEFT", 14, -31)
+    self.searchBox:SetScript("OnTextChanged", function(box, userInput)
+        if not userInput then return end
+        self.recipeSearch = box:GetText() or ""; self.recipePage = 1; self:RefreshRecipes()
+    end)
+    local slotLabel = Text(filters, "Slot", nil, 11, COLORS.muted); slotLabel:SetPoint("TOPLEFT", 285, -10)
+    self.slotDropdown = Dropdown(filters, 145,
+        function() return KeyLab.CraftingAnalysis.GetSlotOptions() end,
+        function() return self.slotFilter end,
+        function(value) self.slotFilter = value; self.recipePage = 1; self:RefreshRecipes() end)
+    self.slotDropdown:SetPoint("TOPLEFT", 285, -31)
+    local professionLabel = Text(filters, "Profession", nil, 11, COLORS.muted); professionLabel:SetPoint("TOPLEFT", 444, -10)
+    self.professionDropdown = Dropdown(filters, 175,
+        function() return KeyLab.CraftingAnalysis.GetProfessionOptions() end,
+        function() return self.professionFilter end,
+        function(value) self.professionFilter = value; self.recipePage = 1; self:RefreshRecipes() end)
+    self.professionDropdown:SetPoint("TOPLEFT", 444, -31)
+    self.shoppingButton = Button(filters, "Open Shopping List", 180, 30)
+    self.shoppingButton:SetPoint("TOPRIGHT", -14, -31)
+    self.shoppingButton:SetScript("OnClick", function()
+        if KeyLab.CraftingShoppingWindow and KeyLab.CraftingShoppingWindow.Show then KeyLab.CraftingShoppingWindow.Show(true) end
+    end)
+
+    local weaponLabel = Text(filters, "Weapon Type", nil, 11, COLORS.muted); weaponLabel:SetPoint("TOPLEFT", 14, -72)
+    self.weaponTypeDropdown = Dropdown(filters, 165,
+        function() return KeyLab.CraftingAnalysis.GetWeaponTypeOptions() end,
+        function() return self.weaponTypeFilter end,
+        function(value)
+            self.weaponTypeFilter = value
+            if value then self.armorTypeFilter = nil; self.armorTypeDropdown:RefreshText() end
+            self.recipePage = 1; self:RefreshRecipes()
+        end)
+    self.weaponTypeDropdown:SetPoint("TOPLEFT", 14, -93)
+
+    local armorLabel = Text(filters, "Armor Type", nil, 11, COLORS.muted); armorLabel:SetPoint("TOPLEFT", 193, -72)
+    self.armorTypeDropdown = Dropdown(filters, 145,
+        function() return KeyLab.CraftingAnalysis.GetArmorTypeOptions() end,
+        function() return self.armorTypeFilter end,
+        function(value)
+            self.armorTypeFilter = value
+            if value then self.weaponTypeFilter = nil; self.weaponTypeDropdown:RefreshText() end
+            self.recipePage = 1; self:RefreshRecipes()
+        end)
+    self.armorTypeDropdown:SetPoint("TOPLEFT", 193, -93)
+
+    local levelLabel = Text(filters, "Item Level", nil, 11, COLORS.muted); levelLabel:SetPoint("TOPLEFT", 352, -72)
+    self.itemLevelDropdown = Dropdown(filters, 120,
+        function() return KeyLab.CraftingAnalysis.GetItemLevelOptions() end,
+        function() return self.itemLevelFilter end,
+        function(value)
+            self.itemLevelFilter = value
+            if value and tonumber(value) ~= 175 and self.pvpFilter == true then
+                self.pvpFilter = nil
+                self.pvpDropdown:RefreshText()
+            end
+            self.recipePage = 1; self:RefreshRecipes()
+        end)
+    self.itemLevelDropdown:SetPoint("TOPLEFT", 352, -93)
+
+    local pvpLabel = Text(filters, "PvP Items", nil, 11, COLORS.muted); pvpLabel:SetPoint("TOPLEFT", 486, -72)
+    self.pvpDropdown = Dropdown(filters, 145,
+        function() return KeyLab.CraftingAnalysis.GetPvPOptions() end,
+        function() return self.pvpFilter end,
+        function(value)
+            self.pvpFilter = value
+            if value == true then self.itemLevelFilter = 175; self.itemLevelDropdown:RefreshText() end
+            self.recipePage = 1; self:RefreshRecipes()
+        end)
+    self.pvpDropdown:SetPoint("TOPLEFT", 486, -93)
+
+    local plannedLabel = Text(filters, "Plan", nil, 11, COLORS.muted); plannedLabel:SetPoint("TOPLEFT", 645, -72)
+    self.plannedDropdown = Dropdown(filters, 145,
+        function() return KeyLab.CraftingAnalysis.GetPlanStatusOptions() end,
+        function() return self.plannedOnly == true end,
+        function(value) self.plannedOnly = value == true; self.recipePage = 1; self:RefreshRecipes() end)
+    self.plannedDropdown:SetPoint("TOPLEFT", 645, -93)
+
+    local listPanel = CreateFrame("Frame", nil, view, "BackdropTemplate")
+    listPanel:SetPoint("TOPLEFT", filters, "BOTTOMLEFT", 0, -10)
+    listPanel:SetPoint("BOTTOMLEFT", view, "BOTTOMLEFT", 0, 0)
+    listPanel:SetWidth(432); SetBackdrop(listPanel, COLORS.panel, COLORS.border)
+    local listTitle = Text(listPanel, "Crafted Items", "GameFontNormal", 15, COLORS.gold); listTitle:SetPoint("TOPLEFT", 14, -12)
+    self.recipeRows = {}
+    for index = 1, 8 do
+        local row = CreateFrame("Button", nil, listPanel, "BackdropTemplate")
+        row:SetPoint("TOPLEFT", 12, -39 - ((index - 1) * 49)); row:SetPoint("TOPRIGHT", -12, -39 - ((index - 1) * 49)); row:SetHeight(43)
+        SetBackdrop(row, index % 2 == 0 and COLORS.body or COLORS.bg, COLORS.border)
+        row.name = Text(row, "", "GameFontHighlightSmall", 11, COLORS.text); row.name:SetPoint("TOPLEFT", 9, -6); row.name:SetPoint("RIGHT", -70, 0)
+        row.meta = Text(row, "", "GameFontHighlightSmall", 10, COLORS.muted); row.meta:SetPoint("BOTTOMLEFT", 9, 5)
+        row.status = Text(row, "", "GameFontHighlightSmall", 9, COLORS.gold); row.status:SetPoint("RIGHT", -8, 0); row.status:SetJustifyH("RIGHT")
+        row:SetScript("OnClick", function(selfRow)
+            if not selfRow.recipe then return end
+            self.selectedRecipeID = selfRow.recipe.recipeID
+            self:RefreshRecipes()
+        end)
+        row:SetScript("OnEnter", function(selfRow) selfRow:SetBackdropBorderColor(unpack(COLORS.gold)) end)
+        row:SetScript("OnLeave", function(selfRow)
+            selfRow:SetBackdropBorderColor(unpack(selfRow.recipe and selfRow.recipe.recipeID == self.selectedRecipeID and COLORS.gold or COLORS.border))
+        end)
+        self.recipeRows[index] = row
+    end
+    self.recipeCount = Text(listPanel, "", nil, 10, COLORS.muted); self.recipeCount:SetPoint("BOTTOMLEFT", 14, 14)
+    self.recipeBack = Button(listPanel, "Back", 72, 26); self.recipeBack:SetPoint("BOTTOMRIGHT", -92, 10)
+    self.recipeNext = Button(listPanel, "Next", 72, 26); self.recipeNext:SetPoint("BOTTOMRIGHT", -12, 10)
+    self.recipeBack:SetScript("OnClick", function() self.recipePage = math.max(1, (self.recipePage or 1) - 1); self:RefreshRecipes() end)
+    self.recipeNext:SetScript("OnClick", function() self.recipePage = (self.recipePage or 1) + 1; self:RefreshRecipes() end)
+
+    local editor = CreateFrame("Frame", nil, view, "BackdropTemplate")
+    editor:SetPoint("TOPLEFT", listPanel, "TOPRIGHT", 10, 0); editor:SetPoint("BOTTOMRIGHT", view, "BOTTOMRIGHT", 0, 0)
+    SetBackdrop(editor, COLORS.panel, COLORS.border)
+    self.recipeEditorEmpty = Text(editor, "Select a crafted item to review its materials.", "GameFontHighlight", 13, COLORS.muted)
+    self.recipeEditorEmpty:SetPoint("CENTER", 0, 20)
+    self.recipeEditorContent = CreateFrame("Frame", nil, editor); self.recipeEditorContent:SetAllPoints(editor)
+    self.recipeTitle = Text(self.recipeEditorContent, "", "GameFontNormal", 16, COLORS.gold); self.recipeTitle:SetPoint("TOPLEFT", 15, -12); self.recipeTitle:SetPoint("RIGHT", -150, 0)
+    self.recipeMeta = Text(self.recipeEditorContent, "", nil, 11, COLORS.muted); self.recipeMeta:SetPoint("TOPLEFT", 15, -36)
+    self.planButton = Button(self.recipeEditorContent, "Add to Plan", 140, 28); self.planButton:SetPoint("TOPRIGHT", -14, -12)
+    self.planButton:SetScript("OnClick", function()
+        if not self.selectedRecipeID then return end
+        KeyLab.CraftedPlansDB.Toggle(self.selectedRecipeID)
+        self:RefreshRecipes()
+    end)
+    self.reagentHint = Text(self.recipeEditorContent, "", nil, 10, COLORS.muted); self.reagentHint:SetPoint("TOPLEFT", 15, -57)
+    local reagentScroll = CreateFrame("ScrollFrame", nil, self.recipeEditorContent, "UIPanelScrollFrameTemplate")
+    reagentScroll:SetPoint("TOPLEFT", 10, -78); reagentScroll:SetPoint("BOTTOMRIGHT", -28, 42)
+    self.reagentContent = CreateFrame("Frame", nil, reagentScroll); self.reagentContent:SetSize(390, 300); reagentScroll:SetScrollChild(self.reagentContent)
+    self.reagentRows = {}
+    for index = 1, 20 do
+        local row = CreateFrame("Frame", nil, self.reagentContent, "BackdropTemplate")
+        row:SetPoint("TOPLEFT", 0, -((index - 1) * 66)); row:SetPoint("TOPRIGHT", 0, -((index - 1) * 66)); row:SetHeight(60)
+        SetBackdrop(row, index % 2 == 0 and COLORS.body or COLORS.bg, COLORS.border)
+        row.title = Text(row, "", nil, 10, COLORS.text); row.title:SetPoint("TOPLEFT", 8, -6); row.title:SetPoint("RIGHT", -8, 0)
+        row.detail = Text(row, "", nil, 9, COLORS.muted); row.detail:SetPoint("TOPLEFT", 8, -25); row.detail:SetPoint("RIGHT", -8, 0)
+        row.dropdown = Dropdown(row, 350,
+            function() return KeyLab.CraftingAnalysis.GetChoiceOptions(row.recipeID, row.slotIndex) end,
+            function()
+                local plan = KeyLab.CraftedPlansDB.GetPlan(row.recipeID)
+                return KeyLab.CraftingAnalysis.GetChoiceValue(plan, row.slotIndex)
+            end,
+            function(value, option)
+                if value == "none" then KeyLab.CraftedPlansDB.SetChoice(row.recipeID, row.slotIndex, nil, nil)
+                else KeyLab.CraftedPlansDB.SetChoice(row.recipeID, row.slotIndex, option.kind, option.id) end
+                self:RefreshRecipes()
+            end)
+        row.dropdown:SetPoint("BOTTOMLEFT", 8, 5)
+        self.reagentRows[index] = row
+    end
+    self.planCount = Text(editor, "", nil, 10, COLORS.gold); self.planCount:SetPoint("BOTTOMLEFT", 15, 14)
+    return view
+end
+
+function GearPlanning:ShowView(name)
+    self.selectedView = name == "crafted" and "crafted" or "guide"
+    self.guideView:SetShown(self.selectedView == "guide")
+    self.craftedView:SetShown(self.selectedView == "crafted")
+    self.guideTab:SetSelected(self.selectedView == "guide")
+    self.craftedTab:SetSelected(self.selectedView == "crafted")
+    if self.selectedView == "crafted" then self:RefreshRecipes() end
+end
+
 function GearPlanning:Create(parent)
     local frame = CreateFrame("Frame", "KeyLabGearPlanningTab", parent, "BackdropTemplate")
     frame:SetAllPoints(parent)
@@ -193,23 +601,20 @@ function GearPlanning:Create(parent)
         "Learn the main gearing choices, then plan the open slots around your goals."
     )
 
-    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, HEADER.standardContentY)
-    scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
-
-    local content = CreateFrame("Frame", nil, scroll)
-    content:SetSize(900, 520)
-    scroll:SetScrollChild(content)
-
-    self.accordion = KeyLab.UI.Accordion.Create(content, {
-        sections = SECTIONS,
-        colors = COLORS,
-        width = 884,
-        left = 8,
-        minHeight = 520,
-    })
+    self.guideTab = Button(frame, "Guide", 170, 34); self.guideTab:SetPoint("TOPLEFT", 18, -72)
+    self.craftedTab = Button(frame, "Crafted Gear", 170, 34); self.craftedTab:SetPoint("LEFT", self.guideTab, "RIGHT", 10, 0)
+    local views = CreateFrame("Frame", nil, frame)
+    views:SetPoint("TOPLEFT", 18, -116); views:SetPoint("BOTTOMRIGHT", -34, 18)
+    self.guideView = self:BuildGuideView(views)
+    self:BuildCraftedView(views)
+    self.guideTab:SetScript("OnClick", function() self:ShowView("guide") end)
+    self.craftedTab:SetScript("OnClick", function() self:ShowView("crafted") end)
     self.frame = frame
-    self.content = content
+    self.recipePage, self.recipeSearch = 1, ""
+    self:ShowView("guide")
+    frame:SetScript("OnShow", function()
+        if self.selectedView == "crafted" then self:RefreshRecipes() end
+    end)
     return frame
 end
 

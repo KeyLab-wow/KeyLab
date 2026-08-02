@@ -86,10 +86,23 @@ function Accordion.Create(content, options)
         openIndex = tonumber(options.openIndex),
     }
 
+    function controller:Toggle(index)
+        index = tonumber(index)
+        if not index then return end
+        if self.openIndex == index then
+            self.openIndex = nil
+        else
+            self.openIndex = index
+        end
+        self:Layout()
+    end
+
     for index, definition in ipairs(options.sections or {}) do
         local section = { definition = definition }
         local header = CreateFrame("Button", nil, content, "BackdropTemplate")
         Size(header, width, headerHeight)
+        header:EnableMouse(false)
+        header:SetFrameLevel(content:GetFrameLevel() + 3)
         SetBackdrop(header, Color(colors, "panel"), Color(colors, "border"))
 
         -- A BackdropTemplate's one-pixel top edge can fade when its ScrollFrame
@@ -107,6 +120,7 @@ function Accordion.Create(content, options)
         indicator:SetSize(22, 22)
         indicator:SetJustifyH("CENTER")
         indicator:SetTextColor(unpack(Color(colors, "gold")))
+        if indicator.EnableMouse then indicator:EnableMouse(false) end
 
         local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         title:SetFont(STANDARD_TEXT_FONT, 14, "")
@@ -115,9 +129,12 @@ function Accordion.Create(content, options)
         title:SetJustifyH("LEFT")
         title:SetText(tostring(definition.title or ("Section " .. index)))
         title:SetTextColor(unpack(Color(colors, "text")))
+        if title.EnableMouse then title:EnableMouse(false) end
 
         local body = CreateFrame("Frame", nil, content, "BackdropTemplate")
         body:SetWidth(width)
+        body:SetFrameLevel(content:GetFrameLevel() + 1)
+        body:EnableMouse(false)
         SetBackdrop(body, Color(colors, "body"), Color(colors, "border"))
         body:Hide()
 
@@ -131,6 +148,16 @@ function Accordion.Create(content, options)
         if bodyText.SetSpacing then bodyText:SetSpacing(3) end
         bodyText:SetTextColor(unpack(Color(colors, "text")))
         bodyText:SetText(tostring(definition.body or ""))
+        if bodyText.EnableMouse then bodyText:EnableMouse(false) end
+
+        -- ScrollFrames can consume a button's mouse-up when their scroll child
+        -- changes height. Keep input on a separate top-level hit surface and
+        -- toggle on mouse-down so both opening and closing are dependable.
+        local hit = CreateFrame("Button", nil, content)
+        hit:SetAllPoints(header)
+        hit:SetFrameLevel(content:GetFrameLevel() + 8)
+        hit.sectionIndex = index
+        hit:RegisterForClicks("LeftButtonDown")
 
         section.header = header
         section.indicator = indicator
@@ -138,22 +165,22 @@ function Accordion.Create(content, options)
         section.topEdge = topEdge
         section.body = body
         section.bodyText = bodyText
+        section.hit = hit
         controller.sections[index] = section
 
-        header:SetScript("OnClick", function()
-            controller.openIndex = controller.openIndex == index and nil or index
-            controller:Layout()
+        hit:SetScript("OnClick", function(button)
+            controller:Toggle(button.sectionIndex)
         end)
-        header:SetScript("OnEnter", function(self)
-            self:SetBackdropBorderColor(unpack(Color(colors, "hover")))
+        hit:SetScript("OnEnter", function()
+            header:SetBackdropBorderColor(unpack(Color(colors, "hover")))
             topEdge:SetColorTexture(unpack(Color(colors, "hover")))
-            if colors.hoverBg then self:SetBackdropColor(unpack(colors.hoverBg)) end
+            if colors.hoverBg then header:SetBackdropColor(unpack(colors.hoverBg)) end
             title:SetTextColor(unpack(Color(colors, "gold")))
         end)
-        header:SetScript("OnLeave", function(self)
+        hit:SetScript("OnLeave", function()
             local active = controller.openIndex == index
-            self:SetBackdropColor(unpack(Color(colors, "panel")))
-            self:SetBackdropBorderColor(unpack(active and Color(colors, "gold") or Color(colors, "border")))
+            header:SetBackdropColor(unpack(Color(colors, "panel")))
+            header:SetBackdropBorderColor(unpack(active and Color(colors, "gold") or Color(colors, "border")))
             topEdge:SetColorTexture(unpack(active and Color(colors, "gold") or Color(colors, "border")))
             title:SetTextColor(unpack(active and Color(colors, "gold") or Color(colors, "text")))
         end)

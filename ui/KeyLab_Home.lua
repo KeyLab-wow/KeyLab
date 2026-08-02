@@ -225,16 +225,16 @@ function HOME:Create(parent)
     local releaseNoteHeight = 132
     local releaseNote = MakePanel(frame, CFG.x, y, width, releaseNoteHeight, false)
 
-    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.119", 14, COLORS.title, "LEFT")
+    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.134", 14, COLORS.title, "LEFT")
     releaseTitle:SetPoint("TOPLEFT", releaseNote, "TOPLEFT", 14, -12)
     releaseTitle:SetSize(280, 18)
 
     local releaseBody = MakeText(
         releaseNote,
-        "Released July 31, 2026\n\n" ..
-        "- Added a highlighted Help Shape KeyLab invitation to Home.\n" ..
-        "- Made it easier to share ideas and feature requests through CurseForge.\n" ..
-        "- Kept tracking, gear, and Macro Sequencer behavior unchanged.",
+        "Released August 1, 2026\n\n" ..
+        "- Centered the Gear Targets action and search-field text.\n" ..
+        "- Added clearer backgrounds to Refresh Current Stats and Results.\n" ..
+        "- Buttons now respond visibly when hovered or pressed.",
         11,
         COLORS.muted,
         "LEFT"
