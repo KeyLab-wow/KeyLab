@@ -1,5 +1,134 @@
 # KeyLab Changelog
 
+## Version 1.8.134 - Gear Target Control Styling
+
+Released August 1, 2026
+
+- Centered the Refresh Current Stats and Results labels inside their buttons.
+- Added visible normal, hover, and pressed background colors to both controls.
+- Centered the Search Item placeholder and table-column labels inside their fields.
+
+## Version 1.8.133 - Distinct Trinket Results
+
+Released August 1, 2026
+
+- Corrected paired trinkets in the Stat Goal Matcher Results window.
+- Trinket 1 and Trinket 2 now keep the name, source, item level, and link belonging to the item actually selected for each slot.
+- Existing completed matcher results are corrected when reopened, without requiring another match or changing saved gear plans.
+
+## Version 1.8.132 - Guide Section Controls
+
+Released August 1, 2026
+
+- Corrected the shared expand-and-close control so minus-sign clicks are handled before the scroll frame can consume them.
+- Restored the clipped right borders and balanced margins on Gear Planning guide cards.
+- Kept all guide content and section order unchanged.
+
+## Version 1.8.131 - Expandable Section Controls
+
+Released August 1, 2026
+
+- Fixed the shared expandable sections used by Insights and the Gear Planning guide.
+- Clicking an active section's minus sign now closes the section reliably.
+- Kept all section content, order, and layout unchanged.
+
+## Version 1.8.130 - Menu Alignment
+
+Released August 1, 2026
+
+- Aligned the main menu's outer top border with the selected page window.
+- Kept every menu button, compact-menu position, and window behavior unchanged.
+
+## Version 1.8.129 - Menu-Only Minimize
+
+Released August 1, 2026
+
+- Added a manual Minimize button that leaves KeyLab's labeled menu visible.
+- Added an enabled-by-default option that switches KeyLab to its menu-only view when a regular WoW window opens.
+- Moved both manual and automatic menu-only views beside and below the minimap, then centered the full window whenever it is reopened.
+- Kept KeyLab helper and results popups visible and placed the crafted-item shopping list above the main KeyLab window.
+- Left Blizzard frames, layers, and opacity unchanged.
+
+## Version 1.8.128 - Stable Window Rollback
+
+Released August 1, 2026
+
+- Removed the Compact Mode and window-layer experiment, including its saved layout settings.
+- Restored the proven KeyLab 1.8.122 main-window and popup layering behavior.
+- Kept player records, crafted plans, Macro Sequences, helper settings, and all unrelated features unchanged.
+
+## Version 1.8.127 - Clear Minimize Control
+
+Released August 1, 2026
+
+- Restored KeyLab's original always-front main-window behavior without changing Blizzard interface layers.
+- Replaced the small compact symbol with a larger, clearly labeled Minimize button and a short reminder in the header.
+- Kept KeyLab helper popups above the main window and retained the labeled Compact Mode menu.
+
+## Version 1.8.126 - Visible-Only Window Layer
+
+Released August 1, 2026
+
+- KeyLab now rises above action buttons only while its own window is visible.
+- Closing KeyLab immediately returns its shell to the normal low layer so Blizzard's Game Menu and icons remain unaffected.
+- Kept Blizzard panels, Compact Mode, and all page behavior unchanged.
+
+## Version 1.8.125 - Action Button Layering
+
+Released August 1, 2026
+
+- Kept individual action buttons, counters, and cooldown text from drawing through the KeyLab window.
+- Preserved the higher placement of raised Blizzard panels such as Character and Spellbook.
+- Kept Compact Mode and all page behavior unchanged.
+
+## Version 1.8.124 - Action Bar Layering
+
+Released August 1, 2026
+
+- Kept KeyLab above normal action bars so the bottom of the window remains visible and usable.
+- Continued allowing Character, bags, professions, and other Blizzard panels to appear above KeyLab.
+- Kept Compact Mode, saved window positions, and all page behavior unchanged.
+
+## Version 1.8.123 - Window Layering and Compact Mode
+
+Released August 1, 2026
+
+- Updated KeyLab's window layer so normal Blizzard panels can appear above it.
+- Added a manual Compact Mode that keeps the complete labeled main menu visible while hiding the large page body.
+- Kept the current page highlighted and automatically restores the full window when a menu page is chosen.
+- Saved the compact or full preference and remembered separate window positions for both layouts.
+
+## Version 1.8.122 - Crafted Plan Shopping Summary
+
+Released August 1, 2026
+
+- Added an All Items or Planned Items filter to the Crafted Gear planner.
+- Reworked the Auction House helper into two full-height columns for materials still needed and resources already on hand.
+- Added combined Spark requirements across every planned crafted item.
+- Added at-a-glance counts for all Dawncrests and Galactic PvP Heraldry types.
+- Moved fully covered Auction House materials into the on-hand resource column.
+
+## Version 1.8.121 - Crafted Gear Filters and Materials
+
+Released August 1, 2026
+
+- Added armor type, weapon type, item level, and PvP filters to the Crafted Gear planner.
+- Color-coded crafted item names by their starting item level and removed unusable level-1 recipe shells.
+- Simplified required materials so KeyLab adds them to the shopping list automatically without asking for reagent quality.
+- Kept only meaningful optional choices for embellishments and secondary-stat customization, including Engineering's Amplify Secondary Stat.
+- Added live crest and Competitor's Heraldry counts while keeping the recipe catalog stored inside KeyLab.
+- Removed Artisan's Authenticity from the player shopping plan because it is supplied by the crafter.
+
+## Version 1.8.120 - Crafted Gear Planner
+
+Released July 31, 2026
+
+- Added a Crafted Gear tab inside Gear Planning with 243 current-season armor and weapon recipes.
+- Added exact material choices for reagent quality, Missives, embellishments, Sparks, crests, and other recipe options.
+- Saved crafted plans separately for each character and specialization without changing existing KeyLab records.
+- Added a movable, resizable Auction House shopping helper that separates purchasable materials, special materials, items already owned, and items still needed.
+- Kept the helper strictly observational: it never searches, buys, posts, or changes anything in the Auction House.
+
 ## Version 1.8.119 - Help Shape KeyLab
 
 Released July 31, 2026

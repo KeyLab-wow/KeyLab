@@ -34,6 +34,13 @@ local CFG = {
         y = 0,
     },
 
+    menuOnly = {
+        width = 228,
+        bottomPadding = 22,
+        automaticX = -210,
+        automaticY = -190,
+    },
+
     close = {
         x = -22,
         y = -20,
@@ -200,6 +207,15 @@ local function SaveContentMode(mode)
     return mode
 end
 
+local function IsAutoMenuOnlyEnabled()
+    if KeyLab.DB and KeyLab.DB.GetSetting then
+        return KeyLab.DB.GetSetting("autoMinimizeForBlizzardPanels", true) ~= false
+    end
+    KeyLabDB = type(KeyLabDB) == "table" and KeyLabDB or {}
+    KeyLabDB.settings = type(KeyLabDB.settings) == "table" and KeyLabDB.settings or {}
+    return KeyLabDB.settings.autoMinimizeForBlizzardPanels ~= false
+end
+
 local function GetAnalysisRoute(tabName)
     if ANALYSIS_ROUTES[tabName] then return tabName, nil end
     for category, routes in pairs(ANALYSIS_ROUTES) do
@@ -340,8 +356,34 @@ function KeyLab.UI:Create()
     end)
     self.closeButton = close
 
+    local menuOnlyButton = CreateFrame("Button", nil, frame, "BackdropTemplate")
+    menuOnlyButton:SetSize(92, 30)
+    menuOnlyButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -60, -38)
+    StylePanel(menuOnlyButton, CFG.colors.buttonBg, CFG.colors.gold)
+
+    local menuOnlyLabel = menuOnlyButton:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    menuOnlyLabel:SetPoint("CENTER")
+    menuOnlyLabel:SetText("Minimize")
+    ApplyColor(menuOnlyLabel, CFG.colors.gold)
+    menuOnlyButton.label = menuOnlyLabel
+
+    menuOnlyButton:SetScript("OnClick", function()
+        KeyLab.UI:SetMenuOnly(not KeyLab.UI.isMenuOnly)
+    end)
+    menuOnlyButton:SetScript("OnEnter", function(button)
+        button:SetBackdropBorderColor(unpack(CFG.colors.buttonHover))
+        GameTooltip:SetOwner(button, "ANCHOR_BOTTOM")
+        GameTooltip:SetText(KeyLab.UI.isMenuOnly and "Open KeyLab" or "Show Menu Only")
+        GameTooltip:Show()
+    end)
+    menuOnlyButton:SetScript("OnLeave", function(button)
+        button:SetBackdropBorderColor(unpack(CFG.colors.gold))
+        GameTooltip:Hide()
+    end)
+    self.menuOnlyButton = menuOnlyButton
+
     local sidebar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    sidebar:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.sidebar.x - 8, CFG.sidebar.y + 12)
+    sidebar:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.sidebar.x - 8, CFG.content.y)
 
     local tabCount = #(self.navigationTabs or {})
     local sidebarHeight =
@@ -355,6 +397,7 @@ function KeyLab.UI:Create()
     sidebar:SetSize(CFG.sidebar.width + 16, sidebarHeight)
     StylePanel(sidebar, CFG.colors.sidebarBg, CFG.colors.sidebarBorder)
     self.sidebar = sidebar
+    self.menuOnlyHeight = math.max(400, -CFG.sidebar.y + sidebarHeight + (CFG.menuOnly.bottomPadding or 22))
 
     local content = CreateFrame("Frame", "KeyLabContentFrame", frame, "BackdropTemplate")
     content:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.content.x, CFG.content.y)
@@ -388,9 +431,89 @@ function KeyLab.UI:Create()
         self.sequencerCombatEvents = combatEvents
     end
 
+    self:InstallAutoMenuOnlyHook()
     self:SelectTab("Home")
 
     return frame
+end
+
+function KeyLab.UI:SetMenuOnly(enabled)
+    self:Create()
+    enabled = enabled == true
+    if self.isMenuOnly == enabled then return end
+
+    self.isMenuOnly = enabled
+
+    if enabled then
+        self.frame:SetSize(CFG.menuOnly.width, self.menuOnlyHeight or CFG.main.height)
+        self.frame:ClearAllPoints()
+        self.frame:SetPoint(
+            "TOPRIGHT",
+            UIParent,
+            "TOPRIGHT",
+            CFG.menuOnly.automaticX or -210,
+            CFG.menuOnly.automaticY or -190
+        )
+        self.content:Hide()
+        self.titleIcon:Hide()
+
+        self.title:ClearAllPoints()
+        self.title:SetPoint("LEFT", self.header, "LEFT", 16, 0)
+        self.title:SetFont(CFG.title.font, 24, "")
+
+        self.closeButton:ClearAllPoints()
+        self.closeButton:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -10, -20)
+
+        self.menuOnlyButton:ClearAllPoints()
+        self.menuOnlyButton:SetSize(52, 30)
+        self.menuOnlyButton:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -44, -38)
+        self.menuOnlyButton.label:SetText("Open")
+
+        if self.backgroundArtwork then
+            self.backgroundArtwork:SetTexCoord(0, CFG.menuOnly.width / 2048, 0, (self.menuOnlyHeight or CFG.main.height) / 1024)
+        end
+        return
+    end
+
+    self.frame:SetSize(CFG.main.width, CFG.main.height)
+    self.frame:ClearAllPoints()
+    self.frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    self.titleIcon:Show()
+
+    self.title:ClearAllPoints()
+    self.title:SetPoint("LEFT", self.titleIcon, "RIGHT", 10, 0)
+    self.title:SetFont(CFG.title.font, CFG.title.size, "")
+
+    self.closeButton:ClearAllPoints()
+    self.closeButton:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", CFG.close.x, CFG.close.y)
+
+    self.menuOnlyButton:ClearAllPoints()
+    self.menuOnlyButton:SetSize(92, 30)
+    self.menuOnlyButton:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -60, -38)
+    self.menuOnlyButton.label:SetText("Minimize")
+
+    if self.backgroundArtwork then
+        self.backgroundArtwork:SetTexCoord(0, CFG.main.width / 2048, 0, CFG.main.height / 1024)
+    end
+    if self.frame:IsShown() then
+        self.content:Show()
+        if self.selectedTab and self.tabFrames and self.tabFrames[self.selectedTab] then
+            self.tabFrames[self.selectedTab]:Show()
+        end
+    end
+end
+
+function KeyLab.UI:InstallAutoMenuOnlyHook()
+    if self.autoMenuOnlyHookInstalled then return end
+    if type(hooksecurefunc) ~= "function" or type(ShowUIPanel) ~= "function" then return end
+
+    hooksecurefunc("ShowUIPanel", function()
+        local ui = KeyLab.UI
+        if not (ui and ui.frame and ui.frame:IsShown()) then return end
+        if ui.isMenuOnly or not IsAutoMenuOnlyEnabled() then return end
+        ui:SetMenuOnly(true)
+    end)
+    self.autoMenuOnlyHookInstalled = true
 end
 
 function KeyLab.UI:RefreshContentModeSelector()
@@ -433,7 +556,10 @@ function KeyLab.UI:CreateContentModeSelector(y)
         ApplyColor(label, CFG.colors.text)
         button.label = label
 
-        button:SetScript("OnClick", function() KeyLab.UI:SetContentMode(mode) end)
+        button:SetScript("OnClick", function()
+            if KeyLab.UI.isMenuOnly then KeyLab.UI:SetMenuOnly(false) end
+            KeyLab.UI:SetContentMode(mode)
+        end)
         button:SetScript("OnEnter", function(self)
             if NormalizeContentMode(KeyLab.UI.contentMode) ~= mode then
                 self:SetBackdropBorderColor(unpack(CFG.colors.buttonHover))
@@ -482,6 +608,7 @@ function KeyLab.UI:CreateTabButtons()
         button.label = label
 
         button:SetScript("OnClick", function()
+            if KeyLab.UI.isMenuOnly then KeyLab.UI:SetMenuOnly(false) end
             KeyLab.UI:SelectTab(tabName)
         end)
 
