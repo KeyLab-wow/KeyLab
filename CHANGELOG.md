@@ -1,5 +1,37 @@
 # KeyLab Changelog
 
+## Version 1.8.138 - Clearer Crafting Counts
+
+Released August 2, 2026
+
+- Tightened the selected crafted-item material cards so required rows use only the space they need.
+- Moved required and owned quantities before material names for faster reading.
+- Colored owned material and crest counts red whenever the available amount is below the amount required.
+
+## Version 1.8.137 - Clearer Crafted Shopping
+
+Released August 2, 2026
+
+- Simplified the crafted shopping helper into Materials Required, Crests or Heraldry Needed, and Materials You Have.
+- Kept full required totals separate from owned material qualities and left unowned materials out of the owned list.
+- Added crafted-item icons and standard World of Warcraft hover tooltips, and removed ordinary owned counts from item details.
+
+## Version 1.8.136 - Faster Stat Goal Matching
+
+Released August 2, 2026
+
+- Reduced repeated calculations and temporary memory use during larger Stat Goal Matcher searches.
+- Restored animated running dots while keeping the current `x / x` search progress visible.
+- Kept the full search width, stat goals, priority behavior, and winning-result rules unchanged.
+
+## Version 1.8.135 - Ordered Stat Priority Matching
+
+Released August 2, 2026
+
+- Updated Favor Priority so the first stat is matched as closely as possible before the next stat is considered.
+- Kept Balanced matching unchanged for players who want the closest overall combination.
+- Retained the existing character-percentage conversion, equipped-and-bag scan, slot rules, and upgrade projections.
+
 ## Version 1.8.134 - Gear Target Control Styling
 
 Released August 1, 2026
