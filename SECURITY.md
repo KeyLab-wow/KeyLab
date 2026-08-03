@@ -25,6 +25,4 @@ When reporting an issue, please include:
 
 Reports will be reviewed as time permits. If the issue is confirmed, a fix will be included in a future release and documented in the project changelog.
 
-Please do not publicly disclose security-related issues until they have been reviewed and investigated.
 
-Thank you for helping improve KeyLab.
