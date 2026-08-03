@@ -280,12 +280,12 @@ function Analysis.GetRecipeDisplayRows(recipeID)
             elseif slot.required then
                 local groups = ItemGroups(slot)
                 if #groups > 0 then
-                    local names, owned = {}, 0
-                    for _, group in ipairs(groups) do table.insert(names, group.name); owned = owned + GroupOwned(group) end
+                    local names = {}
+                    for _, group in ipairs(groups) do table.insert(names, group.name) end
                     table.insert(rows, {
                         kind = "required", slotIndex = slotIndex,
                         title = table.concat(names, " / "), quantity = quantity,
-                        detail = "Owned: " .. tostring(owned),
+                        detail = "",
                     })
                 elseif #(slot.currencies or {}) > 0 then
                     table.insert(rows, {
@@ -312,6 +312,15 @@ local function AddGroupedItem(totals, group, quantity, slot, recipe)
         }
         totals[key] = entry
     end
+    local known = {}
+    for _, itemID in ipairs(entry.ids or {}) do known[tonumber(itemID)] = true end
+    for _, itemID in ipairs(group.ids or {}) do
+        itemID = tonumber(itemID)
+        if itemID and not known[itemID] then
+            table.insert(entry.ids, itemID)
+            known[itemID] = true
+        end
+    end
     entry.required = entry.required + (tonumber(quantity) or 0)
     entry.recipes[recipe.name or tostring(recipe.itemID)] = true
 end
@@ -332,10 +341,34 @@ local function AddCurrency(totals, currencyID, quantity, recipe)
 end
 
 function Analysis.GetShoppingList(specID)
-    local totals, powerNeeded, powerItems = {}, {}, {}
-    local heraldryNeeded = 0
+    local totals, resourceByRecipe = {}, {}
     local plans = KeyLab.CraftedPlansDB and KeyLab.CraftedPlansDB.GetPlans
         and KeyLab.CraftedPlansDB.GetPlans(specID) or {}
+
+    local function ResourceEntry(recipe)
+        local key = tonumber(recipe.recipeID) or tonumber(recipe.itemID) or tostring(recipe.name)
+        local entry = resourceByRecipe[key]
+        if not entry then
+            entry = { name = recipe.name or "Crafted Item", lines = {} }
+            resourceByRecipe[key] = entry
+        end
+        return entry
+    end
+
+    local hasCrests, hasHeraldry = false, false
+
+    local function AddResourceLine(recipe, name, owned, required, kind)
+        local entry = ResourceEntry(recipe)
+        entry.kind = entry.kind and entry.kind ~= kind and "mixed" or (entry.kind or kind)
+        if kind == "crest" then hasCrests = true end
+        if kind == "heraldry" then hasHeraldry = true end
+        table.insert(entry.lines, {
+            name = name or "Crafting Resource",
+            owned = tonumber(owned) or 0,
+            required = tonumber(required) or 0,
+        })
+    end
+
     for _, plan in ipairs(plans) do
         local recipe = Analysis.GetRecipe(plan.recipeID)
         if recipe then
@@ -344,20 +377,14 @@ function Analysis.GetShoppingList(specID)
                     local quantity = tonumber(slot.quantity) or 80
                     for _, currencyID in ipairs(slot.currencies or {}) do
                         currencyID = tonumber(currencyID)
-                        powerNeeded[currencyID] = (powerNeeded[currencyID] or 0) + quantity
-                        powerItems[currencyID] = (powerItems[currencyID] or 0) + 1
+                        AddResourceLine(recipe, RuntimeCurrencyName(currencyID), CurrencyCount(currencyID), quantity, "crest")
                     end
                 elseif not IsAuthenticity(slot) then
                     if slot.required then
                         if IsHeraldry(slot) then
-                            heraldryNeeded = heraldryNeeded + (tonumber(slot.quantity) or 1)
-                            local groups = ItemGroups(slot)
-                            if #groups > 0 then
-                                local all = { name = "Competitor's Heraldry (choose one)", ids = {} }
-                                for _, group in ipairs(groups) do
-                                    for _, id in ipairs(group.ids) do table.insert(all.ids, id) end
-                                end
-                                AddGroupedItem(totals, all, slot.quantity, slot, recipe)
+                            local quantity = tonumber(slot.quantity) or 1
+                            for _, group in ipairs(ItemGroups(slot)) do
+                                AddResourceLine(recipe, group.name, GroupOwned(group), quantity, "heraldry")
                             end
                         else
                             for _, group in ipairs(ItemGroups(slot)) do
@@ -377,7 +404,7 @@ function Analysis.GetShoppingList(specID)
         end
     end
 
-    local auctionHouse, alreadyOwned, resources = {}, {}, {}
+    local requiredMaterials, ownedMaterials, resourceRequirements = {}, {}, {}
     for _, entry in pairs(totals) do
         if entry.kind == "currency" then entry.owned = CurrencyCount(entry.id)
         else
@@ -385,70 +412,73 @@ function Analysis.GetShoppingList(specID)
             for _, itemID in ipairs(entry.ids or {}) do entry.owned = entry.owned + ItemCount(itemID) end
         end
         entry.stillNeeded = math.max(0, entry.required - entry.owned)
-        if not entry.special then
-            if entry.stillNeeded == 0 then table.insert(alreadyOwned, entry)
-            else table.insert(auctionHouse, entry) end
-        elseif Lower(entry.name):find("spark", 1, true) then
-            table.insert(resources, {
-                name = entry.name, resourceOrder = 10,
-                summary = string.format("Need %d  |  Own %d  |  Still needed %d",
-                    entry.required or 0, entry.owned or 0, entry.stillNeeded or 0),
-                complete = (entry.stillNeeded or 0) == 0,
-            })
+
+        table.insert(requiredMaterials, {
+            kind = "requiredMaterial",
+            name = entry.name,
+            required = entry.required or 0,
+            owned = entry.owned or 0,
+            summary = "",
+            complete = false,
+        })
+
+        if entry.kind == "items" and (entry.owned or 0) > 0 then
+            local qualityCount = #(entry.ids or {})
+            for qualityIndex, itemID in ipairs(entry.ids or {}) do
+                local owned = ItemCount(itemID)
+                if owned > 0 then
+                    table.insert(ownedMaterials, {
+                        kind = "ownedMaterial",
+                        name = entry.name,
+                        owned = owned,
+                        totalOwned = entry.owned or 0,
+                        required = entry.required or 0,
+                        qualityIndex = qualityIndex,
+                        qualityCount = qualityCount,
+                        summary = qualityCount > 1 and ("Quality " .. tostring(qualityIndex)) or "",
+                        complete = (entry.owned or 0) >= (entry.required or 0),
+                    })
+                end
+            end
         end
     end
 
-
-    for index, crest in ipairs(Database().resourceGroups and Database().resourceGroups.crests or {}) do
-        local currencyID = tonumber(crest.id)
-        local needed = tonumber(powerNeeded[currencyID]) or 0
-        local itemCount = tonumber(powerItems[currencyID]) or 0
-        local summary
-        if needed > 0 then
-            summary = string.format("Own %d  |  %d needed if chosen for %d planned item%s",
-                CurrencyCount(currencyID), needed, itemCount, itemCount == 1 and "" or "s")
-        else
-            summary = "Own " .. tostring(CurrencyCount(currencyID)) .. "  |  Not needed by this plan"
+    for _, entry in pairs(resourceByRecipe) do
+        local lines = {}
+        for _, line in ipairs(entry.lines or {}) do
+            table.insert(lines, string.format("%s  %d / %d", line.name, line.owned, line.required))
         end
-        table.insert(resources, {
-            name = crest.name or RuntimeCurrencyName(currencyID), resourceOrder = 20 + index,
-            summary = summary, complete = needed == 0 or CurrencyCount(currencyID) >= needed,
+        table.insert(resourceRequirements, {
+            kind = "resourceRequirement",
+            name = entry.name,
+            summary = table.concat(lines, "\n"),
+            lines = entry.lines,
+            lineCount = #lines,
+            complete = false,
         })
     end
 
-    for index, heraldry in ipairs(Database().resourceGroups and Database().resourceGroups.heraldry or {}) do
-        local owned = ItemCount(heraldry.id)
-        local summary = "Own " .. tostring(owned)
-        if heraldryNeeded > 0 then
-            summary = summary .. "  |  Plan needs " .. tostring(heraldryNeeded) .. " from one Heraldry type"
-        else
-            summary = summary .. "  |  Not needed by this plan"
-        end
-        table.insert(resources, {
-            name = heraldry.name or RuntimeItemName(heraldry.id), resourceOrder = 40 + index,
-            summary = summary, complete = heraldryNeeded == 0 or owned >= heraldryNeeded,
-        })
+    local function Sort(list)
+        table.sort(list, function(a, b)
+            if tostring(a.name) ~= tostring(b.name) then return tostring(a.name) < tostring(b.name) end
+            return (tonumber(a.qualityIndex) or 0) < (tonumber(b.qualityIndex) or 0)
+        end)
     end
-
-    for index, entry in ipairs(alreadyOwned) do
-        table.insert(resources, {
-            name = entry.name, resourceOrder = 100 + index,
-            summary = string.format("Covered  |  Need %d  |  Own %d", entry.required or 0, entry.owned or 0),
-            complete = true,
-        })
-    end
-
-    local function Sort(list) table.sort(list, function(a, b) return tostring(a.name) < tostring(b.name) end) end
-    Sort(auctionHouse)
-    table.sort(resources, function(a, b)
-        if tonumber(a.resourceOrder) ~= tonumber(b.resourceOrder) then
-            return (tonumber(a.resourceOrder) or 999) < (tonumber(b.resourceOrder) or 999)
-        end
-        return tostring(a.name) < tostring(b.name)
-    end)
+    Sort(requiredMaterials)
+    Sort(ownedMaterials)
+    Sort(resourceRequirements)
     return {
-        planCount = #plans, auctionHouse = auctionHouse, resources = resources,
-        alreadyOwned = alreadyOwned, special = {}, unresolved = {},
+        planCount = #plans,
+        requiredMaterials = requiredMaterials,
+        resourceRequirements = resourceRequirements,
+        ownedMaterials = ownedMaterials,
+        resourceTitle = hasCrests and hasHeraldry and "Crests & Heraldry Needed"
+            or (hasHeraldry and "Heraldry Needed" or "Crests Needed"),
+        -- Compatibility aliases for any code that has not refreshed yet.
+        auctionHouse = requiredMaterials,
+        resources = resourceRequirements,
+        alreadyOwned = ownedMaterials,
+        special = {}, unresolved = {},
     }
 end
 

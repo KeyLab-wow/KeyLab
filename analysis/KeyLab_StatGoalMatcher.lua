@@ -146,11 +146,24 @@ local function BuildProjectionContext(equippedItemStats, specID, matchStyle)
         bonusCache = { Crit = {}, Haste = {}, Mastery = {}, Vers = {} },
         matchStyle = matchStyle == "priority" and "priority" or "balanced",
         priorityWeights = {},
+        priorityOrder = {},
     }
     local displayOrder = KeyLab.StatGoalsDB and KeyLab.StatGoalsDB.GetDisplayOrder and KeyLab.StatGoalsDB.GetDisplayOrder(specID) or {}
+    local prioritySeen = {}
     for rank, statKey in ipairs(displayOrder) do
         local internalKey = INTERNAL_KEYS[statKey]
-        if internalKey then context.priorityWeights[internalKey] = PRIORITY_WEIGHTS[rank] or 1 end
+        if internalKey and not prioritySeen[internalKey] then
+            context.priorityWeights[internalKey] = PRIORITY_WEIGHTS[rank] or 1
+            context.priorityOrder[#context.priorityOrder + 1] = internalKey
+            prioritySeen[internalKey] = true
+        end
+    end
+    for _, key in ipairs(SECONDARY) do
+        if not prioritySeen[key] then
+            context.priorityWeights[key] = context.priorityWeights[key] or 1
+            context.priorityOrder[#context.priorityOrder + 1] = key
+            prioritySeen[key] = true
+        end
     end
     for _, key in ipairs(SECONDARY) do
         local ratingIndex = RATING_KEYS[key]
@@ -274,11 +287,50 @@ local function Score(stats, goals, projection)
     return difference, largest, percentages
 end
 
+-- Search states are immutable once they are created. Cache their projected
+-- percentages and final score so table.sort does not rebuild the same values
+-- for every comparison. Large bounded searches can compare one state dozens
+-- of times, so this also avoids a considerable amount of temporary garbage.
+local function EvaluateState(state, goals, projection)
+    if state._evaluationGoals ~= goals or state._evaluationProjection ~= projection then
+        local difference, largest, percentages = Score(state.stats, goals, projection)
+        state._evaluationGoals = goals
+        state._evaluationProjection = projection
+        state._scoreDifference = difference
+        state._scoreLargest = largest
+        state._projectedPercentages = percentages
+    end
+    return state._scoreDifference, state._scoreLargest, state._projectedPercentages
+end
+
+local function GoalDeviation(percentages, goals, key)
+    return math.abs((tonumber(percentages and percentages[key]) or 0) - (tonumber(goals and goals[key]) or 0))
+end
+
+local function PriorityOrder(projection)
+    return projection and projection.priorityOrder and #projection.priorityOrder > 0
+        and projection.priorityOrder or SECONDARY
+end
+
 local function IsBetter(candidate, current, goals, projection)
     if not candidate then return false end
     if not current then return true end
-    local candidateDifference, candidateLargest = Score(candidate.stats, goals, projection)
-    local currentDifference, currentLargest = Score(current.stats, goals, projection)
+    if projection and projection.matchStyle == "priority" then
+        local _, _, candidatePercentages = EvaluateState(candidate, goals, projection)
+        local _, _, currentPercentages = EvaluateState(current, goals, projection)
+        for _, key in ipairs(PriorityOrder(projection)) do
+            local candidateDeviation = GoalDeviation(candidatePercentages, goals, key)
+            local currentDeviation = GoalDeviation(currentPercentages, goals, key)
+            if math.abs(candidateDeviation - currentDeviation) > 0.000001 then
+                return candidateDeviation < currentDeviation
+            end
+        end
+        local priorityComparison = ComparePriority(candidate.priority, current.priority)
+        if priorityComparison ~= 0 then return priorityComparison > 0 end
+        return tostring(candidate.key or "") < tostring(current.key or "")
+    end
+    local candidateDifference, candidateLargest = EvaluateState(candidate, goals, projection)
+    local currentDifference, currentLargest = EvaluateState(current, goals, projection)
     if math.abs(candidateDifference - currentDifference) > CLOSE_RESULT_DIFFERENCE then
         return candidateDifference < currentDifference
     end
@@ -1039,7 +1091,12 @@ local function BuildRemainingBounds(positions)
 end
 
 local function ReachablePenalty(state, bounds, goals, projection)
-    if not bounds then return select(1, Score(state.stats, goals, projection)) end
+    if not bounds then return EvaluateState(state, goals, projection) end
+    if state._reachablePenaltyBounds == bounds
+        and state._reachablePenaltyGoals == goals
+        and state._reachablePenaltyProjection == projection then
+        return state._reachablePenalty
+    end
     local low = ProjectPercentages(AddStats(state.stats, bounds.minimum), projection)
     local high = ProjectPercentages(AddStats(state.stats, bounds.maximum), projection)
     local penalty = 0
@@ -1054,7 +1111,52 @@ local function ReachablePenalty(state, bounds, goals, projection)
         end
         penalty = penalty + deviation
     end
+    state._reachablePenaltyBounds = bounds
+    state._reachablePenaltyGoals = goals
+    state._reachablePenaltyProjection = projection
+    state._reachablePenalty = penalty
     return penalty
+end
+
+local function ReachableDeviations(state, bounds, goals, projection)
+    if not bounds then
+        local _, _, percentages = EvaluateState(state, goals, projection)
+        local deviations = {}
+        for _, key in ipairs(PriorityOrder(projection)) do
+            deviations[key] = GoalDeviation(percentages, goals, key)
+        end
+        return deviations
+    end
+    if state._reachableDeviationBounds == bounds
+        and state._reachableDeviationGoals == goals
+        and state._reachableDeviationProjection == projection then
+        return state._reachableDeviations
+    end
+    local low = ProjectPercentages(AddStats(state.stats, bounds.minimum), projection)
+    local high = ProjectPercentages(AddStats(state.stats, bounds.maximum), projection)
+    local deviations = {}
+    for _, key in ipairs(PriorityOrder(projection)) do
+        local goal = tonumber(goals[key]) or 0
+        local lowValue = math.min(tonumber(low[key]) or 0, tonumber(high[key]) or 0)
+        local highValue = math.max(tonumber(low[key]) or 0, tonumber(high[key]) or 0)
+        deviations[key] = goal < lowValue and (lowValue - goal) or goal > highValue and (goal - highValue) or 0
+    end
+    state._reachableDeviationBounds = bounds
+    state._reachableDeviationGoals = goals
+    state._reachableDeviationProjection = projection
+    state._reachableDeviations = deviations
+    return deviations
+end
+
+local function CompareReachablePriority(left, right, bounds, goals, projection)
+    local leftDeviations = ReachableDeviations(left, bounds, goals, projection)
+    local rightDeviations = ReachableDeviations(right, bounds, goals, projection)
+    for _, key in ipairs(PriorityOrder(projection)) do
+        local leftValue = tonumber(leftDeviations[key]) or 0
+        local rightValue = tonumber(rightDeviations[key]) or 0
+        if math.abs(leftValue - rightValue) > 0.000001 then return leftValue < rightValue and 1 or -1 end
+    end
+    return 0
 end
 
 local function EstimateCombinations(positions)
@@ -1161,12 +1263,17 @@ local function RunBeam(job, positions, initialState, goals, projection)
         local function Trim(limit)
             local future = remainingBounds[positionIndex + 1]
             table.sort(nextStates, function(a, b)
+                if projection and projection.matchStyle == "priority" then
+                    local comparison = CompareReachablePriority(a, b, future, goals, projection)
+                    if comparison ~= 0 then return comparison > 0 end
+                    return IsBetter(a, b, goals, projection)
+                end
                 local aPenalty = ReachablePenalty(a, future, goals, projection)
                 local bPenalty = ReachablePenalty(b, future, goals, projection)
                 if math.abs(aPenalty - bPenalty) > 0.000001 then return aPenalty < bPenalty end
                 return IsBetter(a, b, goals, projection)
             end)
-            while #nextStates > limit do table.remove(nextStates) end
+            for index = #nextStates, limit + 1, -1 do nextStates[index] = nil end
         end
         for _, state in ipairs(states) do
             for _, option in ipairs(position.options) do
@@ -1431,7 +1538,7 @@ local function BuildResult(specID, itemType, itemSource, ownedRecords, best, goa
         openPositionCount = #positions,
         matchedSlotCount = #(best.assignments or {}),
         unmatchedOpenSlots = CopyArray(unmatchedSlots),
-        scoringModel = "character_percent_slot_aware_v4",
+        scoringModel = "character_percent_slot_aware_v5",
         matchStyle = projection and projection.matchStyle or "balanced",
     }
 end
@@ -1541,7 +1648,7 @@ function Matcher.GetResult(specID)
     local result = GetSavedResults()[specID]
     local currentStyle = KeyLab.StatGoalsDB and KeyLab.StatGoalsDB.GetMatchStyle and KeyLab.StatGoalsDB.GetMatchStyle(specID) or "balanced"
     local resultStyle = result and (result.matchStyle == "priority" and "priority" or "balanced") or nil
-    return result and result.scoringModel == "character_percent_slot_aware_v4" and resultStyle == currentStyle
+    return result and result.scoringModel == "character_percent_slot_aware_v5" and resultStyle == currentStyle
         and RefreshSelectedItemDetails(result) or nil
 end
 
@@ -1655,6 +1762,21 @@ function Matcher.RunDevelopmentRegressionTests()
     Check("goal fit defeats a wrong-stat Myth item", IsBetter(goalFit, wrongMyth, goals, projection) == true)
     local closeMyth = { stats = { Crit = 11 }, priority = { myth = 1 }, key = "close-myth" }
     Check("track remains a close-result preference", IsBetter(closeMyth, goalFit, goals, projection) == true)
+
+    local priorityProjection = {
+        baselineRatings = ZeroStats(),
+        basePercentages = ZeroStats(),
+        masteryCoefficient = 1,
+        matchStyle = "priority",
+        priorityWeights = { Mastery = 1.75, Crit = 1.50, Haste = 1.25, Vers = 1 },
+        priorityOrder = { "Mastery", "Crit", "Haste", "Vers" },
+        bonusCache = projection.bonusCache,
+    }
+    local priorityGoals = { Mastery = 4, Crit = 4, Haste = 0, Vers = 0 }
+    local closerFirstStat = { stats = { Mastery = 30 }, priority = ZeroPriority(), key = "first-stat" }
+    local strongerLowerStat = { stats = { Mastery = 20, Crit = 40 }, priority = ZeroPriority(), key = "lower-stat" }
+    Check("priority matching protects the first stat before lower stats",
+        IsBetter(closerFirstStat, strongerLowerStat, priorityGoals, priorityProjection) == true)
 
     local positions = {
         { name = "Head", visibleOrder = 1, options = {
