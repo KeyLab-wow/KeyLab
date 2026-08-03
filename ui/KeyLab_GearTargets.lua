@@ -729,6 +729,42 @@ function GearTargets:SetMatcherStatusStyle(kind)
     end
 end
 
+function GearTargets:StopMatcherAnimation()
+    if self.matcherAnimationTicker and self.matcherAnimationTicker.Cancel then
+        self.matcherAnimationTicker:Cancel()
+    end
+    self.matcherAnimationTicker = nil
+end
+
+function GearTargets:StartMatcherAnimation()
+    self:StopMatcherAnimation()
+    self.matcherProgressDots = 1
+    if not C_Timer or not C_Timer.NewTicker then return end
+    self.matcherAnimationTicker = C_Timer.NewTicker(0.35, function()
+        local matcher = KeyLab.StatGoalMatcher
+        if not matcher or not matcher.IsRunning or not matcher.IsRunning() then
+            GearTargets:StopMatcherAnimation()
+            return
+        end
+        GearTargets.matcherProgressDots = (tonumber(GearTargets.matcherProgressDots) or 1) % 3 + 1
+        GearTargets:RefreshMatcherCard()
+    end)
+end
+
+function GearTargets:GetMatcherRunningText()
+    if self.matcherCancelling then return "Cancelling" .. string.rep(".", tonumber(self.matcherProgressDots) or 1) end
+    local progress = self.matcherProgressDetail
+    local dots = string.rep(".", tonumber(self.matcherProgressDots) or 1)
+    if progress and tonumber(progress.total) and tonumber(progress.total) > 0 then
+        return string.format("Matching items%s %s %d / %d. Results appear when complete.",
+            dots,
+            tostring(progress.mode or ""),
+            tonumber(progress.completed) or 0,
+            tonumber(progress.total) or 0)
+    end
+    return "Stat Goal Matcher running" .. dots .. " Results will appear when complete."
+end
+
 function GearTargets:RefreshMatcherCard()
     if not self.matcherPanel then return end
     local goals = KeyLab.StatGoalsDB.GetGoals(TargetSpecID())
@@ -784,7 +820,7 @@ function GearTargets:RefreshMatcherCard()
     if matcher and matcher.IsRunning() then
         self.matcherButton:SetText("Cancel Matcher")
         self.matcherButton:SetEnabled(true)
-        self.matcherState:SetText(self.matcherProgressText or "Stat Goal Matcher running... Results will appear when complete.")
+        self.matcherState:SetText(self:GetMatcherRunningText())
         self.matcherState:SetTextColor(unpack(CFG.colors.blue))
         self:SetMatcherStatusStyle("running")
         return
@@ -1307,6 +1343,8 @@ function GearTargets:StartMatcher()
     local matcher = KeyLab.StatGoalMatcher
     if not matcher then return end
     self.matcherFinishing = false
+    self.matcherCancelling = false
+    self.matcherProgressDetail = nil
     self.matcherProgressText = "Stat Goal Matcher running... Results will appear when complete."
     self:RefreshMatcherCard()
     local started, message = matcher.Start({
@@ -1318,11 +1356,19 @@ function GearTargets:StartMatcher()
         local mode = progress.mode or ""
         local completed = tonumber(progress.completed) or 0
         local total = tonumber(progress.total)
+        GearTargets.matcherProgressDetail = {
+            mode = mode,
+            completed = completed,
+            total = total,
+        }
         GearTargets.matcherProgressText = total and total > 0
             and string.format("Matching items... %s %d / %d. Results appear when complete.", mode, completed, total)
             or ("Matching items... " .. mode .. ". Results appear when complete.")
         GearTargets:RefreshMatcherCard()
     end, function(payload)
+        GearTargets:StopMatcherAnimation()
+        GearTargets.matcherCancelling = false
+        GearTargets.matcherProgressDetail = nil
         if payload and payload.ok then
             GearTargets.sortKey = "match"
             GearTargets.sortAscending = true
@@ -1351,8 +1397,12 @@ function GearTargets:StartMatcher()
         end
     end)
     if not started then
+        self:StopMatcherAnimation()
         self.matcherProgressText = message
         if KeyLab.Print then KeyLab.Print(message) end
+        self:RefreshMatcherCard()
+    elseif matcher.IsRunning and matcher.IsRunning() then
+        self:StartMatcherAnimation()
         self:RefreshMatcherCard()
     end
 end
@@ -1416,6 +1466,7 @@ function GearTargets:Create(parent)
     self.matcherButton:SetScript("OnClick", function()
         if KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.IsRunning() then
             KeyLab.StatGoalMatcher.Cancel()
+            GearTargets.matcherCancelling = true
             GearTargets.matcherProgressText = "Cancelling..."
             GearTargets:RefreshMatcherCard()
         else

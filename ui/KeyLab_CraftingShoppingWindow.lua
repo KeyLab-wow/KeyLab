@@ -19,7 +19,13 @@ local COLORS = {
     border = {0.240, 0.380, 0.620, 0.72}, gold = {0.820, 0.760, 0.580, 1},
     text = {0.940, 0.960, 0.990, 1}, muted = {0.680, 0.730, 0.820, 1},
     blue = {0.500, 0.680, 0.940, 1}, green = {0.470, 0.850, 0.550, 1},
+    red = {1.000, 0.360, 0.420, 1},
 }
+
+local COLOR_BLUE = "|cFF80ADEF"
+local COLOR_GREEN = "|cFF78D98C"
+local COLOR_RED = "|cFFFF5C6B"
+local COLOR_RESET = "|r"
 
 local frame
 local auctionHouseSessionClosed = false
@@ -90,16 +96,43 @@ local function SetLine(card, index, value, color, size)
     for extra = index + 1, #card.lines do card.lines[extra]:Hide() end
 end
 
-local function Section(parent, title, subtitle, entries, left, top, width)
-    local count = math.max(1, #(entries or {}))
-    local height = 64 + (count * 44)
+local function ColoredNumber(value, enough)
+    return (enough and COLOR_GREEN or COLOR_RED) .. tostring(tonumber(value) or 0) .. COLOR_RESET
+end
+
+local function ResourceSummary(entry)
+    local parts = {}
+    for _, line in ipairs(entry and entry.lines or {}) do
+        local owned, required = tonumber(line.owned) or 0, tonumber(line.required) or 0
+        table.insert(parts, tostring(line.name or "Crafting Resource") .. "  "
+            .. ColoredNumber(owned, owned >= required) .. " / " .. tostring(required))
+    end
+    return #parts > 0 and table.concat(parts, "\n") or tostring(entry and entry.summary or "")
+end
+
+local function Section(parent, title, subtitle, entries, left, top, width, emptyText)
+    local actualCount = #(entries or {})
+    local count = math.max(1, actualCount)
+    local headerHeight = subtitle and subtitle ~= "" and 57 or 39
+    local rowHeights, rowsHeight = {}, 0
+    for index = 1, count do
+        local entry = entries and entries[index]
+        local lineCount = math.max(1, tonumber(entry and entry.lineCount) or 1)
+        local compact = entry and (entry.kind == "requiredMaterial"
+            or (entry.kind == "ownedMaterial" and (entry.summary or "") == ""))
+        local rowHeight = (compact and 31 or 39) + ((lineCount - 1) * 15)
+        rowHeights[index] = rowHeight
+        rowsHeight = rowsHeight + rowHeight + 5
+    end
+    local height = headerHeight + rowsHeight + 9
     local section = AcquireCard(parent)
     section:ClearAllPoints(); section:SetPoint("TOPLEFT", left, -top); section:SetSize(width, height)
     Backdrop(section, COLORS.panel, COLORS.border)
     SetLine(section, 1, title, COLORS.gold, 14)
-    SetLine(section, 2, subtitle, COLORS.muted, 10)
+    if subtitle and subtitle ~= "" then SetLine(section, 2, subtitle, COLORS.muted, 10) end
 
     section.rows = section.rows or {}
+    local rowTop = headerHeight
     for index = 1, count do
         local row = section.rows[index]
         if not row then
@@ -107,24 +140,37 @@ local function Section(parent, title, subtitle, entries, left, top, width)
             row.name = Text(row, "", "GameFontHighlightSmall", 11, COLORS.text)
             row.name:SetPoint("TOPLEFT", 8, -5); row.name:SetPoint("RIGHT", -8, 0)
             row.count = Text(row, "", "GameFontHighlightSmall", 10, COLORS.muted)
-            row.count:SetPoint("BOTTOMLEFT", 8, 4); row.count:SetPoint("RIGHT", -8, 0)
             section.rows[index] = row
         end
-        row:ClearAllPoints(); row:SetPoint("TOPLEFT", 9, -57 - ((index - 1) * 44)); row:SetPoint("TOPRIGHT", -9, -57 - ((index - 1) * 44)); row:SetHeight(39)
+        row:ClearAllPoints(); row:SetPoint("TOPLEFT", 9, -rowTop); row:SetPoint("TOPRIGHT", -9, -rowTop); row:SetHeight(rowHeights[index])
+        row.count:ClearAllPoints(); row.count:SetPoint("TOPLEFT", 8, -21); row.count:SetPoint("BOTTOMRIGHT", -8, 3)
         Backdrop(row, index % 2 == 0 and COLORS.rowB or COLORS.rowA, COLORS.border)
         local entry = entries and entries[index]
-        row:SetShown(entry ~= nil or (#(entries or {}) == 0 and index == 1))
+        row:SetShown(entry ~= nil or (actualCount == 0 and index == 1))
         if entry then
-            row.name:SetText(entry.name or "Material")
-            row.count:SetText(entry.summary or string.format("Need %d  |  Own %d  |  Still needed %d",
-                entry.required or 0, entry.owned or 0, entry.stillNeeded or 0))
+            if entry.kind == "requiredMaterial" then
+                row.name:SetText(COLOR_BLUE .. tostring(entry.required or 0) .. COLOR_RESET
+                    .. " x " .. tostring(entry.name or "Material"))
+                row.count:SetText("")
+            elseif entry.kind == "ownedMaterial" then
+                local enough = (tonumber(entry.totalOwned) or 0) >= (tonumber(entry.required) or 0)
+                row.name:SetText(ColoredNumber(entry.owned, enough) .. " x " .. tostring(entry.name or "Material"))
+                row.count:SetText(entry.summary or "")
+            elseif entry.kind == "resourceRequirement" then
+                row.name:SetText(entry.name or "Crafted Item")
+                row.count:SetText(ResourceSummary(entry))
+            else
+                row.name:SetText(entry.name or "Material")
+                row.count:SetText(entry.summary or ("x" .. tostring(entry.required or 0)))
+            end
             local complete = entry.complete
             if complete == nil then complete = (entry.stillNeeded or 0) == 0 end
-            row.count:SetTextColor(unpack(complete and COLORS.green or COLORS.blue))
+            row.count:SetTextColor(unpack(COLORS.muted))
         else
-            row.name:SetText("Nothing needed here.")
+            row.name:SetText(emptyText or "Nothing needed here.")
             row.count:SetText("")
         end
+        rowTop = rowTop + rowHeights[index] + 5
     end
     for index = count + 1, #(section.rows or {}) do section.rows[index]:Hide() end
     return height, section
@@ -193,14 +239,19 @@ function Window.Refresh()
     local contentWidth = math.max(620, frame.scroll:GetWidth() - 20)
     frame.content:SetWidth(contentWidth)
     local gap, columnWidth = 12, math.floor((contentWidth - 12) / 2)
-    local leftHeight, leftCard = Section(frame.content, "Auction House Materials",
-        "Materials still needed for every item in your crafted plan.", result.auctionHouse, 0, 0, columnWidth)
-    local rightHeight, rightCard = Section(frame.content, "On Hand & Crafting Resources",
-        "Covered materials, Sparks, Dawncrests, and PvP Heraldry at a glance.",
-        result.resources, columnWidth + gap, 0, columnWidth)
+    local leftHeight, leftCard = Section(frame.content, "Materials Required",
+        "Full amounts for every item in your crafted plan.", result.requiredMaterials or result.auctionHouse,
+        0, 0, columnWidth, "No materials are required yet.")
+    local resourceHeight = Section(frame.content, result.resourceTitle or "Crests Needed", "",
+        result.resourceRequirements or result.resources, columnWidth + gap, 0, columnWidth,
+        "No Crests or Heraldry are needed.")
+    local ownedTop = resourceHeight + gap
+    local ownedHeight = Section(frame.content, "Materials You Have",
+        "Quality is shown when it applies.", result.ownedMaterials or result.alreadyOwned,
+        columnWidth + gap, ownedTop, columnWidth, "None of the listed materials were found.")
+    local rightHeight = resourceHeight + gap + ownedHeight
     local totalHeight = math.max(leftHeight, rightHeight)
     leftCard:SetHeight(totalHeight)
-    rightCard:SetHeight(totalHeight)
     frame.content:SetHeight(math.max(totalHeight, frame.scroll:GetHeight()))
 end
 

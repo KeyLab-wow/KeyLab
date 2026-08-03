@@ -225,16 +225,16 @@ function HOME:Create(parent)
     local releaseNoteHeight = 132
     local releaseNote = MakePanel(frame, CFG.x, y, width, releaseNoteHeight, false)
 
-    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.134", 14, COLORS.title, "LEFT")
+    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.138", 14, COLORS.title, "LEFT")
     releaseTitle:SetPoint("TOPLEFT", releaseNote, "TOPLEFT", 14, -12)
     releaseTitle:SetSize(280, 18)
 
     local releaseBody = MakeText(
         releaseNote,
-        "Released August 1, 2026\n\n" ..
-        "- Centered the Gear Targets action and search-field text.\n" ..
-        "- Added clearer backgrounds to Refresh Current Stats and Results.\n" ..
-        "- Buttons now respond visibly when hovered or pressed.",
+        "Released August 2, 2026\n\n" ..
+        "- Crafted material cards now use a tighter layout.\n" ..
+        "- Material amounts appear before their names for faster reading.\n" ..
+        "- Owned materials and crests turn red when the amount is short.",
         11,
         COLORS.muted,
         "LEFT"

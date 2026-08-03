@@ -33,6 +33,35 @@ local function ItemLevelColor(itemLevel)
     return ITEM_LEVEL_COLORS[tonumber(itemLevel)] or COLORS.text
 end
 
+local function ItemIcon(itemID)
+    itemID = tonumber(itemID)
+    if not itemID then return 134400 end
+    if C_Item and C_Item.GetItemIconByID then
+        local ok, icon = pcall(C_Item.GetItemIconByID, itemID)
+        if ok and icon then return icon end
+    end
+    if C_Item and C_Item.GetItemInfoInstant then
+        local ok, _, _, _, _, icon = pcall(C_Item.GetItemInfoInstant, itemID)
+        if ok and icon then return icon end
+    end
+    return 134400
+end
+
+local function ShowItemTooltip(owner, itemID)
+    itemID = tonumber(itemID)
+    if not itemID or not GameTooltip then return end
+    if C_Item and C_Item.RequestLoadItemDataByID then
+        pcall(C_Item.RequestLoadItemDataByID, itemID)
+    end
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    if GameTooltip.SetItemByID then
+        GameTooltip:SetItemByID(itemID)
+    else
+        GameTooltip:SetHyperlink("item:" .. tostring(itemID))
+    end
+    GameTooltip:Show()
+end
+
 local function SetBackdrop(frame, background, border)
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
@@ -334,6 +363,7 @@ function GearPlanning:RefreshRecipeEditor()
         or "Add this item to your plan. Required materials will be added automatically.")
 
     local displayRows = analysis.GetRecipeDisplayRows(recipe.recipeID)
+    local nextTop = 0
     for index, row in ipairs(self.reagentRows) do
         local display = displayRows[index]
         row:SetShown(display ~= nil)
@@ -353,15 +383,25 @@ function GearPlanning:RefreshRecipeEditor()
                 row.title:SetTextColor(unpack(COLORS.text))
             end
             row.detail:SetText(display.detail or "")
+            row.detail:SetShown(display.detail ~= nil and display.detail ~= "")
             row.dropdown:SetShown(display.kind == "optional")
             if display.kind == "optional" then
                 row.dropdown:SetEnabled(plan ~= nil)
                 row.dropdown:SetAlpha(plan and 1 or 0.45)
                 row.dropdown:RefreshText()
             end
+            local rowHeight
+            if display.kind == "optional" then rowHeight = 60
+            elseif display.detail and display.detail ~= "" then rowHeight = 43
+            else rowHeight = 31 end
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", 0, -nextTop)
+            row:SetPoint("TOPRIGHT", 0, -nextTop)
+            row:SetHeight(rowHeight)
+            nextTop = nextTop + rowHeight + 6
         end
     end
-    local height = math.max(250, #displayRows * 66)
+    local height = math.max(250, nextTop)
     self.reagentContent:SetHeight(height)
 end
 
@@ -388,6 +428,7 @@ function GearPlanning:RefreshRecipes()
         row.recipe = recipe
         row:SetShown(recipe ~= nil)
         if recipe then
+            row.icon:SetTexture(ItemIcon(recipe.itemID))
             row.name:SetText(recipe.name or "Crafted Item")
             row.name:SetTextColor(unpack(ItemLevelColor(recipe.iLvlMin)))
             row.meta:SetText("iLvl " .. tostring(recipe.iLvlMin or "-") .. "  |  "
@@ -518,17 +559,23 @@ function GearPlanning:BuildCraftedView(parent)
         local row = CreateFrame("Button", nil, listPanel, "BackdropTemplate")
         row:SetPoint("TOPLEFT", 12, -39 - ((index - 1) * 49)); row:SetPoint("TOPRIGHT", -12, -39 - ((index - 1) * 49)); row:SetHeight(43)
         SetBackdrop(row, index % 2 == 0 and COLORS.body or COLORS.bg, COLORS.border)
-        row.name = Text(row, "", "GameFontHighlightSmall", 11, COLORS.text); row.name:SetPoint("TOPLEFT", 9, -6); row.name:SetPoint("RIGHT", -70, 0)
-        row.meta = Text(row, "", "GameFontHighlightSmall", 10, COLORS.muted); row.meta:SetPoint("BOTTOMLEFT", 9, 5)
+        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon:SetSize(31, 31); row.icon:SetPoint("LEFT", 7, 0)
+        row.name = Text(row, "", "GameFontHighlightSmall", 11, COLORS.text); row.name:SetPoint("TOPLEFT", 46, -6); row.name:SetPoint("RIGHT", -70, 0)
+        row.meta = Text(row, "", "GameFontHighlightSmall", 10, COLORS.muted); row.meta:SetPoint("BOTTOMLEFT", 46, 5)
         row.status = Text(row, "", "GameFontHighlightSmall", 9, COLORS.gold); row.status:SetPoint("RIGHT", -8, 0); row.status:SetJustifyH("RIGHT")
         row:SetScript("OnClick", function(selfRow)
             if not selfRow.recipe then return end
             self.selectedRecipeID = selfRow.recipe.recipeID
             self:RefreshRecipes()
         end)
-        row:SetScript("OnEnter", function(selfRow) selfRow:SetBackdropBorderColor(unpack(COLORS.gold)) end)
+        row:SetScript("OnEnter", function(selfRow)
+            selfRow:SetBackdropBorderColor(unpack(COLORS.gold))
+            if selfRow.recipe then ShowItemTooltip(selfRow, selfRow.recipe.itemID) end
+        end)
         row:SetScript("OnLeave", function(selfRow)
             selfRow:SetBackdropBorderColor(unpack(selfRow.recipe and selfRow.recipe.recipeID == self.selectedRecipeID and COLORS.gold or COLORS.border))
+            if GameTooltip then GameTooltip:Hide() end
         end)
         self.recipeRows[index] = row
     end
