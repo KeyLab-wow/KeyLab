@@ -133,6 +133,34 @@ GearingDB.Voidforge = {
     requiredMaxRank = 6,
 }
 
+-- Sporefall gear uses its own two-step label instead of the normal x/6
+-- upgrade track. Sporefused weapons and trinkets are not valid Ascendant
+-- Voidcore targets, even when their effective tier is Hero or Myth.
+GearingDB.SpecialUpgradeSystems = {
+    Sporefused = {
+        label = "Sporefused",
+        tooltipPattern = "^%s*Sporefused:%s*(Hero|Myth)%s*$",
+        allowedTracks = { Hero = true, Myth = true },
+        ascendantVoidcoreEligible = false,
+    },
+}
+
+function GearingDB.ParseSpecialUpgradeLine(line)
+    line = tostring(line or "")
+    for systemName, rules in pairs(GearingDB.SpecialUpgradeSystems or {}) do
+        local track = rules.tooltipPattern and line:match(rules.tooltipPattern) or nil
+        if track and (not rules.allowedTracks or rules.allowedTracks[track] == true) then
+            return {
+                system = systemName,
+                label = rules.label or systemName,
+                track = track,
+                rawLine = line,
+            }
+        end
+    end
+    return nil
+end
+
 local function CopyEntry(entry)
     if type(entry) ~= "table" then return entry end
     local out = {}
