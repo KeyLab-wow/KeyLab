@@ -218,12 +218,19 @@ local function TrackText(slot)
     if not slot or not slot.itemID then return "" end
     local level = tonumber(slot.itemLevel)
     local track = slot.upgradeTrack or slot.trackName
+    local systemName = slot.upgradeSystem
+    local system = systemName and GearingDB().SpecialUpgradeSystems
+        and GearingDB().SpecialUpgradeSystems[systemName] or nil
+    if system then
+        return tostring(slot.upgradeSystemLabel or system.label or systemName) .. ": " .. tostring(track or "")
+    end
     if level and track and track ~= "" then return tostring(math.floor(level + 0.5)) .. " " .. tostring(track) end
     if level then return tostring(math.floor(level + 0.5)) end
     return tostring(track or "")
 end
 
 local function RankText(slot)
+    if slot and slot.upgradeSystem then return "" end
     local rank = tonumber(slot and slot.upgradeRank)
     local maxRank = tonumber(slot and (slot.upgradeMaxRank or slot.upgradeMax))
     if rank and maxRank then return tostring(rank) .. "/" .. tostring(maxRank) end
@@ -247,9 +254,14 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
     local craftedItem = slot.itemID and (explicitlyCrafted or (masterDatabaseItem == false and not hasUpgradeTrack)) or false
     local voidforgedItem = slot.voidforgedDetected == true or slot.ascendantVoidforgedDetected == true
     local voidforgeRules = GearingDB().Voidforge or {}
+    local specialUpgradeSystem = tostring(slot.upgradeSystem or "")
+    local specialUpgradeRules = specialUpgradeSystem ~= ""
+        and GearingDB().SpecialUpgradeSystems
+        and GearingDB().SpecialUpgradeSystems[specialUpgradeSystem] or nil
     local ascendantRankReady = upgradeRank == tonumber(voidforgeRules.requiredRank or 6)
         and upgradeMaxRank == tonumber(voidforgeRules.requiredMaxRank or 6)
     local voidforgeAvailable = not voidforgedItem
+        and not (specialUpgradeRules and specialUpgradeRules.ascendantVoidcoreEligible == false)
         and slot.voidforgeCandidate == true
         and ascendantRankReady
         and (tonumber(resources.ascendantVoidcores) or 0) > 0
@@ -311,6 +323,7 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
         trackName = slot.upgradeTrack or slot.trackName,
         trackLabel = TrackText(slot),
         rankText = RankText(slot),
+        specialUpgradeSystem = specialUpgradeSystem ~= "" and specialUpgradeSystem or nil,
         actionText = action,
         tierEligible = tierEligible,
         tierChecked = tierChecked,
