@@ -396,6 +396,15 @@ function Capture.Finalize(reason)
         captureDB.lastFinalizeError = buildError or "Unknown finalize error"
         captureDB.lastFinalizeReason = reason
         captureDB.lastFinalizeAt = date("%Y-%m-%d %H:%M:%S")
+        if captureDB.lastFinalizeError == "No aggregate combat session found"
+            and DamageMeter
+            and DamageMeter.GetSessionCatalog
+        then
+            -- Keep the small session-name catalog only while this completed run
+            -- is pending. It makes a future Blizzard naming change diagnosable
+            -- without storing raw damage-meter payloads.
+            captureDB.lastDamageMeterSessionCatalog = DamageMeter.GetSessionCatalog()
+        end
         if captureDB.lastFinalizeError == METRICS_PENDING_REASON then
             Print("Waiting for Blizzard damage meter totals before saving this run.")
         else
@@ -443,10 +452,19 @@ frame:SetScript("OnEvent", function(_, event, ...)
                 for _, delaySeconds in ipairs(RECOVERY_RETRY_DELAYS) do
                     local retryDelay = delaySeconds
                     C_Timer.After(retryDelay, function()
-                        local repaired, encounter = Capture.RepairLatestIncompleteEncounter()
-                        if repaired then
-                            Print("Recovered Blizzard damage meter totals for " .. tostring(encounter.challenge and encounter.challenge.dungeonName or "the latest Mythic+ run") .. ".")
-                            if KeyLab.UI and KeyLab.UI.RefreshSelectedTab then KeyLab.UI:RefreshSelectedTab() end
+                        local pendingCapture = EnsureCaptureDB()
+                        if pendingCapture.completedSeen == true then
+                            local saved, encounter = Capture.Finalize("ADDON_LOADED recovery + " .. tostring(retryDelay) .. "s")
+                            if saved then
+                                Print("Recovered and saved " .. tostring(encounter.challenge and encounter.challenge.dungeonName or "the latest Mythic+ run") .. ".")
+                                if KeyLab.UI and KeyLab.UI.RefreshSelectedTab then KeyLab.UI:RefreshSelectedTab() end
+                            end
+                        else
+                            local repaired, encounter = Capture.RepairLatestIncompleteEncounter()
+                            if repaired then
+                                Print("Recovered Blizzard damage meter totals for " .. tostring(encounter.challenge and encounter.challenge.dungeonName or "the latest Mythic+ run") .. ".")
+                                if KeyLab.UI and KeyLab.UI.RefreshSelectedTab then KeyLab.UI:RefreshSelectedTab() end
+                            end
                         end
                     end)
                 end

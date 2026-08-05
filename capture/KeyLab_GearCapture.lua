@@ -160,6 +160,17 @@ end
 local function ParseUpgrade(lines)
     for _, line in ipairs(lines or {}) do
         local text = CleanLine(line)
+        local special = DB().ParseSpecialUpgradeLine and DB().ParseSpecialUpgradeLine(text) or nil
+        if special then
+            return {
+                rawLine = special.rawLine or text,
+                track = special.track,
+                rank = nil,
+                maxRank = nil,
+                system = special.system,
+                systemLabel = special.label,
+            }
+        end
         for _, trackName in ipairs(TRACK_NAMES) do
             local rank, maxRank = text:match(trackName .. "%s+(%d+)/(%d+)")
             if rank and maxRank then
@@ -178,6 +189,8 @@ local function ParseUpgrade(lines)
         track = nil,
         rank = nil,
         maxRank = nil,
+        system = nil,
+        systemLabel = nil,
     }
 end
 
@@ -361,6 +374,8 @@ local function EmptySlot(slotName)
         texture = nil,
         equipLoc = nil,
         upgradeRawLine = nil,
+        upgradeSystem = nil,
+        upgradeSystemLabel = nil,
         upgradeTrack = nil,
         upgradeRank = nil,
         upgradeMaxRank = nil,
@@ -453,10 +468,12 @@ local function ScanEquippedSlot(slotName)
         and voidforgeRules.weaponSlotIDs[tonumber(slotDef.slotID) or 0] == true
         and isVoidforgeTrack
         and isMaxRank
+        and upgrade.system == nil
     local trinketVoidforgeCandidate = voidforgeRules.trinketSlotIDs
         and voidforgeRules.trinketSlotIDs[tonumber(slotDef.slotID) or 0] == true
         and isVoidforgeTrack
         and isMaxRank
+        and upgrade.system == nil
 
     info.itemLink = itemLink
     info.link = itemLink
@@ -466,6 +483,8 @@ local function ScanEquippedSlot(slotName)
     info.texture = info.icon
     info.equipLoc = equipLoc
     info.upgradeRawLine = upgrade.rawLine
+    info.upgradeSystem = upgrade.system
+    info.upgradeSystemLabel = upgrade.systemLabel
     info.upgradeTrack = trackName
     info.trackName = trackName
     info.upgradeRank = upgradeRank

@@ -123,24 +123,120 @@ local function GetExpectedAggregateSessionName(context)
     return dungeonName .. " +" .. tostring(keyLevel)
 end
 
+local function GetNumberedAggregateSuffix(name, expectedName)
+    if type(name) ~= "string" or type(expectedName) ~= "string" then return nil end
+    if string.sub(name, 1, #expectedName) ~= expectedName then return nil end
+
+    local suffix = Trim(string.sub(name, #expectedName + 1))
+    if suffix == "" then return 0 end
+
+    -- Blizzard may keep a second aggregate with the same visible base name
+    -- after an abandoned/restarted key. Accept only a numeric duplicate suffix,
+    -- never a loose dungeon-name match that could select an ordinary pull.
+    local compact = suffix:gsub("[%s%(%)%[%]#_%-]", "")
+    if compact:match("^%d+$") then
+        return tonumber(compact)
+    end
+
+    return nil
+end
+
 local function FindAggregateSessionID(sessions, context)
     if type(sessions) ~= "table" then
         return nil, nil
     end
 
     local expectedName = GetExpectedAggregateSessionName(context)
-    if expectedName then
-        for _, sessionInfo in pairs(sessions) do
-            local sessionID = GetSessionID(sessionInfo)
-            local name = Trim(GetSessionName(sessionInfo))
+    if not expectedName then return nil, nil end
 
-            if sessionID ~= nil and name == expectedName then
-                return sessionID, "challengeContext"
+    local bestID, bestNumericID, bestDuplicateNumber = nil, nil, nil
+    for _, sessionInfo in pairs(sessions) do
+        local sessionID = GetSessionID(sessionInfo)
+        local name = Trim(GetSessionName(sessionInfo))
+        local duplicateNumber = GetNumberedAggregateSuffix(name, expectedName)
+
+        if sessionID ~= nil and duplicateNumber ~= nil then
+            local numericID = SafeNumber(sessionID)
+            local replace = bestID == nil
+
+            if numericID ~= nil and bestNumericID ~= nil then
+                replace = numericID > bestNumericID
+            elseif numericID ~= nil then
+                replace = true
+            elseif bestNumericID == nil and duplicateNumber > (bestDuplicateNumber or -1) then
+                replace = true
+            end
+
+            if replace then
+                bestID = sessionID
+                bestNumericID = numericID
+                bestDuplicateNumber = duplicateNumber
             end
         end
     end
 
+    if bestID ~= nil then
+        return bestID, (bestDuplicateNumber or 0) > 0 and "challengeContextNumbered" or "challengeContext"
+    end
+
+    -- If Blizzard retained the run but changed its display label, the official
+    -- Challenge Mode duration is still a safe boundary. Ordinary pull sessions
+    -- are much shorter; only accept a session very close to the completed run.
+    local expectedDuration = SafeNumber(context.durationSeconds)
+    if expectedDuration and expectedDuration >= 60 then
+        local tolerance = math.max(30, expectedDuration * 0.10)
+        local closestID, closestDifference, closestNumericID = nil, nil, nil
+
+        for _, sessionInfo in pairs(sessions) do
+            local sessionID = GetSessionID(sessionInfo)
+            local duration = GetSessionDuration(sessionInfo)
+            local difference = math.abs(duration - expectedDuration)
+            local numericID = SafeNumber(sessionID)
+
+            if sessionID ~= nil and duration >= 60 and difference <= tolerance then
+                local replace = closestID == nil or difference < closestDifference
+                if closestDifference ~= nil and difference == closestDifference
+                    and numericID ~= nil
+                    and (closestNumericID == nil or numericID > closestNumericID)
+                then
+                    replace = true
+                end
+
+                if replace then
+                    closestID = sessionID
+                    closestDifference = difference
+                    closestNumericID = numericID
+                end
+            end
+        end
+
+        if closestID ~= nil then
+            return closestID, "challengeDuration"
+        end
+    end
+
     return nil, nil
+end
+
+function DamageMeter.GetSessionCatalog()
+    local catalog = {}
+    if not C_DamageMeter or not C_DamageMeter.GetAvailableCombatSessions then return catalog end
+
+    local ok, sessions = SafeCall(C_DamageMeter.GetAvailableCombatSessions)
+    if not ok or type(sessions) ~= "table" then return catalog end
+
+    for _, sessionInfo in pairs(sessions) do
+        table.insert(catalog, {
+            sessionID = GetSessionID(sessionInfo),
+            sessionName = Trim(GetSessionName(sessionInfo)),
+            durationSeconds = GetSessionDuration(sessionInfo),
+        })
+    end
+
+    table.sort(catalog, function(a, b)
+        return (SafeNumber(a.sessionID) or 0) < (SafeNumber(b.sessionID) or 0)
+    end)
+    return catalog
 end
 
 local function NormalizeRaidSessionName(value)
