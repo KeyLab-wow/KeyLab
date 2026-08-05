@@ -1,5 +1,21 @@
 # KeyLab Changelog
 
+## Version 1.8.140 - Repeated Run Recovery
+
+Released August 5, 2026
+
+- Fixed completed Mythic+ runs not saving after an earlier attempt of the same dungeon ended early.
+- KeyLab now chooses the newest matching completed-run totals when Blizzard keeps more than one session.
+- Added automatic recovery for a completed run that was still waiting to be saved after a reload.
+
+## Version 1.8.139 - Sporefall Gear Support
+
+Released August 4, 2026
+
+- Added Sporefused: Hero and Sporefused: Myth recognition for Sporefall raid items.
+- Removed ordinary x/6 rank displays from Sporefused gear while keeping Hero-to-Myth guidance.
+- Excluded Sporefused weapons and trinkets from Ascendant Voidcore upgrade guidance.
+
 ## Version 1.8.138 - Clearer Crafting Counts
 
 Released August 2, 2026
