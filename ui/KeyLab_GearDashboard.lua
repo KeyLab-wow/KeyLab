@@ -504,6 +504,7 @@ function GearDashboard:RefreshSlotRow(row, plan)
 
     SetBadge(row.tierBadge, plan.tierBadge,
         plan.tierChecked and COLORS.green or (plan.catalystItem and COLORS.blue or COLORS.yellow))
+    row.trackBadge:SetWidth(plan.specialUpgradeSystem and 125 or 82)
     SetBadge(row.trackBadge, plan.trackLabel, TrackColor(plan.trackName))
     SetBadge(row.rankBadge, plan.rankText, TrackColor(plan.trackName))
     row.action:SetText(plan.actionText or "")

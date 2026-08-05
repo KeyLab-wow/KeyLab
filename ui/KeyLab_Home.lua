@@ -225,16 +225,16 @@ function HOME:Create(parent)
     local releaseNoteHeight = 132
     local releaseNote = MakePanel(frame, CFG.x, y, width, releaseNoteHeight, false)
 
-    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.138", 14, COLORS.title, "LEFT")
+    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.140", 14, COLORS.title, "LEFT")
     releaseTitle:SetPoint("TOPLEFT", releaseNote, "TOPLEFT", 14, -12)
     releaseTitle:SetSize(280, 18)
 
     local releaseBody = MakeText(
         releaseNote,
-        "Released August 2, 2026\n\n" ..
-        "- Crafted material cards now use a tighter layout.\n" ..
-        "- Material amounts appear before their names for faster reading.\n" ..
-        "- Owned materials and crests turn red when the amount is short.",
+        "Released August 5, 2026\n\n" ..
+        "- Fixed completed runs not saving after an earlier attempt of the same dungeon.\n" ..
+        "- KeyLab now keeps the newest matching completed-run totals.\n" ..
+        "- Pending completed runs can recover after a reload.",
         11,
         COLORS.muted,
         "LEFT"
