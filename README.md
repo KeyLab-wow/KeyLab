@@ -22,7 +22,7 @@ KeyLab brings your Mythic+ runs, raid nights, practice tests, gear plans, and ma
 
 ***
 
-<span style="color:#2dc26b"><strong>Switch between Mythic+ and Raid mode to explore results for each type of content.</strong></span>
+<span style="color:#CED4D9;">_Switch between Mythic+ and Raid mode to explore results for each type of content._</span>
 
 ***
 
