@@ -705,6 +705,7 @@ function GearTargets:RefreshContent()
 end
 
 function GearTargets:SetGoalTargetFromBox(statKey, box)
+    if self.committingGoalBoxes then return end
     local text = tostring(box:GetText() or ""):gsub("%%", ""):gsub(",", "."):gsub("^%s+", ""):gsub("%s+$", "")
     local value = tonumber(text)
     if value == nil or value < 0 then value = 0 end
@@ -712,6 +713,39 @@ function GearTargets:SetGoalTargetFromBox(statKey, box)
     box:ClearFocus()
     self:RefreshMatcherCard()
     self:RefreshContent()
+end
+
+function GearTargets:CommitVisibleGoals()
+    local targets = {}
+    for _, definition in ipairs(GOAL_FIELDS) do
+        local box = self.goalBoxes and self.goalBoxes[definition.key]
+        local text = tostring(box and box:GetText() or "")
+            :gsub("%%", "")
+            :gsub(",", ".")
+            :gsub("^%s+", "")
+            :gsub("%s+$", "")
+        local value = tonumber(text)
+        if value == nil or value < 0 or value > 100 then
+            return false, "Each stat goal must be from 0% to 100%."
+        end
+        targets[definition.key] = value
+    end
+
+    local saved, message = KeyLab.StatGoalsDB.SetTargets(TargetSpecID(), targets)
+    if not saved then return false, message end
+
+    -- Release keyboard focus only after all four values are safely applied.
+    -- The guard prevents OnEditFocusLost from committing an individual box a
+    -- second time while this batch update is in progress.
+    self.committingGoalBoxes = true
+    for _, definition in ipairs(GOAL_FIELDS) do
+        local box = self.goalBoxes and self.goalBoxes[definition.key]
+        if box and box:HasFocus() then box:ClearFocus() end
+    end
+    self.committingGoalBoxes = false
+    self:RefreshMatcherCard()
+    self:RefreshContent()
+    return true, nil
 end
 
 function GearTargets:SetMatcherStatusStyle(kind)
@@ -1321,6 +1355,13 @@ function GearTargets:CreatePreparationPopup()
 end
 
 function GearTargets:OpenPreparationPopup()
+    local committed, commitMessage = self:CommitVisibleGoals()
+    if not committed then
+        self.matcherProgressText = commitMessage
+        self:RefreshMatcherCard()
+        if KeyLab.Print then KeyLab.Print(commitMessage) end
+        return
+    end
     local valid, message = KeyLab.StatGoalsDB.Validate(TargetSpecID())
     if not valid then
         self.matcherProgressText = message
@@ -1342,6 +1383,13 @@ end
 function GearTargets:StartMatcher()
     local matcher = KeyLab.StatGoalMatcher
     if not matcher then return end
+    local committed, commitMessage = self:CommitVisibleGoals()
+    if not committed then
+        self.matcherProgressText = commitMessage
+        self:RefreshMatcherCard()
+        if KeyLab.Print then KeyLab.Print(commitMessage) end
+        return
+    end
     self.matcherFinishing = false
     self.matcherCancelling = false
     self.matcherProgressDetail = nil

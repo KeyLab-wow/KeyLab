@@ -348,7 +348,7 @@ local function BuildSettings(content)
     createdTitle:SetPoint("TOPLEFT", content, "TOPLEFT", CONTENT_PAD, y)
     createdTitle:SetWidth(240)
 
-    local createdBody = MakeText(content, "Brione", "GameFontHighlightSmall", FONT_BODY, COLORS.text, "LEFT")
+    local createdBody = MakeText(content, "Brione - KeyLabwow", "GameFontHighlightSmall", FONT_BODY, COLORS.text, "LEFT")
     createdBody:SetPoint("TOPLEFT", createdTitle, "BOTTOMLEFT", 0, -8)
     createdBody:SetWidth(240)
     createdBody:SetHeight(42)
