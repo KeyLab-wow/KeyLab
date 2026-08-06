@@ -439,6 +439,20 @@ local function ScanEquippedSlot(slotName)
     local voidforgedDetected, voidforgeLine = DetectVoidforged(tooltipLines)
     local equipLoc = GetItemEquipLoc(itemID)
     local itemLevel = GetInventoryItemLevel(itemLink)
+    if not upgrade.track and DB().InferSpecialUpgrade then
+        local inferred = DB().InferSpecialUpgrade(itemID, itemLevel)
+        if inferred then
+            upgrade = {
+                rawLine = nil,
+                track = inferred.track,
+                rank = nil,
+                maxRank = nil,
+                system = inferred.system,
+                systemLabel = inferred.label,
+                inferredFromItemLevel = true,
+            }
+        end
+    end
     local radianceCraftedDetected = tooltipText:lower():find("radiance crafted", 1, true) ~= nil
     local craftedIndicatorVisible = craftedDetected == true or radianceCraftedDetected == true or craftQualityTier ~= nil
     local voidforgeRules = DB().Voidforge or {}
