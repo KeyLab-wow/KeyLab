@@ -168,6 +168,42 @@ function StatGoalsDB.SetTarget(specID, statKey, value)
     return true
 end
 
+-- Applies the complete set of visible goal fields as one update. This keeps
+-- the matcher from seeing a mixture of newly edited and previously saved
+-- values when the player starts it without pressing Enter in every box.
+function StatGoalsDB.SetTargets(specID, targets)
+    if type(targets) ~= "table" then
+        return false, "Enter your stat goal percentages before running the matcher."
+    end
+
+    local normalized = {}
+    local hasEnteredGoal = false
+    for statKey in pairs(VALID_STATS) do
+        local value = tonumber(targets[statKey])
+        if value == nil or value < 0 or value > 100 then
+            return false, "Each stat goal must be from 0% to 100%."
+        end
+        normalized[statKey] = value
+        if value > 0 then hasEnteredGoal = true end
+    end
+
+    if not hasEnteredGoal then
+        return false, "Enter your stat goal percentages before running the matcher."
+    end
+
+    local goals = EnsureGoals(specID)
+    local changed = false
+    for statKey, value in pairs(normalized) do
+        if tonumber(goals.targets[statKey]) ~= value then changed = true end
+        goals.targets[statKey] = value
+    end
+
+    if changed and KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.ClearResult then
+        KeyLab.StatGoalMatcher.ClearResult(specID, "goals_changed")
+    end
+    return true, nil
+end
+
 function StatGoalsDB.GetTotal(specID)
     local goals = EnsureGoals(specID)
     local total = 0

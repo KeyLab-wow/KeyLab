@@ -141,6 +141,24 @@ GearingDB.SpecialUpgradeSystems = {
         label = "Sporefused",
         tooltipPattern = "^%s*Sporefused:%s*(Hero|Myth)%s*$",
         allowedTracks = { Hero = true, Myth = true },
+        -- Sporefall items use the same item ID at both difficulties. WoW's
+        -- structured tooltip data can omit the Sporefused line even though it
+        -- remains visible in GameTooltip, so these item levels are a safe
+        -- fallback only for the known Sporefall loot table.
+        itemLevelTracks = { [285] = "Hero", [298] = "Myth" },
+        itemIDs = {
+            [268282] = true,
+            [268283] = true,
+            [268284] = true,
+            [268285] = true,
+            [268286] = true,
+            [268287] = true,
+            [268288] = true,
+            [268289] = true,
+            [268290] = true,
+            [268291] = true,
+            [268292] = true,
+        },
         ascendantVoidcoreEligible = false,
     },
 }
@@ -155,6 +173,26 @@ function GearingDB.ParseSpecialUpgradeLine(line)
                 label = rules.label or systemName,
                 track = track,
                 rawLine = line,
+            }
+        end
+    end
+    return nil
+end
+
+function GearingDB.InferSpecialUpgrade(itemID, itemLevel)
+    itemID = tonumber(itemID)
+    itemLevel = tonumber(itemLevel)
+    if not itemID or not itemLevel then return nil end
+
+    for systemName, rules in pairs(GearingDB.SpecialUpgradeSystems or {}) do
+        local track = rules.itemIDs and rules.itemIDs[itemID]
+            and rules.itemLevelTracks and rules.itemLevelTracks[itemLevel] or nil
+        if track and (not rules.allowedTracks or rules.allowedTracks[track] == true) then
+            return {
+                system = systemName,
+                label = rules.label or systemName,
+                track = track,
+                inferredFromItemLevel = true,
             }
         end
     end
