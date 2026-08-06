@@ -1,5 +1,21 @@
 # KeyLab Changelog
 
+## Version 1.8.142 - Current Stat Goals
+
+Released August 5, 2026
+
+- The Stat Goal Matcher now applies all four percentages currently shown in the goal boxes before it calculates.
+- Updated goals are used when the player clicks the matcher without pressing Enter or reloading first.
+- Goal values are applied together and checked for the valid 0% to 100% range before the matcher opens.
+
+## Version 1.8.141 - Sporefall Track Fallback
+
+Released August 5, 2026
+
+- Fixed Sporefall Hero items incorrectly showing "Upgrade to Hero" when WoW omitted the visible Sporefused line from captured tooltip data.
+- Added a Sporefall-only item-level fallback: item level 285 is treated as Sporefused: Hero and item level 298 as Sporefused: Myth.
+- Kept ordinary gear at those item levels unchanged and preserved the Ascendant Voidcore exclusion for Sporefused weapons and trinkets.
+
 ## Version 1.8.140 - Repeated Run Recovery
 
 Released August 5, 2026
