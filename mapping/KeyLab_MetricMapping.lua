@@ -161,7 +161,7 @@ KeyLab.Mapping.VirtualMetrics = {
     },
     healingDoneWithAbsorbs = {
         keylabKey = "healingDoneWithAbsorbs",
-        label = "Healing Done",
+        label = "Healing + Absorbs",
         displayType = "number",
         higherIsBetter = true,
         store = true,

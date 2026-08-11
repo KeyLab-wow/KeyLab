@@ -196,7 +196,7 @@ function ClassSpecs.GetRoleFocusProfile(specID, className, specName)
         metricLabels = {
             avoidableDamageTaken = "Avoidable Damage",
             deaths = "Your Deaths",
-            healingDoneWithAbsorbs = "Healing Done",
+            healingDoneWithAbsorbs = "Healing + Absorbs",
         },
         scale = "perMetric",
     }
