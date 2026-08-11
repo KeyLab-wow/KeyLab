@@ -308,7 +308,7 @@ local function BuildTotals(parent, state)
     AddVerticalDivider(card, 288, -40, 118)
     local items = {
         { label = "DPS", key = "dps" },
-        { label = "HPS", key = "hpsWithAbsorbs" },
+        { label = "HPS", key = "hps" },
         { label = "Damage", key = "damageDone" },
         { label = "Healing", key = "healingDoneWithAbsorbs" },
         { label = "Avoidable Damage", key = "avoidableDamageTaken" },
@@ -330,7 +330,7 @@ local GRAPH_METRICS = {
     hpsWithAbsorbs = { label = "HPS", color = COLORS.green },
     damageDone = { label = "Damage", color = COLORS.orange },
     healingDone = { label = "Healing Done", color = COLORS.green },
-    healingDoneWithAbsorbs = { label = "Healing Done", color = COLORS.green },
+    healingDoneWithAbsorbs = { label = "Healing + Absorbs", color = COLORS.green },
     absorbs = { label = "Absorbs", color = COLORS.blue },
     damageTaken = { label = "Damage Taken", color = COLORS.orange },
     avoidableDamageTaken = { label = "Avoidable Damage", color = GRAPH_COLORS.avoidable },
@@ -345,7 +345,6 @@ local TOOLTIP_METRICS = {
     "hpsWithAbsorbs",
     "damageDone",
     "healingDone",
-    "healingDoneWithAbsorbs",
     "absorbs",
     "damageTaken",
     "avoidableDamageTaken",

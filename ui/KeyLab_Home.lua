@@ -225,16 +225,16 @@ function HOME:Create(parent)
     local releaseNoteHeight = 132
     local releaseNote = MakePanel(frame, CFG.x, y, width, releaseNoteHeight, false)
 
-    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.142", 14, COLORS.title, "LEFT")
+    local releaseTitle = MakeText(releaseNote, "What's New in KeyLab 1.8.146", 14, COLORS.title, "LEFT")
     releaseTitle:SetPoint("TOPLEFT", releaseNote, "TOPLEFT", 14, -12)
     releaseTitle:SetSize(280, 18)
 
     local releaseBody = MakeText(
         releaseNote,
-        "Released August 5, 2026\n\n" ..
-        "- The Stat Goal Matcher now uses the percentages currently shown.\n" ..
-        "- You can change goals and start the matcher without pressing Enter.\n" ..
-        "- All four goals are checked and applied together before matching.",
+        "Released August 11, 2026\n\n" ..
+        "- Added a Season 2 update notice when KeyLab first opens.\n" ..
+        "- Gear Targets and the Stat Goal Matcher remain available.\n" ..
+        "- Added World of Warcraft 12.1.0 compatibility.",
         11,
         COLORS.muted,
         "LEFT"
