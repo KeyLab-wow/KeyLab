@@ -1,5 +1,38 @@
 # KeyLab Changelog
 
+## Version 1.8.146 - Season 2 Transition
+
+Released August 11, 2026
+
+- Added a Season 2 update notice when KeyLab is first opened each login.
+- Kept Gear Targets and the Stat Goal Matcher available while Season 2 item data is being added.
+- Recommended using Equipped + Bags Only until the Season 2 gear database is ready.
+- Added World of Warcraft 12.1.0 interface compatibility.
+
+## Version 1.8.145 - Blizzard HPS Total
+
+Released August 9, 2026
+
+- Last Run Player Totals now shows the HPS value provided directly by Blizzard.
+- Healing Done and Absorbs remain separate in the healer graph.
+- Kept capture, saved encounters, and individual pull records unchanged.
+
+## Version 1.8.144 - Clear Pull Details
+
+Released August 8, 2026
+
+- Removed the calculated Healing + Absorbs total from Last Run pull tooltips.
+- Pull details now show Healing Done and Absorbs separately.
+- Kept graph calculations, capture, and saved run and raid records unchanged.
+
+## Version 1.8.143 - Clear Healing Graphs
+
+Released August 8, 2026
+
+- Corrected Last Run hover details that displayed raw healing and healing with absorbs under the same name.
+- Combined healing totals are now clearly labeled "Healing + Absorbs" in M+ graph details and shared Raid graph labels.
+- Kept all captured run, pull, and raid records unchanged.
+
 ## Version 1.8.142 - Current Stat Goals
 
 Released August 5, 2026

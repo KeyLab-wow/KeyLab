@@ -134,6 +134,11 @@ local OPTIONAL_TABS = {
     ["Gear Planning"] = true,
 }
 
+local SEASON_2_NOTICE_TEXT =
+    "|cffffd36aSeason 2 Update in Progress|r\n\n" ..
+    "KeyLab remains functional while Season 2 item data is being added. Gear Targets and gearing recommendations may continue to show Season 1 items during this transition.\n\n" ..
+    "The Stat Goal Matcher is still available. Until Season 2 gear is added, we recommend selecting |cffffffffEquipped + Bags Only|r."
+
 -- =========================================================
 -- SMALL UI HELPERS
 -- =========================================================
@@ -652,6 +657,31 @@ function KeyLab.UI:ShowSequencerCombatMessage(draftPreserved)
     StaticPopup_Show("KEYLAB_SEQUENCER_COMBAT")
 end
 
+function KeyLab.UI:ShowSeason2Notice()
+    if self.season2NoticeShown then return end
+
+    StaticPopupDialogs = StaticPopupDialogs or {}
+    if not StaticPopupDialogs["KEYLAB_SEASON_2_UPDATE"] then
+        StaticPopupDialogs["KEYLAB_SEASON_2_UPDATE"] = {
+            text = SEASON_2_NOTICE_TEXT,
+            button1 = OKAY,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+        }
+    end
+
+    local dialog = StaticPopup_Show("KEYLAB_SEASON_2_UPDATE")
+    if not dialog then return end
+
+    dialog:SetFrameStrata("FULLSCREEN_DIALOG")
+    dialog:SetFrameLevel(900)
+    if dialog.SetToplevel then dialog:SetToplevel(true) end
+    if dialog.Raise then dialog:Raise() end
+    self.season2NoticeShown = true
+end
+
 function KeyLab.UI:RefreshSequencerNavigationState()
     local button = self.tabButtons and self.tabButtons["Sequencer"]
     if not button then return end
@@ -844,6 +874,7 @@ function KeyLab.UI:Show()
     self:Create()
     self.frame:Show()
     self:SelectTab(self.selectedTab or "Home")
+    self:ShowSeason2Notice()
 end
 
 function KeyLab.UI:Hide()
@@ -865,5 +896,6 @@ function KeyLab.UI:Toggle()
     else
         self.frame:Show()
         self:SelectTab(self.selectedTab or "Home")
+        self:ShowSeason2Notice()
     end
 end
