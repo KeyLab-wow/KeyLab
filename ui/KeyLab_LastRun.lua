@@ -1065,6 +1065,7 @@ function LastRun:Create(parent)
     frame:SetAllPoints(parent)
     SetBackdrop(frame, COLORS.bg, {0, 0, 0, 0})
     self.frame = frame
+    if KeyLab.UI.SeasonFilter then KeyLab.UI.SeasonFilter.Attach(frame) end
 
     local title = MakeText(frame, "M+ Last Run", "GameFontNormalLarge", HEADER.titleSize, COLORS.gold)
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", HEADER.x, HEADER.titleY)
@@ -1078,7 +1079,7 @@ function LastRun:Create(parent)
     historyLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -83)
     historyLabel:SetSize(260, 18)
 
-    local historyDropdown = CreateFrame("Frame", "KeyLabLastRunHistoryDropdown", frame, "UIDropDownMenuTemplate")
+    local historyDropdown = KeyLab.UI.Theme.CreateLegacyDropdown(frame, "KeyLabLastRunHistoryDropdown")
     historyDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -98)
     UIDropDownMenu_SetWidth(historyDropdown, 420)
     UIDropDownMenu_Initialize(historyDropdown, function(_, level)

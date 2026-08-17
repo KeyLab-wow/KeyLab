@@ -107,7 +107,8 @@ end
 local function MakeDropdown(parent, width, x, y, labelText, initialize)
     local label = AddFont(parent, labelText, "GameFontDisableSmall", x, y, width)
     ApplyColor(label, CFG.colors.muted)
-    local dropdown = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
+    local dropdown = KeyLab.UI.Theme.CreateLegacyDropdown(parent)
+    KeyLab.UI.Theme.StyleAnalysisFilterDropdown(dropdown)
     dropdown:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 18, y - 18)
     UIDropDownMenu_SetWidth(dropdown, width)
     UIDropDownMenu_Initialize(dropdown, initialize)
@@ -630,6 +631,7 @@ function RaidTalentBuilds:Create(parent)
     frame:SetAllPoints(parent)
     StylePanel(frame, CFG.colors.bg, { 0, 0, 0, 0 })
     self.frame, self.cards, self.selectedMetricKey = frame, {}, "dps"
+    if KeyLab.UI.SeasonFilter then KeyLab.UI.SeasonFilter.Attach(frame) end
 
     local title = AddFont(frame, "Raid Talent Builds", "GameFontNormalLarge", HEADER.x, HEADER.titleY, 500)
     title:SetFont(STANDARD_TEXT_FONT, HEADER.titleSize, "")

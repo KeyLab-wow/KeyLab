@@ -40,7 +40,7 @@ local TABLE_COLUMNS = {
     slot = { x = 280, width = 76, label = "Slot" },
     source = { x = 362, width = 142, label = "Source" },
     stats = { x = 510, width = 154, label = "Stats" },
-    match = { x = 670, width = 106, label = "Match" },
+    match = { x = 670, width = 106, label = "Matcher" },
     status = { x = 782, width = 94, label = "Status" },
 }
 
@@ -83,7 +83,7 @@ local MATCHER_STYLE_OPTIONS = {
 
 local STATUS_FILTER_OPTIONS = {
     { text = "All Items", value = "all" },
-    { text = "Goal Matches Only", value = "goal_match" },
+    { text = "Goal Match Items", value = "goal_match" },
     { text = "Targets Only", value = "target" },
     { text = "Alternatives Only", value = "alternative" },
     { text = "Targets & Alternatives", value = "saved" },
@@ -142,7 +142,8 @@ local function MakeDropdown(parent, width, x, y, labelText, initFunc)
     local label = MakeText(parent, labelText, "GameFontDisableSmall", nil, CFG.colors.muted)
     label:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     label:SetSize(width, 16)
-    local dropdown = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
+    local dropdown = KeyLab.UI.Theme.CreateLegacyDropdown(parent)
+    KeyLab.UI.Theme.StyleDropdownField(dropdown)
     dropdown:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 18, y - 18)
     UIDropDownMenu_SetWidth(dropdown, width)
     UIDropDownMenu_Initialize(dropdown, initFunc)
@@ -193,9 +194,16 @@ local function StyleGearTargetControlButton(button)
 end
 
 local function MakeActionButton(parent, text, width, height)
-    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    if Theme.CreateButton then
+        return Theme.CreateButton(parent, text or "", width or 164, height or 26)
+    end
+    local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
     button:SetSize(width or 164, height or 26)
-    button:SetText(text or "")
+    SetBackdrop(button, CFG.colors.box, CFG.colors.border)
+    button.label = MakeText(button, text or "", "GameFontHighlightSmall", nil, CFG.colors.text, "CENTER")
+    button.label:SetAllPoints(button)
+    button.label:SetJustifyV("MIDDLE")
+    button.SetText = function(self, value) self.label:SetText(value or "") end
     return button
 end
 
@@ -211,8 +219,9 @@ local function MakeEditBox(parent, width, height)
 end
 
 local function MakeSearchBox(parent, width, height, placeholderText)
-    local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    box:SetSize(width or 180, height or 22)
+    local box = Theme.CreateInput and Theme.CreateInput(parent, width or 180, height or 26)
+        or CreateFrame("EditBox", nil, parent, "BackdropTemplate")
+    box:SetSize(width or 180, height or 26)
     box:SetAutoFocus(false)
     box:SetJustifyH("LEFT")
     if box.SetJustifyV then box:SetJustifyV("MIDDLE") end
@@ -327,6 +336,8 @@ end
 
 local function RefreshExternalTargetViews()
     if KeyLab.GearTargetsWindow and KeyLab.GearTargetsWindow.RefreshVisible then KeyLab.GearTargetsWindow.RefreshVisible() end
+    local dashboard = KeyLab.Tabs and KeyLab.Tabs.GearDashboard
+    if dashboard and dashboard.Refresh then dashboard:Refresh() end
 end
 
 local function PrintAssignmentError(reason)
@@ -346,7 +357,10 @@ local function PrintAssignmentError(reason)
 end
 
 local function GetStatusMenuFrame()
-    if not statusMenuFrame then statusMenuFrame = CreateFrame("Frame", "KeyLabGearTargetsStatusMenu", UIParent, "UIDropDownMenuTemplate") end
+    if not statusMenuFrame then
+        statusMenuFrame = KeyLab.UI.Theme.CreateLegacyDropdown(UIParent, "KeyLabGearTargetsStatusMenu")
+        statusMenuFrame:Hide()
+    end
     return statusMenuFrame
 end
 
@@ -465,7 +479,11 @@ function GearTargets:GetSortValue(item, key)
     if key == "slot" then return CleanSortText(item and item.slot) end
     if key == "source" then return CleanSortText(item and item.sourceName) end
     if key == "stats" then return CleanSortText(ItemDisplayStats(item)) end
-    if key == "match" then return KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.IsGoalMatch(item.itemID, TargetSpecID()) and 1 or 2 end
+    if key == "match" then
+        if KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.IsGoalMatch(item.itemID, TargetSpecID()) then return 1 end
+        if KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.IsStatSupport(item.itemID, TargetSpecID()) then return 2 end
+        return 3
+    end
     if key == "status" then
         local status = GetItemStatus(item.itemID)
         return STATUS_SORT_RANK[status or "unmarked"] or 9, CleanSortText(StatusLabel(status))
@@ -509,7 +527,10 @@ function GearTargets:GetFilteredItems()
     if result and result.itemSource == "owned" and not self.selectedItemType and not self.selectedSourceID then
         local seen = {}
         for _, item in ipairs(items) do seen[tonumber(item.itemID)] = true end
-        for _, item in ipairs(result.matchedItemRecords or {}) do
+        local matcherRecords = {}
+        for _, item in ipairs(result.matchedItemRecords or {}) do table.insert(matcherRecords, item) end
+        for _, item in ipairs(result.statSupportItemRecords or {}) do table.insert(matcherRecords, item) end
+        for _, item in ipairs(matcherRecords) do
             local itemID = tonumber(item and item.itemID)
             local slotMatches = not self.selectedSlot or tostring(item and item.slot or "") == tostring(self.selectedSlot)
             local searchMatches = self.searchText == "" or CleanSortText((item and item.name or "") .. " " .. (item and item.link or "")):find(CleanSortText(self.searchText), 1, true)
@@ -563,8 +584,8 @@ function GearTargets:MakeHeaderButton(parent, key)
         button:SetScript("OnEnter", function(self)
             self:SetBackdropBorderColor(unpack(CFG.colors.blue))
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:AddLine("Sort by Goal Match")
-            GameTooltip:AddLine("Click to place Goal Match items together at the top or bottom of the list.", 0.8, 0.85, 1.0, true)
+            GameTooltip:AddLine("Sort by Matcher Result")
+            GameTooltip:AddLine("Click to group Goal Match and Stat Support items at the top or bottom of the list.", 0.8, 0.85, 1.0, true)
             GameTooltip:Show()
         end)
         button:SetScript("OnLeave", function(self)
@@ -633,7 +654,10 @@ function GearTargets:MakeLootRow(parent, item, y)
     stats:SetSize(TABLE_COLUMNS.stats.width, 18)
 
     local matched = KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.IsGoalMatch(item.itemID, TargetSpecID())
-    local matchText = MakeText(row, matched and "Goal Match" or "", "GameFontHighlightSmall", nil, matched and CFG.colors.gold or CFG.colors.muted)
+    local statSupport = KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.IsStatSupport(item.itemID, TargetSpecID())
+    local matchLabel = matched and "Goal Match" or statSupport and "Stat Support" or ""
+    local matchColor = matched and CFG.colors.gold or statSupport and CFG.colors.blue or CFG.colors.muted
+    local matchText = MakeText(row, matchLabel, "GameFontHighlightSmall", nil, matchColor)
     matchText:SetPoint("LEFT", row, "LEFT", TABLE_COLUMNS.match.x, 0)
     matchText:SetSize(TABLE_COLUMNS.match.width, 18)
     local matchHover = CreateFrame("Frame", nil, row)
@@ -642,8 +666,12 @@ function GearTargets:MakeLootRow(parent, item, y)
     matchHover:EnableMouse(true)
     matchHover:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine(matched and "Goal Match" or "No current match")
-        GameTooltip:AddLine("Goal Match shows the closest secondary-stat combination KeyLab found. It does not mean Best in Slot.", 0.8, 0.85, 1.0, true)
+        GameTooltip:AddLine(matched and "Goal Match" or statSupport and "Stat Support" or "No current matcher result")
+        if statSupport then
+            GameTooltip:AddLine("This trinket provides a secondary stat that supports your selected goals. KeyLab does not evaluate its role, Use or Equip effect, tuning, or overall performance.", 0.8, 0.85, 1.0, true)
+        else
+            GameTooltip:AddLine("Goal Match shows the closest secondary-stat combination KeyLab found. It does not mean Best in Slot.", 0.8, 0.85, 1.0, true)
+        end
         GameTooltip:Show()
     end)
     matchHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -659,7 +687,7 @@ function GearTargets:MakeLootRow(parent, item, y)
         btn:SetBackdropBorderColor(unpack(CFG.colors.blue))
         GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
         GameTooltip:AddLine("Status: " .. StatusLabel(status))
-        GameTooltip:AddLine("You choose Targets and Alternatives. Goal Match never changes them for you.", 0.8, 0.85, 1.0, true)
+        GameTooltip:AddLine("You choose Targets and Alternatives. Goal Match and Stat Support never change them for you.", 0.8, 0.85, 1.0, true)
         local assignments = KeyLab.LootTargetsDB.GetAssignmentsForItem(TargetSpecID(), item.itemID)
         for _, assignment in ipairs(assignments or {}) do
             if assignment.slotInstance then GameTooltip:AddLine((assignment.status == "target" and "Target: " or "Alternative: ") .. assignment.slotInstance, 0.9, 0.9, 0.7) end
@@ -806,7 +834,7 @@ function GearTargets:RefreshMatcherCard()
         if not box:HasFocus() then box:SetText(tostring(tonumber(goals.targets and goals.targets[key]) or 0)) end
     end
     local valid, validationMessage = KeyLab.StatGoalsDB.Validate(TargetSpecID())
-    self.goalTotal:SetText("Character % goals")
+    self.goalTotal:SetText("Character % goals  |  *Trinkets excluded")
     self.goalTotal:SetTextColor(unpack(valid and CFG.colors.green or CFG.colors.warning))
 
     local matcher = KeyLab.StatGoalMatcher
@@ -818,7 +846,11 @@ function GearTargets:RefreshMatcherCard()
     self.visibleMatcherResult = nil
     local characterPercentages = {}
     if matcher and matcher.GetCurrentCharacterPercentages then
-        local percentages = matcher.GetCurrentCharacterPercentages()
+        local percentages = self.matcherCurrentPercentages
+        if type(percentages) ~= "table" then
+            percentages = matcher.GetCurrentCharacterPercentages()
+            self.matcherCurrentPercentages = percentages
+        end
         characterPercentages = type(percentages) == "table" and percentages or {}
     end
     local displayOrder = KeyLab.StatGoalsDB.GetDisplayOrder and KeyLab.StatGoalsDB.GetDisplayOrder(TargetSpecID()) or { "crit", "mastery", "haste", "versatility" }
@@ -830,7 +862,7 @@ function GearTargets:RefreshMatcherCard()
             row.rank:SetText("#" .. tostring(index))
             local current = tonumber(characterPercentages[statKey])
             local goal = tonumber(goals.targets and goals.targets[statKey]) or 0
-            row.current:SetText(current and string.format("Now %.1f%%", current) or "Now —")
+            row.current:SetText(current and string.format("Now* %.1f%%", current) or "Now* —")
             if current == nil then
                 row.status:SetText("No Data")
                 row.status:SetTextColor(unpack(CFG.colors.muted))
@@ -862,7 +894,7 @@ function GearTargets:RefreshMatcherCard()
     if self.matcherFinishing then
         self.matcherButton:SetText("Updating Results")
         self.matcherButton:SetEnabled(false)
-        self.matcherState:SetText(self.matcherProgressText or "Goal Match items found. Updating the list...")
+        self.matcherState:SetText(self.matcherProgressText or "Matcher results found. Updating the list...")
         self.matcherState:SetTextColor(unpack(CFG.colors.blue))
         self:SetMatcherStatusStyle("running")
         return
@@ -880,11 +912,12 @@ function GearTargets:RefreshMatcherCard()
         self.visibleMatcherResult = result
         local unmatched = type(result.unmatchedOpenSlots) == "table" and #result.unmatchedOpenSlots or 0
         local matched = tonumber(result.matchedSlotCount) or tonumber(result.openPositionCount) or 0
-        local message = string.format("Goal Match ready: %d slot(s). %s.",
-            matched, tostring(result.resultStatus or "completed"))
+        local supports = type(result.statSupportItems) == "table" and #result.statSupportItems or 0
+        local message = string.format("Matcher ready: %d Goal Match slot(s), %d Stat Support trinket(s). %s.",
+            matched, supports, tostring(result.resultStatus or "completed"))
         if unmatched > 0 then
-            message = string.format("Goal Match ready: %d slot(s). %d unequipped slot(s) had no distinct candidate.",
-                matched, unmatched)
+            message = string.format("Matcher ready: %d Goal Match slot(s), %d Stat Support trinket(s). %d unequipped slot(s) had no distinct candidate.",
+                matched, supports, unmatched)
         end
         ShowResultsButton(true)
         self.matcherState:SetText(message)
@@ -905,6 +938,7 @@ function GearTargets:RefreshCurrentStats(showConfirmation)
     if KeyLab.GearCapture and KeyLab.GearCapture.MarkAllSlotsChanged then
         KeyLab.GearCapture.MarkAllSlotsChanged()
     end
+    self.matcherCurrentPercentages = nil
     self:RefreshMatcherCard()
 
     if showConfirmation and self.refreshStatsButton and self.refreshStatsButton.label then
@@ -930,6 +964,7 @@ function GearTargets:ScheduleCurrentStatsRefresh()
         if KeyLab.GearCapture and KeyLab.GearCapture.MarkAllSlotsChanged then
             KeyLab.GearCapture.MarkAllSlotsChanged()
         end
+        GearTargets.matcherCurrentPercentages = nil
         if GearTargets.frame and GearTargets.frame:IsShown() then
             GearTargets:RefreshMatcherCard()
         end
@@ -968,6 +1003,15 @@ local function MatcherResultItemDetails(item)
     end
     if item.sourceName and item.sourceName ~= "" then table.insert(details, CleanText(item.sourceName)) end
     return table.concat(details, "  |  ")
+end
+
+local function MatcherResultSupportText(item)
+    local labels = { Crit = "Critical Strike", Haste = "Haste", Mastery = "Mastery", Vers = "Versatility" }
+    local parts = {}
+    for _, key in ipairs(item and item.supportStats or {}) do
+        table.insert(parts, labels[key] or key)
+    end
+    return #parts > 0 and ("Supports " .. table.concat(parts, " / ")) or "Provides a needed secondary stat"
 end
 
 local function MatcherResultStatStatus(projected, goal)
@@ -1034,9 +1078,17 @@ local function RenderMatcherResults(popup, result)
     source:SetPoint("TOPRIGHT", summary, "TOPRIGHT", -14, -34)
     source:SetSize(390, 30)
 
+    local trinketNotice = ResultCard(popup, 78, "About Trinkets", CFG.colors.blue)
+    local trinketNoticeText = MakeText(trinketNotice,
+        "KeyLab does not recommend which trinkets you should use. A trinket may appear as Stat Support when it has a helpful passive secondary stat, but trinket stats are not counted toward completing your goal percentages.",
+        "GameFontHighlightSmall", nil, CFG.colors.text)
+    trinketNoticeText:SetPoint("TOPLEFT", trinketNotice, "TOPLEFT", 14, -34)
+    trinketNoticeText:SetSize(popup.contentWidth - 28, 36)
+    trinketNoticeText:SetWordWrap(true)
+
     local statsCard = ResultCard(popup, 178, "Projected Stat Results", CFG.colors.blue)
     local headers = {
-        { "STAT", 16, 168 }, { "CURRENT", 184, 104 }, { "GOAL", 288, 92 },
+        { "STAT", 16, 168 }, { "CURRENT*", 184, 104 }, { "GOAL", 288, 92 },
         { "PROJECTED", 380, 116 }, { "RESULT", 496, popup.contentWidth - 512 },
     }
     for _, header in ipairs(headers) do
@@ -1088,6 +1140,41 @@ local function RenderMatcherResults(popup, result)
         end
     end
 
+    local supports = type(result.statSupportItems) == "table" and result.statSupportItems or {}
+    if (tonumber(result.openTrinketSlotCount) or 0) > 0 then
+        local supportCount = math.max(1, #supports)
+        local supportCard = ResultCard(popup, 88 + (supportCount * 44), "Trinket Stat Support", CFG.colors.blue)
+        local supportExplanation = MakeText(supportCard,
+            "This trinket provides a secondary stat that supports your selected goals. KeyLab does not evaluate its role, Use or Equip effect, tuning, or overall performance.",
+            "GameFontDisableSmall", nil, CFG.colors.muted)
+        supportExplanation:SetPoint("TOPLEFT", supportCard, "TOPLEFT", 14, -32)
+        supportExplanation:SetSize(popup.contentWidth - 28, 36)
+        supportExplanation:SetWordWrap(true)
+        if #supports == 0 then
+            local empty = MakeText(supportCard,
+                "No eligible trinket with a needed passive stat passed the reduced-efficiency check.",
+                "GameFontHighlightSmall", nil, CFG.colors.muted)
+            empty:SetPoint("TOPLEFT", supportCard, "TOPLEFT", 14, -72)
+            empty:SetSize(popup.contentWidth - 28, 24)
+        else
+            for index, item in ipairs(supports) do
+                local row = ResultRow(supportCard, -72 - ((index - 1) * 44), 40, index % 2 == 0)
+                local label = MakeText(row, "Stat Support", "GameFontNormal", nil, CFG.colors.blue)
+                label:SetPoint("TOPLEFT", row, "TOPLEFT", 9, -6)
+                label:SetSize(108, 27)
+                local name = MakeText(row, CleanText(item.name or ("Item " .. tostring(item.itemID or "?"))), "GameFontHighlightSmall", nil, CFG.colors.text)
+                name:SetPoint("TOPLEFT", row, "TOPLEFT", 120, -4)
+                name:SetSize(popup.contentWidth - 150, 18)
+                local detailText = MatcherResultSupportText(item)
+                local itemDetails = MatcherResultItemDetails(item)
+                if itemDetails ~= "" then detailText = detailText .. "  |  " .. itemDetails end
+                local details = MakeText(row, detailText, "GameFontDisableSmall", nil, CFG.colors.muted)
+                details:SetPoint("TOPLEFT", row, "TOPLEFT", 120, -21)
+                details:SetSize(popup.contentWidth - 150, 16)
+            end
+        end
+    end
+
     local drCard = ResultCard(popup, 166, "Diminishing Returns / Reduced Efficiency", CFG.colors.blue)
     local explanation = MakeText(drCard, "Based on the projected finished set and WoW's stat-rating rules.", "GameFontDisableSmall", nil, CFG.colors.muted)
     explanation:SetPoint("TOPLEFT", drCard, "TOPLEFT", 14, -32)
@@ -1136,7 +1223,7 @@ local function RenderMatcherResults(popup, result)
 
     local footer = ResultCard(popup, 64, "How This Was Projected", CFG.colors.border)
     local footerText = MakeText(footer,
-        "Current values come from your Character panel. Projected values include your locked gear, the matched set, and the highest known upgrade for owned items.",
+        "Current* and projected values exclude all trinket secondary stats. Projected values include your other locked gear, the matched set, and the highest known upgrade for owned items.",
         "GameFontDisableSmall", nil, CFG.colors.muted)
     footerText:SetPoint("TOPLEFT", footer, "TOPLEFT", 14, -32)
     footerText:SetSize(popup.contentWidth - 28, 28)
@@ -1251,9 +1338,9 @@ function GearTargets:CreatePreparationPopup()
     title:SetPoint("TOP", popup, "TOP", 0, -18)
     title:SetSize(530, 28)
     local body = MakeText(popup,
-        "Equip every item you want to keep, including Tier, crafted, embellished, trinket, set, and other keeper items.\n\n" ..
+        "Equip every item you want to keep, including Tier, crafted, embellished, set, and other keeper items. Trinket secondary stats are always excluded from the goal projection.\n\n" ..
         "Unequip only the slots you want KeyLab to fill.\n\n" ..
-        "Choose where KeyLab should search and how it should match your goals. The matcher compares secondary stats and projects the finished set. It does not judge bonuses, special effects, or Best in Slot.",
+        "Choose where KeyLab should search and how it should match your goals. An open trinket slot may receive advisory Stat Support suggestions. The matcher does not judge roles, bonuses, special effects, or Best in Slot.",
         "GameFontHighlightSmall", nil, CFG.colors.text)
     body:SetPoint("TOPLEFT", popup, "TOPLEFT", 24, -58)
     body:SetSize(522, 145)
@@ -1421,7 +1508,7 @@ function GearTargets:StartMatcher()
             GearTargets.sortKey = "match"
             GearTargets.sortAscending = true
             GearTargets.matcherFinishing = true
-            GearTargets.matcherProgressText = "Goal Match items found. Updating the list..."
+            GearTargets.matcherProgressText = "Matcher results found. Updating the list..."
         else
             GearTargets.matcherFinishing = false
             GearTargets.matcherProgressText = payload and payload.message or nil
@@ -1510,6 +1597,7 @@ function GearTargets:Create(parent)
     end)
 
     self.matcherButton = MakeActionButton(frame, "Stat Goal Matcher", 176, 28)
+    if Theme.StylePrimaryActionButton then Theme.StylePrimaryActionButton(self.matcherButton) end
     self.matcherButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -18, -24)
     self.matcherButton:SetScript("OnClick", function()
         if KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.IsRunning() then
@@ -1565,7 +1653,7 @@ function GearTargets:Create(parent)
     local searchLabel = MakeText(controls, "Search Item", "GameFontDisableSmall", nil, CFG.colors.muted)
     searchLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", 600, -12)
     searchLabel:SetSize(180, 16)
-    self.searchBox = MakeSearchBox(controls, 180, 22, "Enter item name")
+    self.searchBox = MakeSearchBox(controls, 180, 26, "Enter item name")
     self.searchBox:SetPoint("TOPLEFT", controls, "TOPLEFT", 600, -34)
     self.searchBox:SetScript("OnTextChanged", function(box)
         if box.placeholder then box.placeholder:SetShown(tostring(box:GetText() or "") == "") end
@@ -1575,7 +1663,7 @@ function GearTargets:Create(parent)
         box:ClearFocus()
         GearTargets:RefreshContent()
     end)
-    self.searchBox:SetScript("OnEditFocusLost", function(box)
+    self.searchBox:HookScript("OnEditFocusLost", function(box)
         local text = tostring(box:GetText() or "")
         if GearTargets.searchText ~= text then GearTargets.searchText = text; GearTargets:RefreshContent() end
     end)
@@ -1650,7 +1738,7 @@ function GearTargets:Create(parent)
     self.refreshStatsButton:SetScript("OnClick", function()
         GearTargets:RefreshCurrentStats(true)
     end)
-    local matcherNote = MakeText(matcherPanel, "Enter your stat goal percentages. KeyLab uses your current stats, fills the unequipped slots, and projects the finished set.", "GameFontDisableSmall", nil, CFG.colors.muted)
+    local matcherNote = MakeText(matcherPanel, "Enter your stat goal percentages. KeyLab excludes trinket stats, fills the other unequipped slots, and projects the finished set.", "GameFontDisableSmall", nil, CFG.colors.muted)
     matcherNote:SetPoint("TOPLEFT", matcherTitle, "BOTTOMLEFT", 0, -4)
     matcherNote:SetSize(380, 28)
     matcherNote:SetWordWrap(true)
@@ -1700,7 +1788,7 @@ function GearTargets:Create(parent)
         local percent = MakeText(row, "%", "GameFontDisableSmall", nil, CFG.colors.muted)
         percent:SetPoint("LEFT", box, "RIGHT", 3, 0)
         percent:SetSize(16, 18)
-        local current = MakeText(row, "Now —", "GameFontHighlightSmall", nil, CFG.colors.muted)
+        local current = MakeText(row, "Now* —", "GameFontHighlightSmall", nil, CFG.colors.muted)
         current:SetPoint("TOPLEFT", row, "TOPLEFT", 232, -5)
         current:SetSize(94, 18)
         current:SetTextColor(unpack(CFG.colors.text))
@@ -1720,9 +1808,9 @@ function GearTargets:Create(parent)
         self.goalBoxes[def.key] = box
         self.goalRows[def.key] = { frame = row, rank = rank, current = current, status = status, up = up, down = down }
     end
-    self.goalTotal = MakeText(matcherPanel, "Character % goals", "GameFontHighlightSmall", nil, CFG.colors.green)
+    self.goalTotal = MakeText(matcherPanel, "Character % goals  |  *Trinkets excluded", "GameFontHighlightSmall", nil, CFG.colors.green)
     self.goalTotal:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 14, -116)
-    self.goalTotal:SetSize(130, 18)
+    self.goalTotal:SetSize(260, 18)
     local goalHint = MakeText(matcherPanel, "Each may be 0%–100%", "GameFontDisableSmall", nil, CFG.colors.muted)
     goalHint:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 150, -116)
     goalHint:SetSize(180, 18)
@@ -1748,6 +1836,7 @@ function GearTargets:Create(parent)
             GearTargets.selectedSourceID = nil
             GearTargets.selectedSlot = nil
             GearTargets.matcherProgressText = nil
+            GearTargets.matcherCurrentPercentages = nil
             if KeyLab.StatGoalMatcher then
                 KeyLab.StatGoalMatcher.Cancel()
             end
@@ -1762,6 +1851,7 @@ function GearTargets:Create(parent)
     self.events = events
     frame:SetScript("OnShow", function()
         if KeyLab.GearCapture and KeyLab.GearCapture.MarkAllSlotsChanged then KeyLab.GearCapture.MarkAllSlotsChanged() end
+        GearTargets.matcherCurrentPercentages = nil
         GearTargets:Refresh()
     end)
     return frame

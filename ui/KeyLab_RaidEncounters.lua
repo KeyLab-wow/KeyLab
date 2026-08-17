@@ -14,10 +14,11 @@ local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
 local Theme = KeyLab.UI and KeyLab.UI.Theme or {}
 local SPACING = Theme.spacing or { compactCard = 8, section = 18 }
 local HEADER = Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16, analysisControlsY = -86, analysisContentY = -172 }
+local LAYOUT = Theme.analysisLayout or { outerX = 12, width = 928, filterY = -86, filterHeight = 96, filterLabelY = -36, resultsY = -196, detailsY = -466, detailsHeight = 300 }
 
 local CFG = {
     pageSize = 5,
-    colors = {
+    colors = Theme.analysisColors or {
         bg = { 0.018, 0.026, 0.056, 0.96 },
         controlBg = { 0.026, 0.046, 0.088, 0.94 },
         cardBg = { 0.030, 0.052, 0.098, 0.94 },
@@ -39,22 +40,22 @@ local CFG = {
         versatility = { 0.460, 0.780, 0.500, 0.95 },
     },
     controls = {
-        x = 12, y = HEADER.analysisControlsY, width = 928, height = 74,
+        x = LAYOUT.outerX, y = LAYOUT.filterY, width = LAYOUT.width, height = LAYOUT.filterHeight,
         bossX = 18, bossWidth = 150,
         difficultyX = 188, difficultyWidth = 100,
         currentSpecX = 308, currentSpecWidth = 110,
         dateX = 430, dateWidth = 105,
         metricX = 552, metricWidth = 145,
         sortX = 742, sortWidth = 130,
-        labelY = -12,
+        labelY = LAYOUT.filterLabelY,
     },
-    list = { x = 12, y = HEADER.analysisContentY, width = 928 },
+    list = { x = LAYOUT.outerX, y = LAYOUT.resultsY, width = LAYOUT.width },
     card = {
         width = 928, height = 44, gap = SPACING.compactCard,
         numberX = 12, bossX = 50, resultX = 420, specX = 570, dateX = 720,
     },
     details = {
-        x = 12, width = 928, height = 300, gapAfterCards = SPACING.section, padding = 14,
+        x = LAYOUT.outerX, y = LAYOUT.detailsY, width = LAYOUT.width, height = LAYOUT.detailsHeight, gapAfterCards = SPACING.section, padding = 14,
         colPullX = 16, colPullW = 175,
         colStatsX = 205, colStatsW = 200,
         colTalentX = 430, colTalentW = 190,
@@ -68,10 +69,12 @@ local CFG = {
 }
 
 local function ApplyColor(font, color)
+    if Theme.ApplyColor then Theme.ApplyColor(font, color); return end
     if font and color then font:SetTextColor(color[1], color[2], color[3], color[4] or 1) end
 end
 
 local function StylePanel(frame, background, border)
+    if Theme.StylePanel then Theme.StylePanel(frame, background, border); return end
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -87,13 +90,14 @@ local function SetBorder(frame, border)
 end
 
 local function AddFont(parent, value, template, x, y, width)
-    local font = parent:CreateFontString(nil, "OVERLAY", template or "GameFontNormal")
+    local font = Theme.CreateText and Theme.CreateText(parent, value, template or "GameFontNormal", nil, CFG.colors.text)
+        or parent:CreateFontString(nil, "OVERLAY", template or "GameFontNormal")
     font:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     font:SetWidth(width or 700)
     font:SetJustifyH("LEFT")
     font:SetJustifyV("TOP")
     font:SetWordWrap(false)
-    font:SetText(value or "")
+    if not Theme.CreateText then font:SetText(value or "") end
     return font
 end
 
@@ -158,7 +162,8 @@ end
 local function MakeDropdown(parent, width, x, y, labelText, initialize)
     local label = AddFont(parent, labelText, "GameFontDisableSmall", x, y, width)
     ApplyColor(label, CFG.colors.muted)
-    local dropdown = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
+    local dropdown = KeyLab.UI.Theme.CreateLegacyDropdown(parent)
+    KeyLab.UI.Theme.StyleAnalysisFilterDropdown(dropdown)
     dropdown:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 18, y - 18)
     UIDropDownMenu_SetWidth(dropdown, width)
     UIDropDownMenu_Initialize(dropdown, initialize)
@@ -368,12 +373,8 @@ end
 
 local function BuildDetails(panel, encounter)
     ClearChildren(panel)
-    StylePanel(panel, CFG.colors.detailBg, CFG.colors.detailBorder)
+    if Theme.StyleAnalysisDetails then Theme.StyleAnalysisDetails(panel) else StylePanel(panel, CFG.colors.detailBg, CFG.colors.detailBorder) end
     if not encounter then
-        local title = AddFont(panel, "Raid Pull Details", "GameFontNormalLarge", 14, -16, 900)
-        ApplyColor(title, CFG.colors.gold)
-        local body = AddFont(panel, "Select a pull above to view its pull details, stat snapshot, talent string, and captured outcomes.", "GameFontHighlightSmall", 14, -48, 900)
-        ApplyColor(body, CFG.colors.muted)
         return
     end
 
@@ -402,7 +403,8 @@ local function BuildDetails(panel, encounter)
     AddSectionTitle(panel, "Talent String", CFG.details.colTalentX, sectionTop, CFG.details.colTalentW)
     local talentString = encounter.talents and encounter.talents.talentString or ""
     if talentString ~= "" then
-        local editBox = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
+        local editBox = Theme.CreateInput and Theme.CreateInput(panel, CFG.details.colTalentW - 8, 30)
+            or CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
         editBox:SetPoint("TOPLEFT", panel, "TOPLEFT", CFG.details.colTalentX + 4, sectionTop - 26)
         editBox:SetSize(CFG.details.colTalentW - 8, 30)
         editBox:SetAutoFocus(false)
@@ -410,7 +412,8 @@ local function BuildDetails(panel, encounter)
         editBox:SetText(talentString)
         editBox:SetCursorPosition(0)
         editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-        local copy = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+        local copy = Theme.CreateButton and Theme.CreateButton(panel, "Copy", 72, 22)
+            or CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
         copy:SetSize(72, 22)
         copy:SetPoint("TOPLEFT", panel, "TOPLEFT", CFG.details.colTalentX + 4, sectionTop - 62)
         copy:SetText("Copy")
@@ -430,10 +433,11 @@ local function CreatePullCard(parent, encounter, displayIndex)
     local raid = GetRaid(encounter)
     local card = CreateFrame("Button", nil, parent, "BackdropTemplate")
     card:SetSize(CFG.card.width, CFG.card.height)
-    StylePanel(card, CFG.colors.cardBg, CFG.colors.cardBorder)
+    if Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(card, "normal") else StylePanel(card, CFG.colors.cardBg, CFG.colors.cardBorder) end
     card.encounter = encounter
 
-    local number = AddFont(card, tostring(displayIndex) .. ".", "GameFontNormal", CFG.card.numberX, -13, 30)
+    local number = AddFont(card, Theme.FormatRank and Theme.FormatRank(displayIndex) or tostring(displayIndex), "GameFontNormal", CFG.card.numberX, -13, 30)
+    card.rankText = number
     ApplyColor(number, CFG.colors.gold)
     local boss = AddFont(card, string.format("%s - Pull %s", raid.encounterName or "Boss", tostring(GetPullNumber(encounter))), "GameFontNormal", CFG.card.bossX, -12, 355)
     ApplyColor(boss, CFG.colors.text)
@@ -449,10 +453,14 @@ local function CreatePullCard(parent, encounter, displayIndex)
         if button == "LeftButton" then RaidEncounters.selectedEncounter = encounter; RaidEncounters:RefreshSelection() end
     end)
     card:SetScript("OnEnter", function(self)
-        if self.encounter ~= RaidEncounters.selectedEncounter then SetBorder(self, CFG.colors.cardHoverBorder) end
+        if self.encounter ~= RaidEncounters.selectedEncounter then
+            if Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(self, "hover") else SetBorder(self, CFG.colors.cardHoverBorder) end
+        end
     end)
     card:SetScript("OnLeave", function(self)
-        if self.encounter ~= RaidEncounters.selectedEncounter then SetBorder(self, CFG.colors.cardBorder) end
+        if self.encounter ~= RaidEncounters.selectedEncounter then
+            if Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(self, "normal") else SetBorder(self, CFG.colors.cardBorder) end
+        end
     end)
     return card
 end
@@ -464,7 +472,12 @@ end
 
 function RaidEncounters:RefreshSelection()
     for _, card in ipairs(self.cards or {}) do
-        SetBorder(card, card.encounter == self.selectedEncounter and CFG.colors.cardSelectedBorder or CFG.colors.cardBorder)
+        local selected = card.encounter == self.selectedEncounter
+        if Theme.StyleAnalysisRow then
+            Theme.StyleAnalysisRow(card, selected and "selected" or "normal")
+        else
+            SetBorder(card, selected and CFG.colors.cardSelectedBorder or CFG.colors.cardBorder)
+        end
     end
     BuildDetails(self.detailPanel, self.selectedEncounter)
 end
@@ -508,7 +521,7 @@ function RaidEncounters:Refresh()
     self.currentPage = math.max(1, math.min(self.currentPage or 1, totalPages))
 
     if total == 0 then
-        self.emptyText:Show()
+        self.emptyText:Hide()
         self.summaryText:SetText("No raid boss pulls found for this specialization and these filters.")
         self.pageText:SetText("Page 0 / 0")
         self.prevButton:Disable(); self.nextButton:Disable()
@@ -542,22 +555,23 @@ function RaidEncounters:Create(parent)
     if self.frame then return self.frame end
     local frame = CreateFrame("Frame", "KeyLabRaidEncountersTab", parent, "BackdropTemplate")
     frame:SetAllPoints(parent)
-    StylePanel(frame, CFG.colors.bg, { 0, 0, 0, 0 })
+    if Theme.StyleAnalysisPage then Theme.StyleAnalysisPage(frame) else StylePanel(frame, CFG.colors.bg, { 0, 0, 0, 0 }) end
     self.frame, self.cards, self.currentPage = frame, {}, 1
 
-    Theme.CreateTabHeader(
+    local page = Theme.CreateAnalysisPage(
         frame,
         "Raid Encounters",
-        "Review your saved raid boss pulls and select one to see its details."
+        "Review your saved raid boss pulls and select one to see its details.",
+        { summaryText = "Loading raid pulls...", detailsHeight = CFG.details.height }
     )
-    self.summaryText = AddFont(frame, "Loading raid pulls...", "GameFontDisableSmall", HEADER.x, HEADER.summaryY, HEADER.summaryWidth)
-    self.summaryText:SetHeight(HEADER.summaryHeight)
-    ApplyColor(self.summaryText, CFG.colors.soft)
-
-    local controls = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    controls:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.controls.x, CFG.controls.y)
-    controls:SetSize(CFG.controls.width, CFG.controls.height)
-    StylePanel(controls, CFG.colors.controlBg, CFG.colors.cardBorder)
+    self.summaryText = page.summaryText
+    local controls = page.filterHeaderCard
+    local filterX = Theme.GetFilterPositions({
+        CFG.controls.bossWidth, CFG.controls.difficultyWidth, CFG.controls.currentSpecWidth,
+        CFG.controls.dateWidth, CFG.controls.metricWidth, CFG.controls.sortWidth,
+    }, { cardWidth = CFG.controls.width })
+    CFG.controls.bossX, CFG.controls.difficultyX, CFG.controls.currentSpecX,
+        CFG.controls.dateX, CFG.controls.metricX, CFG.controls.sortX = unpack(filterX)
 
     self.bossDropdown = MakeDropdown(controls, CFG.controls.bossWidth, CFG.controls.bossX, CFG.controls.labelY, "Boss", function(_, level)
         for _, option in ipairs(RaidEncounters.bossOptions or {}) do
@@ -588,7 +602,8 @@ function RaidEncounters:Create(parent)
     local specLabel = AddFont(controls, "Current Spec", "GameFontDisableSmall", CFG.controls.currentSpecX, CFG.controls.labelY, CFG.controls.currentSpecWidth)
     ApplyColor(specLabel, CFG.colors.muted)
     self.specValue = AddFont(controls, "Loading...", "GameFontHighlightSmall", CFG.controls.currentSpecX, CFG.controls.labelY - 26, CFG.controls.currentSpecWidth)
-    ApplyColor(self.specValue, CFG.colors.gold)
+    ApplyColor(self.specValue, CFG.colors.text)
+    if Theme.CreateFieldUnderline then Theme.CreateFieldUnderline(controls, CFG.controls.currentSpecX, CFG.controls.labelY, CFG.controls.currentSpecWidth, CFG.colors.gold) end
     self.dateDropdown = MakeDropdown(controls, CFG.controls.dateWidth, CFG.controls.dateX, CFG.controls.labelY, "Date", function(_, level)
         for _, option in ipairs(DATE_OPTIONS) do
             local value = option.value
@@ -629,34 +644,18 @@ function RaidEncounters:Create(parent)
         end
     end)
 
-    self.emptyText = AddFont(frame, "No raid boss pulls have been captured yet.", "GameFontHighlight", CFG.list.x, CFG.list.y, CFG.list.width)
-    ApplyColor(self.emptyText, CFG.colors.text)
+    self.emptyText = AddFont(page.encountersCards, "", "GameFontHighlight", 0, 0, CFG.list.width)
     self.emptyText:Hide()
 
-    local reservedListHeight = (CFG.pageSize * CFG.card.height) + ((CFG.pageSize - 1) * CFG.card.gap)
-    self.detailPanel = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    self.detailPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.details.x, CFG.list.y - reservedListHeight - CFG.details.gapAfterCards)
-    self.detailPanel:SetSize(CFG.details.width, CFG.details.height)
-    StylePanel(self.detailPanel, CFG.colors.detailBg, CFG.colors.detailBorder)
+    self.detailPanel = page.detailsCard
 
-    self.pageText = AddFont(frame, "Page 1 / 1", "GameFontDisableSmall", CFG.pager.labelX, -780, CFG.pager.labelWidth)
-    self.pageText:ClearAllPoints()
-    self.pageText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", CFG.pager.labelX, CFG.pager.y)
-    ApplyColor(self.pageText, CFG.colors.muted)
-
-    self.prevButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    self.prevButton:SetSize(CFG.pager.buttonWidth, CFG.pager.buttonHeight)
-    self.prevButton:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", CFG.pager.prevX, CFG.pager.y)
-    self.prevButton:SetText("Back")
+    local pager = Theme.CreatePager(frame)
+    self.pageText, self.prevButton, self.nextButton = pager.pageText, pager.prevButton, pager.nextButton
     self.prevButton:SetScript("OnClick", function()
         RaidEncounters.currentPage = math.max(1, (RaidEncounters.currentPage or 1) - 1)
         RaidEncounters.selectedEncounter = nil
         RaidEncounters:Refresh()
     end)
-    self.nextButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    self.nextButton:SetSize(CFG.pager.buttonWidth, CFG.pager.buttonHeight)
-    self.nextButton:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", CFG.pager.nextX, CFG.pager.y)
-    self.nextButton:SetText("Next")
     self.nextButton:SetScript("OnClick", function()
         RaidEncounters.currentPage = (RaidEncounters.currentPage or 1) + 1
         RaidEncounters.selectedEncounter = nil

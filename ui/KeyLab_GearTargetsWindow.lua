@@ -274,6 +274,7 @@ local function NewCard(f, title, accentColor)
     card.lineIndex = 0
     card.rollGroupIndex = 0
     for _, panel in ipairs(card.rollGroupPanels or {}) do panel:Hide() end
+    if card.columnDivider then card.columnDivider:Hide() end
     card.cursorY = -12
     card:Show()
 
@@ -437,6 +438,97 @@ local function AddRollGroupPanel(card, column, group, fullWidth)
     end
 end
 
+local function AddDungeonRunPanel(card, column, dungeonName, badgeText, rows, accentColor, backgroundColor)
+    card.rollGroupIndex = (card.rollGroupIndex or 0) + 1
+    card.rollGroupPanels = card.rollGroupPanels or {}
+    local panel = card.rollGroupPanels[card.rollGroupIndex]
+    if not panel then
+        panel = CreateFrame("Frame", nil, card, "BackdropTemplate")
+        panel.itemLines = {}
+        panel.itemRows = {}
+        panel.title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        panel.title:SetJustifyH("LEFT")
+        panel.kind = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        panel.kind:SetJustifyH("RIGHT")
+        card.rollGroupPanels[card.rollGroupIndex] = panel
+    end
+
+    local gap = 18
+    local cardWidth = card:GetWidth() or 600
+    local columnWidth = math.floor((cardWidth - 28 - gap) / 2)
+    local x = 14 + ((column - 1) * (columnWidth + gap))
+    local y = card.columnY[column]
+    local rowHeight = 30
+    local panelHeight = 43 + (math.max(1, #rows) * rowHeight)
+
+    panel:ClearAllPoints()
+    panel:SetPoint("TOPLEFT", card, "TOPLEFT", x, y)
+    panel:SetSize(columnWidth, panelHeight)
+    SetBackdrop(panel, backgroundColor or {0.014, 0.030, 0.062, 0.98}, accentColor)
+
+    panel.title:ClearAllPoints()
+    panel.title:SetPoint("TOPLEFT", panel, "TOPLEFT", 11, -9)
+    panel.title:SetSize(columnWidth - 108, 20)
+    panel.title:SetWordWrap(false)
+    panel.title:SetTextColor(unpack(CFG.colors.activity))
+    panel.title:SetText(tostring(dungeonName or "Dungeon"))
+
+    panel.kind:ClearAllPoints()
+    panel.kind:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -10, -11)
+    panel.kind:SetSize(88, 16)
+    panel.kind:SetTextColor(unpack(accentColor))
+    panel.kind:SetText(tostring(badgeText or ""))
+
+    for index, rowData in ipairs(rows) do
+        local row = panel.itemRows[index]
+        if not row then
+            row = panel:CreateTexture(nil, "BACKGROUND")
+            row:SetTexture("Interface\\Buttons\\WHITE8x8")
+            panel.itemRows[index] = row
+        end
+        local line = panel.itemLines[index]
+        if not line then
+            line = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            line:SetJustifyH("LEFT")
+            line:SetWordWrap(false)
+            panel.itemLines[index] = line
+        end
+
+        local rowY = -32 - ((index - 1) * rowHeight)
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, rowY)
+        row:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, rowY)
+        row:SetHeight(rowHeight - 2)
+        if backgroundColor and index % 2 == 1 then
+            row:SetVertexColor(0.130, 0.055, 0.180, 0.78)
+        elseif backgroundColor then
+            row:SetVertexColor(0.075, 0.035, 0.120, 0.78)
+        elseif index % 2 == 1 then
+            row:SetVertexColor(0.060, 0.100, 0.165, 0.74)
+        else
+            row:SetVertexColor(0.030, 0.060, 0.115, 0.74)
+        end
+        row:Show()
+
+        line:ClearAllPoints()
+        line:SetPoint("TOPLEFT", panel, "TOPLEFT", 13, rowY - 2)
+        line:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -13, rowY - 2)
+        line:SetHeight(rowHeight - 2)
+        line:SetJustifyV("MIDDLE")
+        line:SetWordWrap(true)
+        line:SetTextColor(unpack(rowData.color or CFG.colors.text))
+        line:SetText(tostring(rowData.text or ""))
+        line:Show()
+    end
+    for index = #rows + 1, #(panel.itemLines or {}) do
+        panel.itemLines[index]:Hide()
+        if panel.itemRows[index] then panel.itemRows[index]:Hide() end
+    end
+
+    panel:Show()
+    card.columnY[column] = y - panelHeight - 9
+end
+
 local function AddCardGap(card, height)
     card.cursorY = card.cursorY - (height or 8)
 end
@@ -501,6 +593,98 @@ local function AddSavedGearCard(f, title, groups, bagItems, alternativeBudget)
         end
     end
     if added then FinishCard(f, card) else card:Hide() end
+end
+
+local function AddDungeonRunCard(f, targetGroups, catalystGroups, bagItems, alternativeBudget)
+    targetGroups = targetGroups or {}
+    catalystGroups = catalystGroups or {}
+    if #targetGroups == 0 and #catalystGroups == 0 then return end
+
+    local card = NewCard(f, "Dungeon Runs", CFG.colors.blue)
+    AddCardLine(card,
+        "Saved Target sources are on the left. Dungeon armor for your Tier slots is on the right.",
+        CFG.colors.muted, 0, "GameFontDisableSmall", true)
+    AddCardGap(card, 4)
+    card.columnYStart = card.cursorY
+    card.columnY = { card.cursorY, card.cursorY }
+
+    AddColumnLine(card, 1, "Saved Target Dungeons", CFG.colors.gold, 0, "GameFontNormal")
+    AddColumnLine(card, 1, "Run these for the dungeon items you chose.",
+        CFG.colors.muted, 0, "GameFontDisableSmall", true)
+    local targetAdded = false
+    for _, group in ipairs(targetGroups) do
+        local canShowAlternative = alternativeBudget.value > 0 and #(group.alternatives or {}) > 0
+        if #(group.targets or {}) > 0 or canShowAlternative then
+            local rows = {}
+            for _, item in ipairs(group.targets or {}) do
+                local slotName = item.slotInstance or item.slot or "Gear"
+                local itemName = StripColorCodes(item.name or ("Item " .. tostring(item.itemID)))
+                local bagRecord = bagItems and bagItems[tonumber(item.itemID)]
+                local bagTrack = bagRecord and (bagRecord.track or item.upgradeTrack)
+                local suffix = (bagTrack == "Hero" or bagTrack == "Myth")
+                    and (" (In Bags - " .. bagTrack .. ")") or ""
+                table.insert(rows, {
+                    text = "•  " .. tostring(slotName) .. " - " .. itemName .. suffix,
+                    color = CFG.colors.text,
+                })
+            end
+            for _, item in ipairs(group.alternatives or {}) do
+                if alternativeBudget.value > 0 then
+                    local slotName = item.slotInstance or item.slot or "Gear"
+                    local itemName = StripColorCodes(item.name or ("Item " .. tostring(item.itemID)))
+                    table.insert(rows, {
+                        text = "◇  " .. tostring(slotName) .. " - " .. itemName .. " (Alternative)",
+                        color = CFG.colors.blue,
+                    })
+                    alternativeBudget.value = alternativeBudget.value - 1
+                    alternativeBudget.shown = alternativeBudget.shown + 1
+                end
+            end
+            if #rows > 0 then
+                AddDungeonRunPanel(card, 1, group.sourceName,
+                    tostring(#rows) .. (#rows == 1 and " ITEM" or " ITEMS"),
+                    rows, CFG.colors.blue)
+                targetAdded = true
+            end
+        end
+    end
+    if not targetAdded then
+        AddColumnLine(card, 1, "No saved dungeon Targets are currently needed.", CFG.colors.muted, 0, nil, true)
+    end
+
+    AddColumnLine(card, 2, "Tier Slot Catalyst Dungeons", CFG.colors.violet, 0, "GameFontNormal")
+    AddColumnLine(card, 2, "Run these for armor that can fill your selected or remaining Tier slots.",
+        CFG.colors.muted, 0, "GameFontDisableSmall", true)
+    if #catalystGroups == 0 then
+        AddColumnLine(card, 2, "No Tier-slot dungeon armor is currently needed.", CFG.colors.muted, 0, nil, true)
+    else
+        for _, group in ipairs(catalystGroups) do
+            local rows = {}
+            for _, item in ipairs(group.items or {}) do
+                local status = item.tierChecked and "Checked Tier Slot" or "Tier Slot Needed"
+                table.insert(rows, {
+                    text = "•  " .. tostring(item.displaySlot or item.slotName or "Tier") .. " - " .. status,
+                    color = item.tierChecked and CFG.colors.green or CFG.colors.text,
+                })
+            end
+            AddDungeonRunPanel(card, 2, group.sourceName,
+                tostring(#rows) .. (#rows == 1 and " TIER SLOT" or " TIER SLOTS"),
+                rows, CFG.colors.violet, {0.045, 0.025, 0.074, 0.98})
+        end
+    end
+
+    card.cursorY = math.min(card.columnY[1], card.columnY[2])
+    if not card.columnDivider then
+        card.columnDivider = card:CreateTexture(nil, "ARTWORK")
+        card.columnDivider:SetTexture("Interface\\Buttons\\WHITE8x8")
+    end
+    card.columnDivider:ClearAllPoints()
+    card.columnDivider:SetPoint("TOP", card, "TOP", 0, card.columnYStart or -78)
+    card.columnDivider:SetPoint("BOTTOM", card, "TOP", 0, card.cursorY + 5)
+    card.columnDivider:SetWidth(1)
+    card.columnDivider:SetVertexColor(unpack(CFG.colors.border))
+    card.columnDivider:Show()
+    FinishCard(f, card)
 end
 
 local function GetShoppingPlan(filters)
@@ -847,9 +1031,14 @@ function GearWindow.Refresh()
         AddCardLine(empty, "Open Gear Targets to choose items you want to track.", CFG.colors.text)
         FinishCard(f, empty)
     else
-        AddSavedGearCard(f, "Dungeon Gear", FilterGroups(groups, "Dungeon"), bagItems, alternativeBudget)
+        AddDungeonRunCard(f, FilterGroups(groups, "Dungeon"),
+            shoppingPlan.catalystDungeonGroups, bagItems, alternativeBudget)
         AddSavedGearCard(f, "Raid Gear", FilterGroups(groups, "Raid"), bagItems, alternativeBudget)
         AddSavedGearCard(f, "Other Saved Gear", FilterGroups(groups, "Other"), bagItems, alternativeBudget)
+    end
+
+    if #targets == 0 and #alternatives == 0 then
+        AddDungeonRunCard(f, {}, shoppingPlan.catalystDungeonGroups, bagItems, alternativeBudget)
     end
 
     AddNebulousRollCard(f, shoppingPlan.nebulousRollPlan, false)

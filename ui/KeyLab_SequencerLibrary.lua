@@ -114,6 +114,7 @@ local function Dropdown(parent,width,optionsProvider,getValue,setValue)
     dropdown.defaultBg=COLORS.controlBg or COLORS.buttonBg; dropdown.defaultBorder=COLORS.softBorder or COLORS.border; dropdown.defaultText=COLORS.text
     dropdown.label=Text(dropdown,"None","GameFontHighlightSmall",11,COLORS.text); dropdown.label:SetPoint("LEFT",8,0); dropdown.label:SetPoint("RIGHT",-24,0); dropdown.label:SetHeight(22); dropdown.label:SetJustifyV("MIDDLE")
     dropdown.arrow=Text(dropdown,"v","GameFontNormal",12,COLORS.gold,"CENTER"); dropdown.arrow:SetPoint("RIGHT",-5,0); dropdown.arrow:SetSize(16,20); dropdown.arrow:SetJustifyV("MIDDLE")
+    if Theme.StyleDropdownField then Theme.StyleDropdownField(dropdown) end
     dropdown.optionsProvider=optionsProvider; dropdown.getValue=getValue; dropdown.setValue=setValue
     dropdown.menu=CreateFrame("Frame",nil,UIParent,"BackdropTemplate"); dropdown.menu:SetFrameStrata("TOOLTIP"); dropdown.menu:SetFrameLevel(9000); dropdown.menu:SetWidth(width); dropdown.menu:Hide(); Style(dropdown.menu,COLORS.bg,COLORS.gold)
     dropdown.menu.rows={}; dropdown.menu.offset=1; dropdown.menu:EnableMouseWheel(true)
@@ -168,14 +169,17 @@ local function Dropdown(parent,width,optionsProvider,getValue,setValue)
     end)
     dropdown:SetScript("OnHide",function() dropdown.menu:Hide(); if activeDropdown==dropdown then activeDropdown=nil end end)
     dropdown:SetScript("OnEnter",function(self)
-        ApplyButtonHoverStyle(self)
+        if Theme.ApplyDropdownFieldState then Theme.ApplyDropdownFieldState(self,true) else ApplyButtonHoverStyle(self) end
         local options=type(self.optionsProvider)=="function" and self.optionsProvider() or self.optionsProvider or {}
         local current=self.getValue and self.getValue() or nil
         for _,option in ipairs(options) do
             if option.value==current then ShowOptionTooltip(self,option); break end
         end
     end)
-    dropdown:SetScript("OnLeave",function(self) ApplyButtonRestingStyle(self); HideOptionTooltip() end)
+    dropdown:SetScript("OnLeave",function(self)
+        if Theme.ApplyDropdownFieldState then Theme.ApplyDropdownFieldState(self,false) else ApplyButtonRestingStyle(self) end
+        HideOptionTooltip()
+    end)
     dropdown.RefreshText=function(self)
         local options=type(self.optionsProvider)=="function" and self.optionsProvider() or self.optionsProvider or {}
         local current=self.getValue and self.getValue() or nil

@@ -15,6 +15,7 @@ local HEADER = Theme.tabHeader or {
     summaryY = -66, summaryWidth = 890, summaryHeight = 14,
     analysisControlsY = -86, analysisContentY = -172,
 }
+local LAYOUT = Theme.analysisLayout or { outerX = 12, width = 928, filterY = -86, filterHeight = 96, filterLabelY = -36, resultsY = -196, detailsY = -466, detailsHeight = 300 }
 
 local SLOT_ORDER = {
     "Head", "Neck", "Shoulders", "Back", "Chest", "Wrist", "Main Hand", "Off Hand",
@@ -95,7 +96,7 @@ local function CreateComparisonBar(parent, value, maxValue, minValue, lowerIsBet
     local background = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     background:SetPoint("TOPLEFT", parent, "TOPLEFT", PROFILE_BAR_X, -17)
     background:SetSize(PROFILE_BAR_WIDTH, 9)
-    Style(background, { 0.012, 0.020, 0.044, 0.90 }, { 0.185, 0.300, 0.500, 0.50 })
+    Style(background, Color("barBg"), Color("barBorder"))
 
     local number = tonumber(value) or 0
     local maximum = tonumber(maxValue) or 0
@@ -326,9 +327,17 @@ local function BuildProfiles(tab)
 end
 
 local function Dropdown(parent, label, x, width, optionsFunc, selectedFunc, changedFunc)
-    Place(parent, label, x, -12, width, "GameFontDisableSmall", nil, Color("muted"))
-    local menu = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
-    menu:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 16, -30)
+    if Theme.CreateAnalysisFilterLabel then
+        Theme.CreateAnalysisFilterLabel(parent, label, x, width)
+    else
+        local labelText = Place(parent, label, x, LAYOUT.filterLabelY, width, "GameFontDisableSmall", nil, Color("muted"))
+        labelText:SetJustifyV("TOP")
+    end
+    local menu = KeyLab.UI.Theme.CreateLegacyDropdown(parent)
+    KeyLab.UI.Theme.StyleAnalysisFilterDropdown(menu)
+    menu:SetPoint("TOPLEFT", parent, "TOPLEFT",
+        x + (LAYOUT.filterControlOffsetX or -18),
+        LAYOUT.filterLabelY + (LAYOUT.filterControlOffsetY or -18))
     UIDropDownMenu_SetWidth(menu, width)
     UIDropDownMenu_Initialize(menu, function(_, level)
         for _, option in ipairs(optionsFunc() or {}) do
@@ -384,9 +393,9 @@ end
 
 local function BuildDynamic(tab, profiles, lowerIsBetter)
     Clear(tab.dynamic)
+    Clear(tab.detailsCard)
+    if Theme.StyleAnalysisDetails then Theme.StyleAnalysisDetails(tab.detailsCard) else Style(tab.detailsCard, Color("detailBg"), Color("detailBorder")) end
     if #profiles == 0 then
-        Place(tab.dynamic, "No matching gear profiles yet. New runs and boss pulls will save the equipped setup at their start.", 10, -30, PROFILE_WIDTH - 20, "GameFontHighlight", 14, Color("muted"), "CENTER"):SetHeight(50)
-        tab.dynamic:SetHeight(560)
         return
     end
 
@@ -413,23 +422,39 @@ local function BuildDynamic(tab, profiles, lowerIsBetter)
     for index = 1, showCount do
         local profile = profiles[index]
         local profileSignature, profileSpec = profile.signature, profile.spec
-        local card = Panel(tab.dynamic, 0, y, PROFILE_WIDTH, PROFILE_CARD_HEIGHT, profile.signature == tab.selectedSignature and profile.spec == tab.selectedProfileSpec and Color("gold") or Color("cardBorder"))
+        local isSelected = profile.signature == tab.selectedSignature and profile.spec == tab.selectedProfileSpec
+        local card = Panel(tab.dynamic, 0, y, PROFILE_WIDTH, PROFILE_CARD_HEIGHT, isSelected and Color("gold") or Color("cardBorder"))
+        if Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(card, isSelected and "selected" or "normal") end
         card:EnableMouse(true)
         card:SetScript("OnMouseUp", function() tab.selectedSignature, tab.selectedProfileSpec = profileSignature, profileSpec; tab:Refresh() end)
-        Place(card, "#" .. index, 12, -11, 34, "GameFontNormal", 13, Color("gold"), "CENTER")
-        Place(card, "Gear Profile", 54, -11, 120, "GameFontNormal", nil, Color("text"))
-        Place(card, profile.spec, 180, -11, 135, "GameFontHighlightSmall", nil, Color("muted"))
+        card:SetScript("OnEnter", function(self)
+            if not isSelected and Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(self, "hover") end
+        end)
+        card:SetScript("OnLeave", function(self)
+            if not isSelected and Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(self, "normal") end
+        end)
+        card.rankText = Place(card, Theme.FormatRank and Theme.FormatRank(index) or tostring(index), 12, -11, 34, "GameFontNormal", nil, isSelected and Color("gold") or Color("blue"), "CENTER")
+        if Theme.ApplyTextRole then
+            Theme.ApplyTextRole(card.rankText, isSelected and "rowRankSelected" or "rowRank")
+        end
+        card.titleText = Place(card, "Gear Profile", 54, -11, 120, "GameFontNormal", nil, Color("text"))
+        if Theme.ApplyTextRole then Theme.ApplyTextRole(card.titleText, "rowTitle") end
+        card.specText = Place(card, profile.spec, 180, -11, 135, "GameFontHighlightSmall", nil, Color("muted"))
+        if Theme.ApplyTextRole then Theme.ApplyTextRole(card.specText, "rowMeta") end
         local averageItemLevel = tonumber(profile.gear and profile.gear.averageItemLevel)
         local itemLevelText = averageItemLevel and string.format("Avg Item Level: %.1f", averageItemLevel) or "Avg Item Level unavailable"
-        Place(card, itemLevelText, 320, -11, 280, "GameFontHighlightSmall", nil, averageItemLevel and Color("soft") or Color("muted"))
-        Place(card, string.format("%d use%s", profile.uses, profile.uses == 1 and "" or "s"), 608, -11, 80, "GameFontDisableSmall", nil, Color("muted"), "CENTER")
-        Place(card, profile.average ~= nil and ("Avg " .. FormatNumber(profile.average)) or "Outcome unavailable", 680, -11, 114, "GameFontNormal", nil, profile.average ~= nil and Color("blue") or Color("muted"), "RIGHT")
+        card.itemLevelText = Place(card, itemLevelText, 320, -11, 280, "GameFontHighlightSmall", nil, averageItemLevel and Color("soft") or Color("muted"))
+        if Theme.ApplyTextRole then Theme.ApplyTextRole(card.itemLevelText, "rowMeta", averageItemLevel and Color("soft") or Color("muted")) end
+        card.usesText = Place(card, string.format("%d use%s", profile.uses, profile.uses == 1 and "" or "s"), 608, -11, 80, "GameFontDisableSmall", nil, Color("muted"), "CENTER")
+        if Theme.ApplyTextRole then Theme.ApplyTextRole(card.usesText, "rowMeta") end
+        card.metricText = Place(card, profile.average ~= nil and ("Avg " .. FormatNumber(profile.average)) or "Outcome unavailable", 680, -11, 114, "GameFontNormal", nil, profile.average ~= nil and Color("blue") or Color("muted"), "RIGHT")
+        if Theme.ApplyTextRole then Theme.ApplyTextRole(card.metricText, "rowMetric", profile.average ~= nil and Color("blue") or Color("muted")) end
         if profile.average ~= nil then CreateComparisonBar(card, profile.average, maxValue, minValue or 0, lowerIsBetter) end
         y = y - PROFILE_CARD_HEIGHT - PROFILE_CARD_GAP
     end
 
-    local detail = Panel(tab.dynamic, 0, y - 10, PROFILE_WIDTH, 300, Color("detailBorder"))
-    Style(detail, Color("detailBg"), Color("detailBorder"))
+    local detail = tab.detailsCard
+    if Theme.StyleAnalysisDetails then Theme.StyleAnalysisDetails(detail) else Style(detail, Color("detailBg"), Color("detailBorder")) end
     local detailEncounter = selected.bestEncounter or selected.latestEncounter or {}
     Place(detail, "Selected Gear Profile", 16, -10, 250, "GameFontNormal", 14, Color("gold"))
     local outcomeSummary = selected.average ~= nil
@@ -449,7 +474,6 @@ local function BuildDynamic(tab, profiles, lowerIsBetter)
         local x = column == 0 and 16 or 476
         AddGearItem(detail, slotName, selected.gear.slots and selected.gear.slots[slotName], x, -104 - ((row - 1) * 23), 436)
     end
-    tab.dynamic:SetHeight(math.max(570, math.abs(y) + 320))
 end
 
 local function NewGearTab(mode)
@@ -504,31 +528,41 @@ local function NewGearTab(mode)
         if self.frame then return self.frame end
         local frame = CreateFrame("Frame", "KeyLab" .. self.key .. "Tab", parent, "BackdropTemplate")
         frame:SetAllPoints(parent)
-        Style(frame, Color("bg"), { 0, 0, 0, 0 })
+        if Theme.StyleAnalysisPage then Theme.StyleAnalysisPage(frame) else Style(frame, Color("bg"), { 0, 0, 0, 0 }) end
         self.frame = frame
-        local titleText = Place(frame, self.title, HEADER.x, HEADER.titleY, HEADER.titleWidth, "GameFontNormalLarge", HEADER.titleSize, Color("gold"))
-        titleText:SetHeight(HEADER.titleHeight)
-        local description = Place(frame, "Compare complete gear setups you actually used and the results you recorded with them.", HEADER.x, HEADER.descriptionY, HEADER.descriptionWidth, "GameFontHighlightSmall", nil, Color("muted"))
-        description:SetHeight(HEADER.descriptionHeight)
-        self.summary = Place(frame, "Loading gear profiles...", HEADER.x, HEADER.summaryY, HEADER.summaryWidth, "GameFontDisableSmall", nil, Color("muted"))
-        self.summary:SetHeight(HEADER.summaryHeight)
-
-        local controls = Panel(frame, 12, HEADER.analysisControlsY, PROFILE_WIDTH, 74, Color("softBorder"))
-        self.primaryDropdown = Dropdown(controls, mode == "raid" and "Boss" or "Dungeon", 16, 190, function() return tab.primaryOptions or {} end, function() return tab.selectedPrimary end, function(value)
+        local page = Theme.CreateAnalysisPage(
+            frame,
+            self.title,
+            "Compare complete gear setups you actually used and the results you recorded with them.",
+            { summaryText = "Loading gear profiles...", detailsHeight = LAYOUT.detailsHeight }
+        )
+        self.summary = page.summaryText
+        local controls = page.filterHeaderCard
+        local sharedWidths = Theme.analysisFourFilterWidths or { 185, 90, 170, 180 }
+        local primaryWidth, secondaryWidth, specWidth, metricWidth = unpack(sharedWidths)
+        local filterX = Theme.GetFilterPositions({ primaryWidth, secondaryWidth, specWidth, metricWidth }, { cardWidth = PROFILE_WIDTH })
+        local primaryX, secondaryX, specX, metricX = unpack(filterX)
+        self.primaryDropdown = Dropdown(controls, mode == "raid" and "Boss" or "Dungeon / Zone", primaryX, primaryWidth, function() return tab.primaryOptions or {} end, function() return tab.selectedPrimary end, function(value)
             tab.selectedPrimary, tab.selectedSecondary, tab.selectedSignature = value, nil, nil; tab:Refresh()
         end)
-        self.secondaryDropdown = Dropdown(controls, mode == "raid" and "Difficulty" or "Key", 252, 130, function() return tab.secondaryOptions or {} end, function() return tab.selectedSecondary end, function(value)
+        self.secondaryDropdown = Dropdown(controls, mode == "raid" and "Difficulty" or "Key Level", secondaryX, secondaryWidth, function() return tab.secondaryOptions or {} end, function() return tab.selectedSecondary end, function(value)
             tab.selectedSecondary, tab.selectedSignature = value, nil; tab:Refresh()
         end)
-        Place(controls, "Current Spec", 442, -12, 150, "GameFontDisableSmall", nil, Color("muted"))
-        self.specValue = Place(controls, "Loading...", 442, -38, 150, "GameFontHighlightSmall", nil, Color("gold"))
-        self.metricDropdown = Dropdown(controls, "Performance Metric", 632, 170, function() return tab.metricOptions or {} end, function() return tab.selectedMetricKey end, function(value)
+        if Theme.CreateAnalysisFilterLabel then
+            Theme.CreateAnalysisFilterLabel(controls, "Current Spec", specX, specWidth)
+        else
+            local specLabel = Place(controls, "Current Spec", specX, LAYOUT.filterLabelY, specWidth, "GameFontDisableSmall", nil, Color("muted"))
+            specLabel:SetJustifyV("TOP")
+        end
+        self.specValue = Place(controls, "Loading...", specX, LAYOUT.filterLabelY - 26, specWidth, "GameFontHighlightSmall", nil, Color("text"))
+        self.specValue:SetJustifyV("TOP")
+        if Theme.CreateFieldUnderline then Theme.CreateFieldUnderline(controls, specX, LAYOUT.filterLabelY, specWidth, Color("gold")) end
+        self.metricDropdown = Dropdown(controls, "Performance Metric", metricX, metricWidth, function() return tab.metricOptions or {} end, function() return tab.selectedMetricKey end, function(value)
             tab.selectedMetricKey, tab.selectedSignature = value, nil; tab:Refresh()
         end)
 
-        self.dynamic = CreateFrame("Frame", nil, frame)
-        self.dynamic:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, HEADER.analysisContentY)
-        self.dynamic:SetSize(PROFILE_WIDTH, 570)
+        self.dynamic = page.encountersCards
+        self.detailsCard = page.detailsCard
         frame:SetScript("OnShow", function() tab:Refresh() end)
         return frame
     end

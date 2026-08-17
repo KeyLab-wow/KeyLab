@@ -12,6 +12,14 @@ local Theme = KeyLab.UI.Theme or {}
 local Analysis = KeyLab.Analysis and KeyLab.Analysis.Practice or {}
 local SPACING = Theme.spacing or { card = 14 }
 local HEADER = Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16 }
+local ANALYSIS_LAYOUT = Theme.analysisLayout or { outerX = 12, width = 928 }
+local PRACTICE_LAYOUT = Theme.practiceLayout or {
+    outerX = ANALYSIS_LAYOUT.outerX, width = ANALYSIS_LAYOUT.width,
+    newSessionY = -86, newSessionHeight = 96,
+    filtersY = -196, filtersHeight = 96,
+    tableY = -306, pageSize = 5,
+    detailsY = -592, detailsHeight = 192,
+}
 
 local COLORS = (Theme and Theme.colors) or {
     bg = {0.018, 0.026, 0.056, 0.96},
@@ -39,18 +47,16 @@ local TABLE_COLUMNS = {
     status = { x = 722, width = 108, label = "Status" },
 }
 
-local PAGE_SIZE = 6
+local PAGE_SIZE = PRACTICE_LAYOUT.pageSize
 local TABLE_ROW_HEIGHT = 27
 local TABLE_HEIGHT = 137 + (PAGE_SIZE * TABLE_ROW_HEIGHT)
 local PAGER_TEXT_Y = -(109 + (PAGE_SIZE * TABLE_ROW_HEIGHT))
 local PAGER_BUTTON_Y = -(101 + (PAGE_SIZE * TABLE_ROW_HEIGHT))
-local PANEL_X = 12
+local PANEL_X = PRACTICE_LAYOUT.outerX
+local PANEL_WIDTH = PRACTICE_LAYOUT.width
 
-local NEW_SESSION_HEIGHT = 86
-local LAYOUT = { newSessionY = -78 }
-LAYOUT.filtersY = LAYOUT.newSessionY - NEW_SESSION_HEIGHT - SPACING.card
-LAYOUT.tableY = LAYOUT.filtersY - 78 - SPACING.card
-LAYOUT.detailsY = LAYOUT.tableY - TABLE_HEIGHT - SPACING.card
+local NEW_SESSION_HEIGHT = PRACTICE_LAYOUT.newSessionHeight
+local LAYOUT = PRACTICE_LAYOUT
 
 local METRIC_COLORS = {
     damageDone = COLORS.orange,
@@ -149,10 +155,7 @@ local function MakeMovableWindow(frame, dragHeight)
 end
 
 local function MakeButton(parent, text, width, height)
-    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    button:SetSize(width or 110, height or 24)
-    button:SetText(text or "")
-    return button
+    return Theme.CreateButton(parent, text, width or 110, height or 24)
 end
 
 local function MakeSmallButton(parent, text, width, height)
@@ -182,7 +185,8 @@ local function MakeDropdown(parent, width, x, y, labelText, onInitialize)
     label:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 2, y)
     label:SetSize(width + 30, 16)
 
-    local dropdown = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
+    local dropdown = KeyLab.UI.Theme.CreateLegacyDropdown(parent)
+    KeyLab.UI.Theme.StyleDropdownField(dropdown)
     dropdown:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 18, y - 18)
     UIDropDownMenu_SetWidth(dropdown, width or 150)
     UIDropDownMenu_Initialize(dropdown, onInitialize)
@@ -603,7 +607,8 @@ local statusMenuFrame = nil
 
 local function GetStatusMenuFrame()
     if not statusMenuFrame then
-        statusMenuFrame = CreateFrame("Frame", "KeyLabPracticeStatusMenu", UIParent, "UIDropDownMenuTemplate")
+        statusMenuFrame = KeyLab.UI.Theme.CreateLegacyDropdown(UIParent, "KeyLabPracticeStatusMenu")
+        statusMenuFrame:Hide()
     end
     return statusMenuFrame
 end
@@ -737,10 +742,8 @@ local function EnsureMonitor()
         return false
     end
 
-    frame.stop = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    frame.stop:SetSize(130, 28)
+    frame.stop = MakeButton(frame, "Stop Session", 130, 28)
     frame.stop:SetPoint("BOTTOM", frame, "BOTTOM", 0, 18)
-    frame.stop:SetText("Stop Session")
     frame.stop:SetScript("OnClick", function()
         frame.pendingStop = true
         frame.stopRetryElapsed = 0
@@ -854,9 +857,10 @@ function Practice:RefreshDropdowns(baseSessions)
 end
 
 function Practice:BuildNewSession(parent)
-    local panel = MakePanel(parent, PANEL_X, LAYOUT.newSessionY, 908, NEW_SESSION_HEIGHT, "New Session")
+    local panel = MakePanel(parent, PANEL_X, LAYOUT.newSessionY, PANEL_WIDTH, NEW_SESSION_HEIGHT, "New Session")
     local active = Capture().GetActiveSession and Capture().GetActiveSession()
-    local actionX = 756
+    local startPositions = Theme.GetFilterPositions({ 105, 95, 390, 126 }, { cardWidth = PANEL_WIDTH })
+    local typeX, durationX, sequenceX, actionX = unpack(startPositions)
 
     if active then
         local lengthText = active.targetDurationSeconds and FormatDuration(active.targetDurationSeconds) or "Manual"
@@ -871,7 +875,7 @@ function Practice:BuildNewSession(parent)
         return panel
     end
 
-    self.startTypeDropdown = MakeDropdown(panel, 105, 16, -36, "Session Type", function(_, level)
+    self.startTypeDropdown = MakeDropdown(panel, 105, typeX, -36, "Session Type", function(_, level)
         for _, option in ipairs(TestTypeOptions()) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.label
@@ -884,7 +888,7 @@ function Practice:BuildNewSession(parent)
     end)
 
 
-    self.startDurationDropdown = MakeDropdown(panel, 95, 151, -36, "Test Length", function(_, level)
+    self.startDurationDropdown = MakeDropdown(panel, 95, durationX, -36, "Test Length", function(_, level)
         for _, option in ipairs(DurationOptions(false)) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.label
@@ -896,7 +900,7 @@ function Practice:BuildNewSession(parent)
         end
     end)
 
-    self.startSequenceDropdown = MakeDropdown(panel, 390, 276, -36, "Macro Sequence Version", function(_, level)
+    self.startSequenceDropdown = MakeDropdown(panel, 390, sequenceX, -36, "Macro Sequence Version", function(_, level)
         for _, option in ipairs(GetSequenceVersionOptions()) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.label
@@ -932,12 +936,14 @@ function Practice:BuildNewSession(parent)
 end
 
 function Practice:BuildFilters(parent, baseSessions)
-    local panel = MakePanel(parent, PANEL_X, LAYOUT.filtersY, 908, 78, "Filters")
+    local panel = MakePanel(parent, PANEL_X, LAYOUT.filtersY, PANEL_WIDTH, LAYOUT.filtersHeight, "Filters")
+    local filterPositions = Theme.GetFilterPositions({ 140, 115, 105, 120, 120 }, { cardWidth = PANEL_WIDTH })
+    local specX, typeX, durationX, outcomeX, statusX = unpack(filterPositions)
 
-    AddLine(panel, "Current Spec", 18, -34, 140, COLORS.muted, "GameFontDisableSmall")
-    self.currentSpecValue = AddLine(panel, CurrentSpecName(), 18, -58, 140, COLORS.gold, "GameFontHighlightSmall")
+    AddLine(panel, "Current Spec", specX, -36, 140, COLORS.muted, "GameFontDisableSmall")
+    self.currentSpecValue = AddLine(panel, CurrentSpecName(), specX, -62, 140, COLORS.gold, "GameFontHighlightSmall")
 
-    self.typeFilterDropdown = MakeDropdown(panel, 115, 174, -34, "Session Type", function(_, level)
+    self.typeFilterDropdown = MakeDropdown(panel, 115, typeX, -36, "Session Type", function(_, level)
         local all = UIDropDownMenu_CreateInfo()
         all.text = "All Types"
         all.func = function()
@@ -962,7 +968,7 @@ function Practice:BuildFilters(parent, baseSessions)
     end)
 
 
-    self.durationFilterDropdown = MakeDropdown(panel, 105, 324, -34, "Test Length", function(_, level)
+    self.durationFilterDropdown = MakeDropdown(panel, 105, durationX, -36, "Test Length", function(_, level)
         for _, option in ipairs(DurationOptions(true)) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.label
@@ -976,7 +982,7 @@ function Practice:BuildFilters(parent, baseSessions)
         end
     end)
 
-    self.outcomeDropdown = MakeDropdown(panel, 120, 462, -34, "Performance Metric", function(_, level)
+    self.outcomeDropdown = MakeDropdown(panel, 120, outcomeX, -36, "Performance Metric", function(_, level)
         for _, option in ipairs(MetricOptions()) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.label
@@ -990,7 +996,7 @@ function Practice:BuildFilters(parent, baseSessions)
         end
     end)
 
-    self.statusFilterDropdown = MakeDropdown(panel, 120, 620, -34, "Status", function(_, level)
+    self.statusFilterDropdown = MakeDropdown(panel, 120, statusX, -36, "Status", function(_, level)
         for _, option in ipairs(StatusFilterOptions()) do
             local info = UIDropDownMenu_CreateInfo()
             info.text = option.label
@@ -1009,7 +1015,7 @@ function Practice:BuildFilters(parent, baseSessions)
 end
 
 function Practice:BuildSessionTable(parent, sessions, baseCount)
-    local panel = MakePanel(parent, PANEL_X, LAYOUT.tableY, 908, TABLE_HEIGHT, "Saved Practice Sessions")
+    local panel = MakePanel(parent, PANEL_X, LAYOUT.tableY, PANEL_WIDTH, TABLE_HEIGHT, "Saved Practice Sessions")
     local totalPages = math.max(1, math.ceil(#sessions / PAGE_SIZE))
     self.currentPage = Clamp(self.currentPage or 1, 1, totalPages)
     local startIndex = ((self.currentPage - 1) * PAGE_SIZE) + 1
@@ -1026,7 +1032,6 @@ function Practice:BuildSessionTable(parent, sessions, baseCount)
     end
 
     if #sessions == 0 then
-        AddLine(panel, "No practice sessions matched these filters.", 14, -64, 830, COLORS.muted, "GameFontNormal")
         return panel
     end
 
@@ -1054,7 +1059,7 @@ function Practice:BuildSessionTable(parent, sessions, baseCount)
 
         local row = CreateFrame("Button", nil, panel, "BackdropTemplate")
         row:SetPoint("TOPLEFT", panel, "TOPLEFT", 10, y + 5)
-        row:SetSize(828, 25)
+        row:SetSize(848, 25)
         SetBackdrop(row, COLORS.bg, session == self.selectedSession and COLORS.gold or COLORS.cardBorder)
         row:SetScript("OnClick", function()
             Practice:SelectSession(session)
@@ -1077,7 +1082,7 @@ function Practice:BuildSessionTable(parent, sessions, baseCount)
         end)
 
         local delete = MakeButton(panel, "Delete", 62, 22)
-        delete:SetPoint("TOPLEFT", panel, "TOPLEFT", 842, y + 2)
+        delete:SetPoint("TOPLEFT", panel, "TOPLEFT", 862, y + 2)
         delete:SetScript("OnClick", function()
             RegisterDeletePopup()
             StaticPopup_Show("KEYLAB_DELETE_PRACTICE_SESSION", nil, nil, session.id)
@@ -1088,7 +1093,7 @@ function Practice:BuildSessionTable(parent, sessions, baseCount)
     pageText:SetJustifyH("LEFT")
 
     local back = MakeButton(panel, "Back", 82, 24)
-    back:SetPoint("TOPLEFT", panel, "TOPLEFT", 686, PAGER_BUTTON_Y)
+    back:SetPoint("TOPLEFT", panel, "TOPLEFT", 706, PAGER_BUTTON_Y)
     back:SetScript("OnClick", function()
         Practice.currentPage = math.max(1, (Practice.currentPage or 1) - 1)
         Practice.selectedSessionID = nil
@@ -1097,7 +1102,7 @@ function Practice:BuildSessionTable(parent, sessions, baseCount)
     if self.currentPage <= 1 then back:Disable() end
 
     local nextButton = MakeButton(panel, "Next", 82, 24)
-    nextButton:SetPoint("TOPLEFT", panel, "TOPLEFT", 782, PAGER_BUTTON_Y)
+    nextButton:SetPoint("TOPLEFT", panel, "TOPLEFT", 802, PAGER_BUTTON_Y)
     nextButton:SetScript("OnClick", function()
         Practice.currentPage = math.min(totalPages, (Practice.currentPage or 1) + 1)
         Practice.selectedSessionID = nil
@@ -1109,9 +1114,8 @@ function Practice:BuildSessionTable(parent, sessions, baseCount)
 end
 
 function Practice:BuildDetails(parent, session)
-    local panel = MakePanel(parent, PANEL_X, LAYOUT.detailsY, 908, 192, "Session Details")
+    local panel = MakePanel(parent, PANEL_X, LAYOUT.detailsY, PANEL_WIDTH, LAYOUT.detailsHeight, "Session Details")
     if not session then
-        AddLine(panel, "Select a saved Practice Session to see its setup and results.", 14, -44, 830, COLORS.muted, "GameFontNormal")
         return panel
     end
 
@@ -1183,11 +1187,11 @@ function Practice:Refresh()
     self.selectedStartDuration = self.selectedStartDuration or 60
     self.selectedStatusFilter = self.selectedStatusFilter or "all"
 
-    Theme.CreateTabHeader(
+    Theme.CreateNameDescCard(
         self.content,
         "Practice",
         "Test your setup at a training dummy and compare saved results. Choose a Macro Sequence version to track the rotation used.",
-        { descriptionWidth = 860 }
+        {}
     )
 
     local baseSessions = GetSessions()
@@ -1219,7 +1223,6 @@ function Practice:Create(parent)
     local frame = CreateFrame("Frame", "KeyLabPracticeTab", parent, "BackdropTemplate")
     frame:SetAllPoints(parent)
     SetBackdrop(frame, COLORS.bg, {0, 0, 0, 0})
-
     local content = CreateFrame("Frame", nil, frame)
     content:SetAllPoints(frame)
 

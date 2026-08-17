@@ -33,6 +33,8 @@ local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
 local TalentCapture = KeyLab.Capture and KeyLab.Capture.Talents or {}
 local SPACING = KeyLab.UI.Theme and KeyLab.UI.Theme.spacing or { compactCard = 8, section = 18 }
 local HEADER = KeyLab.UI.Theme and KeyLab.UI.Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16, analysisControlsY = -86, analysisContentY = -172 }
+local Theme = KeyLab.UI.Theme or {}
+local LAYOUT = Theme.analysisLayout or { outerX = 12, width = 928, filterY = -86, filterHeight = 96, filterLabelY = -36, resultsY = -196, detailsY = -466 }
 
 -- =========================================================
 -- EASY EDIT SETTINGS
@@ -46,7 +48,7 @@ local CFG = {
         height = 820,
     },
 
-    colors = {
+    colors = Theme.analysisColors or {
         bg = {0.018, 0.026, 0.056, 0.96},
         controlBg = {0.026, 0.046, 0.088, 0.94},
 
@@ -84,16 +86,16 @@ local CFG = {
     },
 
     controls = {
-        x = 12,
-        y = HEADER.analysisControlsY,
-        width = 928,
-        height = 74,
+        x = LAYOUT.outerX,
+        y = LAYOUT.filterY,
+        width = LAYOUT.width,
+        height = LAYOUT.filterHeight,
 
         dungeonX = 18,
         keyX = 255,
         specX = 390,
         outcomeX = 610,
-        labelY = -12,
+        labelY = LAYOUT.filterLabelY,
 
         dungeonWidth = 185,
         keyWidth = 90,
@@ -102,9 +104,9 @@ local CFG = {
     },
 
     list = {
-        x = 12,
-        y = HEADER.analysisContentY,
-        width = 928,
+        x = LAYOUT.outerX,
+        y = LAYOUT.resultsY,
+        width = LAYOUT.width,
     },
 
     card = {
@@ -126,8 +128,9 @@ local CFG = {
     },
 
     details = {
-        x = 12,
-        width = 928,
+        x = LAYOUT.outerX,
+        y = LAYOUT.detailsY,
+        width = LAYOUT.width,
         minHeight = 300,
         maxHeight = 300,
         gapAfterCards = SPACING.section,
@@ -151,12 +154,12 @@ local CFG = {
 -- =========================================================
 
 local function ApplyColor(fs, color)
-    if fs and color then
-        fs:SetTextColor(color[1], color[2], color[3], color[4] or 1)
-    end
+    if Theme.ApplyColor then Theme.ApplyColor(fs, color); return end
+    if fs and color then fs:SetTextColor(color[1], color[2], color[3], color[4] or 1) end
 end
 
 local function StylePanel(frame, bg, border)
+    if Theme.StylePanel then Theme.StylePanel(frame, bg, border); return end
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -174,13 +177,14 @@ local function SetBorder(frame, border)
 end
 
 local function AddFont(parent, text, template, x, y, width)
-    local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontNormal")
+    local fs = Theme.CreateText and Theme.CreateText(parent, text, template or "GameFontNormal", nil, CFG.colors.text)
+        or parent:CreateFontString(nil, "OVERLAY", template or "GameFontNormal")
     fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     fs:SetWidth(width or 700)
     fs:SetJustifyH("LEFT")
     fs:SetJustifyV("TOP")
     fs:SetWordWrap(true)
-    fs:SetText(text or "")
+    if not Theme.CreateText then fs:SetText(text or "") end
     return fs
 end
 
@@ -269,12 +273,11 @@ local function SetDropdownText(dropdown, text)
 end
 
 local function MakeDropdown(parent, width, x, y, labelText, onInitialize)
-    local label = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    label:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    label:SetText(labelText)
+    local label = AddFont(parent, labelText, "GameFontDisableSmall", x, y, width or 160)
     ApplyColor(label, CFG.colors.muted)
 
-    local dropdown = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
+    local dropdown = KeyLab.UI.Theme.CreateLegacyDropdown(parent)
+    KeyLab.UI.Theme.StyleAnalysisFilterDropdown(dropdown)
     dropdown:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 18, y - 18)
     UIDropDownMenu_SetWidth(dropdown, width or 160)
     UIDropDownMenu_Initialize(dropdown, onInitialize)
@@ -887,17 +890,11 @@ end
 
 local function BuildDetails(panel, cardData, variantNumber)
     ClearChildren(panel)
-    StylePanel(panel, CFG.colors.detailBg, CFG.colors.detailBorder)
+    if Theme.StyleAnalysisDetails then Theme.StyleAnalysisDetails(panel) else StylePanel(panel, CFG.colors.detailBg, CFG.colors.detailBorder) end
 
     local padding = CFG.details.padding
 
     if not cardData then
-        local title = AddFont(panel, "Talent Build Details", "GameFontNormalLarge", padding, -16, CFG.details.width - 28)
-        ApplyColor(title, CFG.colors.gold)
-
-        local body = AddFont(panel, "Select a build above to see its best saved run, stats, talent string, and results.", "GameFontHighlightSmall", padding, -48, CFG.details.width - 28)
-        ApplyColor(body, CFG.colors.muted)
-
         panel:SetHeight(CFG.details.minHeight)
         return CFG.details.minHeight
     end
@@ -943,7 +940,8 @@ local function BuildDetails(panel, cardData, variantNumber)
     local talentString = GetTalentString(encounter)
 
     if talentString ~= "" then
-        local editBox = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
+        local editBox = Theme.CreateInput and Theme.CreateInput(panel, CFG.details.colTalentW - 8, 30)
+            or CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
         editBox:SetPoint("TOPLEFT", panel, "TOPLEFT", CFG.details.colTalentX + 4, sectionTop - 26)
         editBox:SetSize(CFG.details.colTalentW - 8, 30)
         editBox:SetAutoFocus(false)
@@ -952,7 +950,8 @@ local function BuildDetails(panel, cardData, variantNumber)
         editBox:SetCursorPosition(0)
         editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 
-        local copyButton = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+        local copyButton = Theme.CreateButton and Theme.CreateButton(panel, "Copy", 72, 22)
+            or CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
         copyButton:SetSize(72, 22)
         copyButton:SetPoint("TOPLEFT", panel, "TOPLEFT", CFG.details.colTalentX + 4, sectionTop - 62)
         copyButton:SetText("Copy")
@@ -1004,7 +1003,7 @@ end
 local function CreateBuildCard(parent, cardData, displayIndex, maxValue, minValue)
     local card = CreateFrame("Button", nil, parent, "BackdropTemplate")
     card:SetSize(CFG.card.width, CFG.card.height)
-    StylePanel(card, CFG.colors.cardBg, CFG.colors.cardBorder)
+    if Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(card, "normal") else StylePanel(card, CFG.colors.cardBg, CFG.colors.cardBorder) end
 
     card.cardData = cardData
     card.displayIndex = displayIndex
@@ -1013,7 +1012,8 @@ local function CreateBuildCard(parent, cardData, displayIndex, maxValue, minValu
     local metricLabel = GetMetricLabel(metricKey)
     local value = cardData.bestValue
 
-    local rank = AddFont(card, tostring(displayIndex) .. ".", "GameFontNormal", CFG.card.rankX, -13, 28)
+    local rank = AddFont(card, Theme.FormatRank and Theme.FormatRank(displayIndex) or tostring(displayIndex), "GameFontNormal", CFG.card.rankX, -13, 28)
+    card.rankText = rank
     ApplyColor(rank, CFG.colors.gold)
 
     local titleText = GetVariantTitle(cardData, displayIndex)
@@ -1037,13 +1037,13 @@ local function CreateBuildCard(parent, cardData, displayIndex, maxValue, minValu
 
     card:SetScript("OnEnter", function(self)
         if self.cardData ~= TalentStatBuild.selectedCardData then
-            SetBorder(self, CFG.colors.cardHoverBorder)
+            if Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(self, "hover") else SetBorder(self, CFG.colors.cardHoverBorder) end
         end
     end)
 
     card:SetScript("OnLeave", function(self)
         if self.cardData ~= TalentStatBuild.selectedCardData then
-            SetBorder(self, CFG.colors.cardBorder)
+            if Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(self, "normal") else SetBorder(self, CFG.colors.cardBorder) end
         end
     end)
 
@@ -1143,7 +1143,9 @@ function TalentStatBuild:RefreshSelection()
     for _, card in ipairs(self.cards or {}) do
         local selected = card.cardData == self.selectedCardData
 
-        if selected then
+        if Theme.StyleAnalysisRow then
+            Theme.StyleAnalysisRow(card, selected and "selected" or "normal")
+        elseif selected then
             StylePanel(card, CFG.colors.cardBg, CFG.colors.cardSelectedBorder)
         else
             StylePanel(card, CFG.colors.cardBg, CFG.colors.cardBorder)
@@ -1172,7 +1174,7 @@ function TalentStatBuild:LayoutCards()
 
     if self.detailPanel then
         self.detailPanel:ClearAllPoints()
-        self.detailPanel:SetPoint("TOPLEFT", self.frame, "TOPLEFT", CFG.details.x, y - CFG.details.gapAfterCards)
+        self.detailPanel:SetPoint("TOPLEFT", self.frame, "TOPLEFT", CFG.details.x, CFG.details.y)
     end
 end
 
@@ -1201,8 +1203,7 @@ function TalentStatBuild:Refresh()
     end
 
     if #cards == 0 then
-        self.emptyText:Show()
-        self.emptyText:SetText("No saved talent builds match these filters yet.")
+        self.emptyText:Hide()
         self.selectedCardData = nil
         self.selectedIndex = nil
         self:RefreshSelection()
@@ -1255,33 +1256,23 @@ end
 function TalentStatBuild:Create(parent)
     local frame = CreateFrame("Frame", "KeyLabTalentStatBuildTab", parent, "BackdropTemplate")
     frame:SetAllPoints(parent)
-    StylePanel(frame, CFG.colors.bg, {0, 0, 0, 0})
+    if Theme.StyleAnalysisPage then Theme.StyleAnalysisPage(frame) else StylePanel(frame, CFG.colors.bg, {0, 0, 0, 0}) end
 
     self.frame = frame
     self.cards = {}
-
-    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.header.x, CFG.header.y)
-    title:SetFont(STANDARD_TEXT_FONT, HEADER.titleSize, "")
-    title:SetText("M+ Talent Builds")
-    ApplyColor(title, CFG.colors.gold)
-
-    local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-    subtitle:SetWidth(CFG.header.subtitleWidth)
-    subtitle:SetJustifyH("LEFT")
-    subtitle:SetText("Compare the talent builds you used in Mythic+ and see their best saved results.")
-    ApplyColor(subtitle, CFG.colors.muted)
-
-    self.summaryText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    self.summaryText:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -10)
-    self.summaryText:SetText("Loading talent build data...")
-    ApplyColor(self.summaryText, CFG.colors.soft)
-
-    local controls = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    controls:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.controls.x, CFG.controls.y)
-    controls:SetSize(CFG.controls.width, CFG.controls.height)
-    StylePanel(controls, CFG.colors.controlBg, CFG.colors.cardBorder)
+    local page = Theme.CreateAnalysisPage(
+        frame,
+        "M+ Talent Builds",
+        "Compare the talent builds you used in Mythic+ and see their best saved results.",
+        { summaryText = "Loading talent build data...", detailsHeight = CFG.details.minHeight }
+    )
+    self.summaryText = page.summaryText
+    local controls = page.filterHeaderCard
+    local filterX = Theme.GetFilterPositions({
+        CFG.controls.dungeonWidth, CFG.controls.keyWidth,
+        CFG.controls.specWidth, CFG.controls.outcomeWidth,
+    }, { cardWidth = CFG.controls.width })
+    CFG.controls.dungeonX, CFG.controls.keyX, CFG.controls.specX, CFG.controls.outcomeX = unpack(filterX)
 
     self.dungeonDropdown = MakeDropdown(controls, CFG.controls.dungeonWidth, CFG.controls.dungeonX, CFG.controls.labelY, "Dungeon / Zone", function(_, level)
         local options = GetDungeonOptions(TalentStatBuild.currentSpecEncounters or TalentStatBuild.allEncounters or GetEncounterList())
@@ -1316,19 +1307,12 @@ function TalentStatBuild:Create(parent)
         end
     end)
 
-    local specLabel = controls:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    specLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", CFG.controls.specX, CFG.controls.labelY)
-    specLabel:SetWidth(CFG.controls.specWidth)
-    specLabel:SetJustifyH("LEFT")
-    specLabel:SetText("Current Spec")
+    local specLabel = AddFont(controls, "Current Spec", "GameFontDisableSmall", CFG.controls.specX, CFG.controls.labelY, CFG.controls.specWidth)
     ApplyColor(specLabel, CFG.colors.muted)
 
-    self.specValue = controls:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    self.specValue:SetPoint("TOPLEFT", controls, "TOPLEFT", CFG.controls.specX, CFG.controls.labelY - 26)
-    self.specValue:SetWidth(CFG.controls.specWidth)
-    self.specValue:SetJustifyH("LEFT")
-    self.specValue:SetText("Loading...")
-    ApplyColor(self.specValue, CFG.colors.gold)
+    self.specValue = AddFont(controls, "Loading...", "GameFontHighlightSmall", CFG.controls.specX, CFG.controls.labelY - 26, CFG.controls.specWidth)
+    ApplyColor(self.specValue, CFG.colors.text)
+    if Theme.CreateFieldUnderline then Theme.CreateFieldUnderline(controls, CFG.controls.specX, CFG.controls.labelY, CFG.controls.specWidth, CFG.colors.gold) end
 
     self.outcomeDropdown = MakeDropdown(controls, CFG.controls.outcomeWidth, CFG.controls.outcomeX, CFG.controls.labelY, "Performance Metric", function(_, level)
         local options = GetMetricOptions()
@@ -1346,17 +1330,10 @@ function TalentStatBuild:Create(parent)
         end
     end)
 
-    self.emptyText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    self.emptyText:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.list.x, CFG.list.y)
-    self.emptyText:SetWidth(CFG.list.width)
-    self.emptyText:SetJustifyH("LEFT")
-    self.emptyText:SetText("No talent build data captured yet.")
-    ApplyColor(self.emptyText, CFG.colors.text)
+    self.emptyText = AddFont(page.encountersCards, "", "GameFontHighlight", 0, 0, CFG.list.width)
     self.emptyText:Hide()
 
-    self.detailPanel = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    self.detailPanel:SetSize(CFG.details.width, CFG.details.minHeight)
-    StylePanel(self.detailPanel, CFG.colors.detailBg, CFG.colors.detailBorder)
+    self.detailPanel = page.detailsCard
     self.detailPanel:Show()
 
     frame:SetScript("OnShow", function()

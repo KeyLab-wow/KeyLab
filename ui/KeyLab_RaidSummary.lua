@@ -798,12 +798,13 @@ function RaidSummary:Create(parent)
         "Last Raid",
         "Review your latest raid session and see how each boss pull went."
     )
+    if KeyLab.UI.SeasonFilter then KeyLab.UI.SeasonFilter.Attach(frame) end
 
     local historyLabel = Text(frame, "View one of your latest saved raid sessions", "GameFontDisableSmall", nil, Color("muted"))
     historyLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -83)
     historyLabel:SetSize(280, 18)
 
-    self.historyDropdown = CreateFrame("Frame", "KeyLabLastRaidHistoryDropdown", frame, "UIDropDownMenuTemplate")
+    self.historyDropdown = KeyLab.UI.Theme.CreateLegacyDropdown(frame, "KeyLabLastRaidHistoryDropdown")
     self.historyDropdown:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -98)
     UIDropDownMenu_SetWidth(self.historyDropdown, 420)
     UIDropDownMenu_Initialize(self.historyDropdown, function(_, level)

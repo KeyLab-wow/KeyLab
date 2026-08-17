@@ -56,16 +56,28 @@ local TRACK_COLORS = {
     Myth = COLORS.purple,
 }
 
-local DASHBOARD_CURRENCIES = {
-    { name = "Adventurer Dawncrest", currencyID = 3383 },
-    { name = "Veteran Dawncrest", currencyID = 3341 },
-    { name = "Champion Dawncrest", currencyID = 3343 },
-    { name = "Hero Dawncrest", currencyID = 3345 },
-    { name = "Myth Dawncrest", currencyID = 3347 },
-    { name = "Nebulous Voidcore", currencyID = 3418 },
-    { name = "Dawnlight Manaflux", currencyID = 3378 },
-    { name = "Ascendant Voidcore", itemID = 268552 },
+local DASHBOARD_CURRENCY_KEYS = {
+    "adventurerCrests", "veteranCrests", "championCrests", "heroCrests",
+    "mythCrests", "nebulousVoidcore", "venomblightManaflux", "ascendantVenomstone",
 }
+
+local function DashboardCurrencies()
+    local db = KeyLab and KeyLab.GearingDatabase
+    local currencyKeys = db and db.CurrencyKeys or {}
+    local currencies = {}
+    for _, key in ipairs(DASHBOARD_CURRENCY_KEYS) do
+        local entry = currencyKeys[key]
+        if entry then
+            table.insert(currencies, {
+                name = entry.label or key,
+                currencyID = entry.type == "currency" and entry.id or nil,
+                itemID = entry.type == "item" and entry.id or nil,
+                pending = entry.pending == true,
+            })
+        end
+    end
+    return currencies
+end
 
 local function Analysis()
     return KeyLab and KeyLab.GearingAnalysis or {}
@@ -293,7 +305,7 @@ end
 
 function GearDashboard:BuildCurrencyCard(parent)
     self.currencyRows = {}
-    for index, currency in ipairs(DASHBOARD_CURRENCIES) do
+    for index, currency in ipairs(DashboardCurrencies()) do
         local column = (index - 1) % 2
         local row = math.floor((index - 1) / 2)
         local x = 10 + (column * 150)
@@ -308,6 +320,7 @@ function GearDashboard:BuildCurrencyCard(parent)
         table.insert(self.currencyRows, {
             currencyID = currency.currencyID,
             itemID = currency.itemID,
+            pending = currency.pending == true,
             label = label,
             value = value,
         })
@@ -564,8 +577,12 @@ end
 
 function GearDashboard:RefreshCurrencies()
     for _, row in ipairs(self.currencyRows or {}) do
-        local quantity = row.itemID and GetBagItemQuantity(row.itemID) or GetCurrencyQuantity(row.currencyID)
-        row.value:SetText(FormatCurrencyQuantity(quantity))
+        if row.pending then
+            row.value:SetText("-")
+        else
+            local quantity = row.itemID and GetBagItemQuantity(row.itemID) or GetCurrencyQuantity(row.currencyID)
+            row.value:SetText(FormatCurrencyQuantity(quantity))
+        end
     end
 end
 

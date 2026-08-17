@@ -123,6 +123,16 @@ function LFGTooltips.OpenManual()
     return false
 end
 
+function LFGTooltips.ReopenShoppingList()
+    if groupFinderSessionActive and KeyLab.GearTargetsWindow
+        and KeyLab.GearTargetsWindow.ShowForLFG then
+        dismissedForCurrentSession = false
+        KeyLab.GearTargetsWindow.ShowForLFG()
+        return true
+    end
+    return LFGTooltips.OpenManual()
+end
+
 function LFGTooltips.InstallHooks()
     HookFunction("LFGListUtil_SetSearchEntryTooltip")
     HookFunction("LFGListSearchEntry_OnEnter")

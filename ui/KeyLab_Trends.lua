@@ -32,6 +32,7 @@ local Theme = KeyLab.UI.Theme or {}
 local EncounterData = KeyLab.Analysis and KeyLab.Analysis.EncounterData or {}
 local SPACING = Theme.spacing or { card = 14 }
 local HEADER = Theme.tabHeader or { x = 18, titleY = -18, titleSize = 16, analysisControlsY = -86 }
+local ANALYSIS_LAYOUT = Theme.analysisLayout or { outerX = 12, width = 928, filterY = -86, filterHeight = 96, filterLabelY = -36, resultsY = -196, resultsHeight = 252 }
 
 -- =========================================================
 -- EASY EDIT SETTINGS
@@ -72,22 +73,22 @@ local CFG = {
     },
 
     controls = {
-        x = 12,
-        y = HEADER.analysisControlsY,
-        width = 928,
-        height = 62,
+        x = ANALYSIS_LAYOUT.outerX,
+        y = ANALYSIS_LAYOUT.filterY,
+        width = ANALYSIS_LAYOUT.width,
+        height = ANALYSIS_LAYOUT.filterHeight,
 
         currentSpecX = 18,
         dungeonX = 250,
-        labelY = -12,
+        labelY = ANALYSIS_LAYOUT.filterLabelY,
         currentSpecWidth = 190,
         dungeonWidth = 260,
     },
 
     content = {
-        x = 12,
-        y = -160,
-        width = 928,
+        x = ANALYSIS_LAYOUT.outerX,
+        y = ANALYSIS_LAYOUT.resultsY,
+        width = ANALYSIS_LAYOUT.width,
         gap = SPACING.card,
     },
 
@@ -176,7 +177,8 @@ local function MakeDropdown(parent, width, x, y, labelText, onInitialize)
     label:SetText(labelText)
     ApplyColor(label, CFG.colors.muted)
 
-    local dropdown = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
+    local dropdown = KeyLab.UI.Theme.CreateLegacyDropdown(parent)
+    KeyLab.UI.Theme.StyleDropdownField(dropdown)
     dropdown:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 18, y - 18)
     UIDropDownMenu_SetWidth(dropdown, width or 160)
     UIDropDownMenu_Initialize(dropdown, onInitialize)
@@ -1368,16 +1370,13 @@ function Trends:RefreshContent()
     end
 
     if usableCount == 0 then
-        BuildMessagePanel(self.content, 0, 0, "Performance Direction", "Run this dungeon more to unlock trends.", CFG.colors.warning)
-        self.content:SetHeight(120)
+        self.content:SetHeight(ANALYSIS_LAYOUT.resultsHeight)
         return
     end
 
     if self.selectedDungeon and usableCount < 2 then
-        BuildMessagePanel(self.content, 0, 0, "Performance Direction", "Run this dungeon more to unlock trends.", CFG.colors.warning)
-        local patternY = -(96 + SPACING.card)
-        BuildRunPatternPanel(self.content, 0, patternY, filtered)
-        self.content:SetHeight(math.abs(patternY) + 124 + SPACING.card)
+        BuildRunPatternPanel(self.content, 0, 0, filtered)
+        self.content:SetHeight(124 + SPACING.card)
         return
     end
 
@@ -1430,22 +1429,16 @@ function Trends:Create(parent)
 
     self.frame = frame
 
-    local title, subtitle = Theme.CreateTabHeader(
+    local page = Theme.CreateAnalysisPage(
         frame,
         "M+ Trends",
-        "See whether your recent Mythic+ results are improving, steady, or changing."
+        "See whether your recent Mythic+ results are improving, steady, or changing.",
+        { summaryText = "Loading trends...", details = false }
     )
-
-    self.summaryText = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    self.summaryText:SetPoint("TOPLEFT", frame, "TOPLEFT", HEADER.x, HEADER.summaryY)
-    self.summaryText:SetSize(HEADER.summaryWidth, HEADER.summaryHeight)
-    self.summaryText:SetText("Loading trends...")
-    ApplyColor(self.summaryText, CFG.colors.soft)
-
-    local controls = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    controls:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.controls.x, CFG.controls.y)
-    controls:SetSize(CFG.controls.width, CFG.controls.height)
-    StylePanel(controls, CFG.colors.controlBg, CFG.colors.cardBorder)
+    self.summaryText = page.summaryText
+    local controls = page.filterHeaderCard
+    local positions = Theme.GetFilterPositions({ CFG.controls.currentSpecWidth, CFG.controls.dungeonWidth }, { cardWidth = CFG.controls.width })
+    CFG.controls.currentSpecX, CFG.controls.dungeonX = positions[1], positions[2]
 
     local specLabel = controls:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     specLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", CFG.controls.currentSpecX, CFG.controls.labelY)
@@ -1479,16 +1472,8 @@ function Trends:Create(parent)
         end
     end)
 
-    local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.content.x, CFG.content.y)
-    scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
-
-    local content = CreateFrame("Frame", nil, scrollFrame)
-    content:SetSize(CFG.content.width, 700)
-    scrollFrame:SetScrollChild(content)
-
-    self.scrollFrame = scrollFrame
-    self.content = content
+    self.content = page.encountersCards
+    self.content:SetSize(CFG.content.width, ANALYSIS_LAYOUT.resultsHeight)
 
     frame:SetScript("OnShow", function()
         Trends:Refresh()

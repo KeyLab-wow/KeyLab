@@ -121,6 +121,43 @@ local function RegisterResetPopup()
     -- Reset confirmation is registered by KeyLab_JournalData.lua.
 end
 
+local function RegisterSeasonOnePopup()
+    if not StaticPopupDialogs or StaticPopupDialogs.KEYLAB_ERASE_MN_S1 then return end
+    StaticPopupDialogs.KEYLAB_ERASE_MN_S1 = {
+        text = "Erase MN S1 Data?\n\n"
+            .. "This removes MN S1 Mythic+ and Raid Data from:\n\n"
+            .. "- Encounters\n"
+            .. "- Stat Profiles\n"
+            .. "- Talent Builds\n"
+            .. "- Gear Profiles\n"
+            .. "- Last Run\n"
+            .. "- Last Raid\n"
+            .. "- Trends\n"
+            .. "- Practice\n"
+            .. "- Saved Gear Targets\n"
+            .. "- Alternatives\n"
+            .. "- Goal Matches\n\n"
+            .. "This can not be undone.",
+        button1 = "Erase MN S1 Data",
+        button2 = "Cancel",
+        OnAccept = function()
+            if not (KeyLab.SeasonData and KeyLab.SeasonData.EraseSeason1) then
+                Print("Season data tools are not available.")
+                return
+            end
+            local report = KeyLab.SeasonData.EraseSeason1()
+            local total = 0
+            for _, count in pairs(report or {}) do total = total + (tonumber(count) or 0) end
+            Print(string.format("Midnight Season 1 data erased: %d saved record%s removed. Macro Sequences were not changed.", total, total == 1 and "" or "s"))
+            if KeyLab.RefreshTabs then KeyLab.RefreshTabs() end
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        preferredIndex = 3,
+    }
+end
+
 -- =========================================================
 -- CONTENT BUILDERS
 -- =========================================================
@@ -137,7 +174,12 @@ local function MakeDataAction(parent, y, title, description, buttonText, buttonC
     body:SetWidth(560)
     body:SetHeight(40)
 
-    MakeButton(parent, buttonText, 640, y + 2, 210, onClick)
+    local button = Theme.CreateButton and Theme.CreateButton(parent, buttonText, 210, 28)
+        or MakeButton(parent, buttonText, 640, y + 2, 210, onClick)
+    if Theme.CreateButton then
+        button:SetPoint("TOPLEFT", parent, "TOPLEFT", 640, y + 2)
+        button:SetScript("OnClick", onClick)
+    end
 end
 
 local function MakeBackupInstructions(parent, y)
@@ -311,6 +353,23 @@ local function BuildSettings(content)
     MakeBackupInstructions(content, y)
     y = y - 204
 
+    MakeSectionHeader(content, "Season Data", y)
+    y = y - 50
+
+    MakeDataAction(
+        content,
+        y,
+        "Erase Midnight Season 1 Player Data",
+        "Deletes MN S1 encounters, raid pulls/nights, derived profiles and trends, Practice sessions, saved matcher results, and all MN S1 Targets, Alternatives, and pending target choices. Macro Sequences and MN S2 data are preserved.",
+        "Erase MN S1 Data",
+        "danger",
+        function()
+            RegisterSeasonOnePopup()
+            if StaticPopup_Show then StaticPopup_Show("KEYLAB_ERASE_MN_S1") end
+        end
+    )
+    y = y - ROW_GAP - SECTION_GAP
+
     MakeDataAction(
         content,
         y,
@@ -384,6 +443,7 @@ end
 
 function Settings:Create(parent)
     RegisterResetPopup()
+    RegisterSeasonOnePopup()
 
     local frame = CreateFrame("Frame", "KeyLabSettingsTab", parent, "BackdropTemplate")
     frame:SetAllPoints(parent)

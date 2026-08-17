@@ -120,7 +120,10 @@ local function Section(parent, title, subtitle, entries, left, top, width, empty
         local lineCount = math.max(1, tonumber(entry and entry.lineCount) or 1)
         local compact = entry and (entry.kind == "requiredMaterial"
             or (entry.kind == "ownedMaterial" and (entry.summary or "") == ""))
-        local rowHeight = (compact and 31 or 39) + ((lineCount - 1) * 15)
+        local resourceRequirement = entry and entry.kind == "resourceRequirement"
+        local rowHeight = resourceRequirement
+            and (46 + ((lineCount - 1) * 18))
+            or ((compact and 31 or 39) + ((lineCount - 1) * 15))
         rowHeights[index] = rowHeight
         rowsHeight = rowsHeight + rowHeight + 5
     end
@@ -201,6 +204,12 @@ local function CreateWindow()
 
     local art = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
     art:SetAllPoints(frame); art:SetTexture("Interface\\AddOns\\KeyLab\\Assets\\KeyLabWindowBackground.tga"); art:SetAlpha(0.28)
+    local icon = frame:CreateTexture(nil, "ARTWORK", nil, 2)
+    icon:SetTexture("Interface\\AddOns\\KeyLab\\Assets\\KeyLabKeyIcon.tga")
+    icon:SetTexCoord(0, 1, 1, 0)
+    icon:SetSize(42, 42)
+    icon:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -10)
+    frame.keyLabIcon = icon
     local title = Text(frame, "Crafted Gear Shopping List", "GameFontNormal", 20, COLORS.gold)
     title:SetPoint("TOP", 0, -18)
     local subtitle = Text(frame, "Your saved crafted plan, ready for the Auction House.", nil, 11, COLORS.muted)

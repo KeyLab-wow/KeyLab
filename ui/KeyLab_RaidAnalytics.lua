@@ -13,7 +13,8 @@ local HEADER = Theme.tabHeader or {
     summaryY = -66, summaryWidth = 890, summaryHeight = 14,
     analysisControlsY = -86,
 }
-local CONTENT_WIDTH = 906
+local LAYOUT = Theme.analysisLayout or { outerX = 12, width = 928, filterY = -86, filterHeight = 96, filterLabelY = -36, resultsY = -196, detailsY = -466, detailsHeight = 300, resultsHeight = 252 }
+local CONTENT_WIDTH = LAYOUT.width
 local SIGNAL_CARD_WIDTH = (CONTENT_WIDTH - (SPACING.column * 4)) / 3
 local SIGNAL_START_X = SPACING.column
 
@@ -181,10 +182,11 @@ local function OptionLabel(options, selected, fallback)
 end
 
 local function Dropdown(parent, label, x, width, optionsFunc, selectedFunc, changedFunc)
-    local caption = PlaceText(parent, label, x, -10, width + 20, "GameFontDisableSmall", nil, Color("muted"))
+    local caption = PlaceText(parent, label, x, LAYOUT.filterLabelY, width + 20, "GameFontDisableSmall", nil, Color("muted"))
     caption:SetHeight(16)
-    local menu = CreateFrame("Frame", nil, parent, "UIDropDownMenuTemplate")
-    menu:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 16, -24)
+    local menu = KeyLab.UI.Theme.CreateLegacyDropdown(parent)
+    KeyLab.UI.Theme.StyleDropdownField(menu)
+    menu:SetPoint("TOPLEFT", parent, "TOPLEFT", x - 16, LAYOUT.filterLabelY - 18)
     UIDropDownMenu_SetWidth(menu, width)
     UIDropDownMenu_Initialize(menu, function(_, level)
         for _, option in ipairs(optionsFunc() or {}) do
@@ -203,8 +205,8 @@ local function Dropdown(parent, label, x, width, optionsFunc, selectedFunc, chan
 end
 
 local function AddEmpty(parent, message)
-    local card = Panel(parent, 0, 0, 906, 116, Color("softBorder"))
-    local text = PlaceText(card, message, 20, -36, 866, "GameFontHighlight", 14, Color("muted"), "CENTER")
+    local card = Panel(parent, 0, 0, CONTENT_WIDTH, 116, Color("softBorder"))
+    local text = PlaceText(card, message, 20, -36, CONTENT_WIDTH - 40, "GameFontHighlight", 14, Color("muted"), "CENTER")
     text:SetHeight(48)
     return 136
 end
@@ -222,7 +224,8 @@ local function EncounterContext(encounter)
 end
 
 local function AddCopyField(parent, value, y)
-    local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    local box = Theme.CreateInput and Theme.CreateInput(parent, 820, 28)
+        or CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
     box:SetPoint("TOPLEFT", parent, "TOPLEFT", 18, y)
     box:SetSize(820, 28)
     box:SetAutoFocus(false)
@@ -233,11 +236,15 @@ local function AddCopyField(parent, value, y)
 end
 
 local function BuildTalentContent(tab, encounters)
+    if tab.detailsCard then
+        Clear(tab.detailsCard)
+        if Theme.StyleAnalysisDetails then Theme.StyleAnalysisDetails(tab.detailsCard) else Style(tab.detailsCard, Color("detailBg"), Color("detailBorder")) end
+    end
     local groups = Analysis.BuildTalentGroups(encounters, tab.selectedMetricKey)
     local bossName = OptionLabel(tab.bossOptions, tab.selectedEncounterID, "Boss")
     tab.summary:SetText(string.format("%d boss pull%s • %d talent build%s for %s", #encounters, #encounters == 1 and "" or "s", #groups, #groups == 1 and "" or "s", bossName))
     if #groups == 0 then
-        tab.content:SetHeight(AddEmpty(tab.content, "No matching raid talent builds yet. Complete boss pulls with a captured talent string and metric data."))
+        tab.content:SetHeight(LAYOUT.resultsHeight)
         return
     end
 
@@ -250,26 +257,34 @@ local function BuildTalentContent(tab, encounters)
         local key = group.spec .. "|" .. group.talentString
         if key == tab.selectedKey then selected = group end
         local border = key == tab.selectedKey and Color("gold") or Color("cardBorder")
-        local card = Panel(tab.content, 0, y, 906, 92, border)
+        local card = Panel(tab.content, 0, y, CONTENT_WIDTH, 44, border)
+        local isSelected = key == tab.selectedKey
+        if Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(card, isSelected and "selected" or "normal") end
         card:EnableMouse(true)
         card:SetScript("OnMouseUp", function()
             tab.selectedKey = key
             tab:Refresh()
         end)
-        PlaceText(card, string.format("#%d  %s Talent Build", index, group.spec), 16, -10, 430, "GameFontNormal", 14, Color("gold"))
-        PlaceText(card, string.format("Best %s: %s", MetricLabel(tab.selectedMetricKey), FormatNumber(group.bestValue)), 590, -10, 290, "GameFontNormal", 14, Color("blue"), "RIGHT")
-        PlaceText(card, string.format("Used on %d boss pull%s", group.pullCount, group.pullCount == 1 and "" or "s"), 16, -36, 260, "GameFontHighlightSmall", nil, Color("muted"))
-        PlaceText(card, EncounterContext(group.bestEncounter), 280, -36, 600, "GameFontHighlightSmall", nil, Color("muted"), "RIGHT")
-        PlaceText(card, Shorten(group.talentString, 115), 16, -62, 864, "GameFontDisableSmall", nil, Color("text"))
-        y = y - 102
+        card:SetScript("OnEnter", function(self)
+            if not isSelected and Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(self, "hover") end
+        end)
+        card:SetScript("OnLeave", function(self)
+            if not isSelected and Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(self, "normal") end
+        end)
+        PlaceText(card, string.format("#%d  %s Talent Build", index, group.spec), 16, -11, 330, "GameFontNormal", 14, Color("gold"))
+        PlaceText(card, string.format("%d pull%s", group.pullCount, group.pullCount == 1 and "" or "s"), 350, -11, 130, "GameFontHighlightSmall", nil, Color("muted"), "CENTER")
+        PlaceText(card, Shorten(EncounterContext(group.bestEncounter), 48), 490, -11, 240, "GameFontHighlightSmall", nil, Color("muted"), "CENTER")
+        PlaceText(card, string.format("Best %s: %s", MetricLabel(tab.selectedMetricKey), FormatNumber(group.bestValue)), 730, -11, 182, "GameFontNormal", 14, Color("blue"), "RIGHT")
+        y = y - 52
     end
 
     if not selected then selected = groups[1]; tab.selectedKey = selected.spec .. "|" .. selected.talentString end
-    local detail = Panel(tab.content, 0, y - 4, 906, 122, Color("cardStrongBorder"))
+    local detail = tab.detailsCard
+    if Theme.StyleAnalysisDetails then Theme.StyleAnalysisDetails(detail) else Style(detail, Color("detailBg"), Color("detailBorder")) end
     PlaceText(detail, "Selected Build Details", 16, -10, 300, "GameFontNormal", 14, Color("gold"))
     PlaceText(detail, "Talent import string — click the field to select it for copying.", 16, -38, 700, "GameFontHighlightSmall", nil, Color("muted"))
     AddCopyField(detail, selected.talentString, -66)
-    tab.content:SetHeight(math.abs(y) + 150)
+    tab.content:SetHeight(LAYOUT.resultsHeight)
 end
 
 local function StatValueText(priority)
@@ -281,11 +296,15 @@ local function StatValueText(priority)
 end
 
 local function BuildStatContent(tab, encounters)
+    if tab.detailsCard then
+        Clear(tab.detailsCard)
+        if Theme.StyleAnalysisDetails then Theme.StyleAnalysisDetails(tab.detailsCard) else Style(tab.detailsCard, Color("detailBg"), Color("detailBorder")) end
+    end
     local groups = Analysis.BuildStatGroups(encounters, tab.selectedMetricKey)
     local bossName = OptionLabel(tab.bossOptions, tab.selectedEncounterID, "Boss")
     tab.summary:SetText(string.format("%d boss pull%s • %d stat profile%s for %s", #encounters, #encounters == 1 and "" or "s", #groups, #groups == 1 and "" or "s", bossName))
     if #groups == 0 then
-        tab.content:SetHeight(AddEmpty(tab.content, "No matching raid stat profiles yet. Complete boss pulls with all four secondary-stat snapshots and metric data."))
+        tab.content:SetHeight(LAYOUT.resultsHeight)
         return
     end
 
@@ -297,23 +316,30 @@ local function BuildStatContent(tab, encounters)
         local group = groups[index]
         local key = group.spec .. "|" .. group.priorityText
         if key == tab.selectedKey then selected = group end
-        local card = Panel(tab.content, 0, y, 906, 98, key == tab.selectedKey and Color("gold") or Color("cardBorder"))
+        local isSelected = key == tab.selectedKey
+        local card = Panel(tab.content, 0, y, CONTENT_WIDTH, 44, isSelected and Color("gold") or Color("cardBorder"))
+        if Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(card, isSelected and "selected" or "normal") end
         card:EnableMouse(true)
         card:SetScript("OnMouseUp", function() tab.selectedKey = key; tab:Refresh() end)
-        PlaceText(card, string.format("#%d  %s", index, group.priorityText), 16, -10, 560, "GameFontNormal", 14, Color("gold"))
-        PlaceText(card, string.format("Avg %s: %s", MetricLabel(tab.selectedMetricKey), FormatNumber(group.metricAverage)), 590, -10, 290, "GameFontNormal", 14, Color("blue"), "RIGHT")
-        PlaceText(card, string.format("%s • %d boss pull%s", group.spec, group.pullCount, group.pullCount == 1 and "" or "s"), 16, -38, 350, "GameFontHighlightSmall", nil, Color("muted"))
-        PlaceText(card, "Best: " .. FormatNumber(group.bestValue) .. " • " .. EncounterContext(group.bestEncounter), 390, -38, 490, "GameFontHighlightSmall", nil, Color("muted"), "RIGHT")
-        PlaceText(card, StatValueText(group.bestPriority or group.priority), 16, -68, 864, "GameFontDisableSmall", nil, Color("text"))
-        y = y - 108
+        card:SetScript("OnEnter", function(self)
+            if not isSelected and Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(self, "hover") end
+        end)
+        card:SetScript("OnLeave", function(self)
+            if not isSelected and Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(self, "normal") end
+        end)
+        PlaceText(card, string.format("#%d  %s", index, group.priorityText), 16, -11, 430, "GameFontNormal", 14, Color("gold"))
+        PlaceText(card, string.format("%s • %d pull%s", group.spec, group.pullCount, group.pullCount == 1 and "" or "s"), 450, -11, 240, "GameFontHighlightSmall", nil, Color("muted"), "CENTER")
+        PlaceText(card, string.format("Avg %s: %s", MetricLabel(tab.selectedMetricKey), FormatNumber(group.metricAverage)), 700, -11, 212, "GameFontNormal", 14, Color("blue"), "RIGHT")
+        y = y - 52
     end
 
     if not selected then selected = groups[1]; tab.selectedKey = selected.spec .. "|" .. selected.priorityText end
-    local detail = Panel(tab.content, 0, y - 4, 906, 112, Color("cardStrongBorder"))
+    local detail = tab.detailsCard
+    if Theme.StyleAnalysisDetails then Theme.StyleAnalysisDetails(detail) else Style(detail, Color("detailBg"), Color("detailBorder")) end
     PlaceText(detail, "Selected Profile Details", 16, -10, 300, "GameFontNormal", 14, Color("gold"))
     PlaceText(detail, selected.priorityText, 16, -40, 874, "GameFontNormalLarge", 16, Color("text"))
     PlaceText(detail, StatValueText(selected.bestPriority or selected.priority), 16, -72, 874, "GameFontHighlightSmall", nil, Color("muted"))
-    tab.content:SetHeight(math.abs(y) + 140)
+    tab.content:SetHeight(LAYOUT.resultsHeight)
 end
 
 local function TrendTile(parent, x, title, value, detail, color)
@@ -332,7 +358,7 @@ local function BuildLegacyTrendContent(tab, encounters)
     local metricLabel = TrendMetricShortLabel(tab.selectedMetricKey)
     tab.summary:SetText(string.format("%d boss pull%s for %s  •  Each pull compares with the pull immediately before it", #encounters, #encounters == 1 and "" or "s", bossName))
     if #encounters == 0 then
-        tab.content:SetHeight(AddEmpty(tab.content, "No matching raid pulls yet. Complete more pulls on this boss to begin building trends."))
+        tab.content:SetHeight(LAYOUT.resultsHeight)
         return
     end
 
@@ -586,14 +612,15 @@ end
 local function BuildTrendContent(tab, encounters)
     local performance = Analysis.BuildBossPerformance and Analysis.BuildBossPerformance(encounters, tab.selectedMetricKey)
     if not performance then
-        tab.content:SetHeight(AddEmpty(tab.content, "Raid trend analysis is unavailable."))
+        tab.summary:SetText("Raid trend analysis is unavailable")
+        tab.content:SetHeight(LAYOUT.resultsHeight)
         return
     end
 
     local bossName = OptionLabel(tab.bossOptions, tab.selectedEncounterID, "Boss")
     if #encounters == 0 then
         tab.summary:SetText("No saved pulls for " .. bossName)
-        tab.content:SetHeight(AddEmpty(tab.content, "No matching raid pulls yet. Complete more pulls on this boss to begin building trends."))
+        tab.content:SetHeight(LAYOUT.resultsHeight)
         return
     end
 
@@ -608,7 +635,7 @@ local function BuildTrendContent(tab, encounters)
     ))
 
     local statusColor = StatusColor(performance.status)
-    local overview = Panel(tab.content, 0, 0, 906, 104, statusColor)
+    local overview = Panel(tab.content, 0, 0, CONTENT_WIDTH, 104, statusColor)
     PlaceText(overview, "Boss Performance", 16, -12, 260, "GameFontNormal", nil, Color("gold"))
     PlaceText(overview, performance.confidence or "", 626, -12, 260, "GameFontDisableSmall", nil, Color("muted"), "RIGHT")
     PlaceText(overview, performance.status or "Building Baseline", 18, -38, 870, "GameFontNormalLarge", 21, statusColor, "CENTER")
@@ -638,7 +665,7 @@ local function BuildTrendContent(tab, encounters)
     PlaceText(consistencyCard, string.format("%d comparable value%s", consistency.sampleSize or 0, consistency.sampleSize == 1 and "" or "s"), 12, -91, SIGNAL_CARD_WIDTH - 24, "GameFontHighlightSmall", nil, Color("muted"), "CENTER")
 
     local takeawayY = signalY - 130 - SPACING.card
-    local takeaway = Panel(tab.content, 0, takeawayY, 906, 108, Color("cardStrongBorder"))
+    local takeaway = Panel(tab.content, 0, takeawayY, CONTENT_WIDTH, 108, Color("cardStrongBorder"))
     PlaceText(takeaway, "KeyLab Takeaway", 16, -12, 260, "GameFontNormal", nil, Color("gold"))
     local selectedPhrase = SignalPhrase(performance.selectedSignal)
     local executionPhrase = SignalPhrase(performance.executionSignal)
@@ -679,9 +706,12 @@ local function NewTab(key, title, subtitle, metricSetting, buildContent, metricO
 
     function tab:RefreshOptions()
         self.allEncounters = Analysis.GetEncounters and Analysis.GetEncounters() or {}
-        self.bossOptions = Analysis.GetBossOptions(self.allEncounters)
+        self.raidOptions = Analysis.GetRaidOptions and Analysis.GetRaidOptions(self.allEncounters)
+            or {{ value = nil, label = "All Raids" }}
+        if not HasOption(self.raidOptions, self.selectedInstanceID) then self.selectedInstanceID = nil end
+        self.bossOptions = Analysis.GetBossOptions(self.allEncounters, self.selectedInstanceID)
         if not HasOption(self.bossOptions, self.selectedEncounterID) then
-            self.selectedEncounterID = self.allEncounters[1] and Analysis.GetRaid(self.allEncounters[1]).encounterID or nil
+            self.selectedEncounterID = self.bossOptions[1] and self.bossOptions[1].value or nil
             self.selectedDifficultyID = nil
             self.selectedSpec = self.lockCurrentSpec and CurrentSpecName() or nil
             self.selectedKey = nil
@@ -704,7 +734,8 @@ local function NewTab(key, title, subtitle, metricSetting, buildContent, metricO
             KeyLab.DB.SetSetting(self.metricSetting, self.selectedMetricKey)
         end
 
-        self.bossDropdown:SetDisplay(self.selectedEncounterID, "No Bosses Yet")
+        self.raidDropdown:SetDisplay(self.selectedInstanceID, "All Raids")
+        self.bossDropdown:SetDisplay(self.selectedEncounterID, "No Raid Bosses Yet")
         self.difficultyDropdown:SetDisplay(self.selectedDifficultyID, "All Difficulties")
         if self.specDropdown then self.specDropdown:SetDisplay(self.selectedSpec, "All Specs") end
         self.metricDropdown:SetDisplay(self.selectedMetricKey, MetricLabel(self.selectedMetricKey))
@@ -714,7 +745,13 @@ local function NewTab(key, title, subtitle, metricSetting, buildContent, metricO
         if not self.frame then return end
         self:RefreshOptions()
         Clear(self.content)
-        local filtered = Analysis.Filter(self.allEncounters, self.selectedEncounterID, self.selectedDifficultyID, self.selectedSpec)
+        local filtered = Analysis.Filter(
+            self.allEncounters,
+            self.selectedEncounterID,
+            self.selectedDifficultyID,
+            self.selectedSpec,
+            self.selectedInstanceID
+        )
         self.buildContent(self, filtered)
     end
 
@@ -722,44 +759,50 @@ local function NewTab(key, title, subtitle, metricSetting, buildContent, metricO
         if self.frame then return self.frame end
         local frame = CreateFrame("Frame", "KeyLab" .. key .. "Tab", parent, "BackdropTemplate")
         frame:SetAllPoints(parent)
-        Style(frame, Color("bg"), { 0, 0, 0, 0 })
+        if Theme.StyleAnalysisPage then Theme.StyleAnalysisPage(frame) else Style(frame, Color("bg"), { 0, 0, 0, 0 }) end
         self.frame = frame
+        local controls
+        local raidWidth, bossWidth, difficultyWidth, specWidth, metricWidth = 150, 180, 110, 110, 130
+        local raidX, bossX, difficultyX, specX, metricX
+        local page = Theme.CreateAnalysisPage(frame, title, subtitle, {
+            summaryText = "Loading raid data...",
+            detailsHeight = LAYOUT.detailsHeight,
+            details = key ~= "RaidTrends",
+        })
+        self.summary = page.summaryText
+        controls = page.filterHeaderCard
+        self.content = page.encountersCards
+        self.content:SetSize(CONTENT_WIDTH, LAYOUT.resultsHeight)
+        self.detailsCard = page.detailsCard
+        if self.lockCurrentSpec then
+            metricWidth = 170
+            local positions = Theme.GetFilterPositions({ raidWidth, bossWidth, difficultyWidth, metricWidth }, { cardWidth = CONTENT_WIDTH })
+            raidX, bossX, difficultyX, metricX = unpack(positions)
+        else
+            local positions = Theme.GetFilterPositions({ raidWidth, bossWidth, difficultyWidth, specWidth, metricWidth }, { cardWidth = CONTENT_WIDTH })
+            raidX, bossX, difficultyX, specX, metricX = unpack(positions)
+        end
 
-        local heading = PlaceText(frame, title, HEADER.x, HEADER.titleY, HEADER.titleWidth, "GameFontNormalLarge", HEADER.titleSize, Color("gold"))
-        heading:SetHeight(HEADER.titleHeight or 20)
-        local sub = PlaceText(frame, subtitle, HEADER.x, HEADER.descriptionY, HEADER.descriptionWidth, "GameFontHighlightSmall", nil, Color("muted"))
-        sub:SetHeight(HEADER.descriptionHeight)
-        self.summary = PlaceText(frame, "Loading raid data...", HEADER.x, HEADER.summaryY, HEADER.summaryWidth, "GameFontDisableSmall", nil, Color("muted"))
-        self.summary:SetHeight(HEADER.summaryHeight)
-
-        local controls = Panel(frame, 18, HEADER.analysisControlsY, 906, 82, Color("softBorder"))
-        self.bossDropdown = Dropdown(controls, "Boss", 16, 190, function() return tab.bossOptions or {} end, function() return tab.selectedEncounterID end, function(value)
+        self.raidDropdown = Dropdown(controls, "Raid", raidX, raidWidth, function() return tab.raidOptions or {} end, function() return tab.selectedInstanceID end, function(value)
+            tab.selectedInstanceID = value; tab.selectedEncounterID = nil; tab.selectedDifficultyID = nil; tab.selectedSpec = nil; tab.selectedKey = nil; tab:Refresh()
+        end)
+        self.bossDropdown = Dropdown(controls, "Raid Boss", bossX, bossWidth, function() return tab.bossOptions or {} end, function() return tab.selectedEncounterID end, function(value)
             tab.selectedEncounterID = value; tab.selectedDifficultyID = nil; tab.selectedSpec = nil; tab.selectedKey = nil; tab:Refresh()
         end)
-        self.difficultyDropdown = Dropdown(controls, "Difficulty", 252, 130, function() return tab.difficultyOptions or {} end, function() return tab.selectedDifficultyID end, function(value)
+        self.difficultyDropdown = Dropdown(controls, "Difficulty", difficultyX, difficultyWidth, function() return tab.difficultyOptions or {} end, function() return tab.selectedDifficultyID end, function(value)
             tab.selectedDifficultyID = value; tab.selectedSpec = nil; tab.selectedKey = nil; tab:Refresh()
         end)
         if not self.lockCurrentSpec then
-            self.specDropdown = Dropdown(controls, "Spec", 442, 130, function() return tab.specOptions or {} end, function() return tab.selectedSpec end, function(value)
+            self.specDropdown = Dropdown(controls, "Spec", specX, specWidth, function() return tab.specOptions or {} end, function() return tab.selectedSpec end, function(value)
                 tab.selectedSpec = value; tab.selectedKey = nil; tab:Refresh()
             end)
         end
-        local metricX = self.lockCurrentSpec and 442 or 632
-        local metricFilterLabel = self.key == "RaidTrends" and "Performance Metric" or "Metric"
-        self.metricDropdown = Dropdown(controls, metricFilterLabel, metricX, 170, function() return tab.metricOptions or {} end, function() return tab.selectedMetricKey end, function(value)
+        self.metricDropdown = Dropdown(controls, "Performance Metric", metricX, metricWidth, function() return tab.metricOptions or {} end, function() return tab.selectedMetricKey end, function(value)
             tab.selectedMetricKey = value
             if KeyLab.DB and KeyLab.DB.SetSetting then KeyLab.DB.SetSetting(tab.metricSetting, value) end
             tab.selectedKey = nil
             tab:Refresh()
         end)
-
-        local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-        scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, HEADER.analysisControlsY - 96)
-        scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 18)
-        self.content = CreateFrame("Frame", nil, scroll)
-        self.content:SetSize(906, 600)
-        scroll:SetScrollChild(self.content)
-        self.scroll = scroll
 
         frame.Refresh = function() tab:Refresh() end
         frame:SetScript("OnShow", function() tab:Refresh() end)
