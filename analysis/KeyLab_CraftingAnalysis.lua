@@ -23,6 +23,17 @@ local function Database() return KeyLab.CraftedRecipeDatabase or {} end
 local function Lower(value) return string.lower(tostring(value or "")) end
 local function Trim(value) return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "") end
 
+local function ResolveRecipeItemLink(recipe)
+    if not recipe then return nil end
+    return recipe.itemLink
+        or (Database().itemLinks and Database().itemLinks[tonumber(recipe.itemID)])
+end
+
+local function PrepareRecipe(recipe)
+    if recipe then recipe.itemLink = ResolveRecipeItemLink(recipe) end
+    return recipe
+end
+
 local function RuntimeItemName(itemID)
     return (Database().itemNames and Database().itemNames[tonumber(itemID)])
         or ("Item " .. tostring(itemID))
@@ -105,7 +116,7 @@ local function FindItemGroup(slot, itemID)
 end
 
 function Analysis.GetRecipe(recipeID)
-    return Database().recipes and Database().recipes[tonumber(recipeID)] or nil
+    return PrepareRecipe(Database().recipes and Database().recipes[tonumber(recipeID)] or nil)
 end
 
 function Analysis.GetRecipes(filters)
@@ -128,6 +139,7 @@ function Analysis.GetRecipes(filters)
         if tonumber(recipe.iLvlMin) ~= 1 and professionMatches and slotMatches and weaponMatches
             and armorMatches and levelMatches and pvpMatches and plannedMatches
             and searchMatches and usableMatches then
+            PrepareRecipe(recipe)
             recipe.recipeID = tonumber(recipe.recipeID or recipeID)
             table.insert(out, recipe)
         end

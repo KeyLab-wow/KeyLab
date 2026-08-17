@@ -168,9 +168,13 @@ end
 function PracticeAnalysis.GetAllSessions()
     local raw = DB().GetAll and DB().GetAll() or {}
     local sessions = {}
+    local seasonKey = KeyLab.SeasonData and KeyLab.SeasonData.GetSelectedSeasonKey
+        and KeyLab.SeasonData.GetSelectedSeasonKey() or nil
 
     for _, session in ipairs(raw or {}) do
-        if type(session) == "table" then
+        local seasonMatches = not seasonKey or not KeyLab.SeasonData or not KeyLab.SeasonData.Matches
+            or KeyLab.SeasonData.Matches(session, seasonKey)
+        if type(session) == "table" and seasonMatches then
             table.insert(sessions, session)
         end
     end

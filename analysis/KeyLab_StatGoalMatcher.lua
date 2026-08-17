@@ -27,14 +27,13 @@ local PRIORITY_WEIGHTS = { 1.75, 1.50, 1.25, 1.00 }
 local CLOSE_RESULT_DIFFERENCE = 0.25
 local GOAL_MATCH_TOLERANCE = 0.10
 local ITEM_BUDGET_GROWTH_PER_15_LEVELS = 1.15
-local TRACK_MAX_ITEM_LEVEL = {
-    Adventurer = 237,
-    Veteran = 250,
-    Champion = 263,
-    Hero = 276,
-    Myth = 289,
-}
 local TRACK_NAMES = { "Adventurer", "Veteran", "Champion", "Hero", "Myth" }
+
+local function GetTrackMaximumItemLevel(trackName)
+    local seasonLevels = KeyLab and KeyLab.GearingDatabase and KeyLab.GearingDatabase.TrackItemLevels
+    local track = seasonLevels and seasonLevels[trackName]
+    return tonumber(track and track.maximum)
+end
 local OWNED_SLOT_BY_EQUIP_LOC = {
     INVTYPE_HEAD = "Head", INVTYPE_NECK = "Neck", INVTYPE_SHOULDER = "Shoulders",
     INVTYPE_CLOAK = "Back", INVTYPE_CHEST = "Chest", INVTYPE_ROBE = "Chest",
@@ -51,10 +50,38 @@ local DUAL_WIELD_SPECS = {
 }
 local activeJob
 
-local function GetSavedResults()
+local function CurrentSeasonKey()
+    return KeyLab.SeasonData and KeyLab.SeasonData.GetCurrentSeasonKey
+        and KeyLab.SeasonData.GetCurrentSeasonKey() or "MN_S2"
+end
+
+local function NormalizeSeasonKey(value, fallback)
+    if KeyLab.SeasonData and KeyLab.SeasonData.NormalizeSeasonKey then
+        return KeyLab.SeasonData.NormalizeSeasonKey(value, fallback)
+    end
+    return value == "MN_S1" and "MN_S1" or fallback or "MN_S2"
+end
+
+local function GetSavedResults(seasonKey)
     KeyLabDB = type(KeyLabDB) == "table" and KeyLabDB or {}
     if type(KeyLabDB.statGoalMatcherResults) ~= "table" then KeyLabDB.statGoalMatcherResults = {} end
-    return KeyLabDB.statGoalMatcherResults
+    if tonumber(KeyLabDB.statGoalMatcherSeasonVersion) ~= 1 then
+        local migrated = { MN_S1 = {}, MN_S2 = {} }
+        for specID, result in pairs(KeyLabDB.statGoalMatcherResults) do
+            if tonumber(specID) and type(result) == "table" then
+                local resultSeason = KeyLab.SeasonData and KeyLab.SeasonData.GetSeasonKeyForTimestamp
+                    and KeyLab.SeasonData.GetSeasonKeyForTimestamp(result.completedAt, "MN_S1") or "MN_S1"
+                result.seasonKey = resultSeason
+                result.mnSeason = resultSeason == "MN_S1" and 1 or 2
+                migrated[resultSeason][tonumber(specID)] = result
+            end
+        end
+        KeyLabDB.statGoalMatcherResults = migrated
+        KeyLabDB.statGoalMatcherSeasonVersion = 1
+    end
+    seasonKey = NormalizeSeasonKey(seasonKey, CurrentSeasonKey())
+    KeyLabDB.statGoalMatcherResults[seasonKey] = KeyLabDB.statGoalMatcherResults[seasonKey] or {}
+    return KeyLabDB.statGoalMatcherResults[seasonKey]
 end
 
 local function ZeroStats()
@@ -603,7 +630,7 @@ local function ProjectOwnedItem(stats, priority, itemLevel, upgrade)
     local rank = tonumber(upgrade and upgrade.rank)
     local maxRank = tonumber(upgrade and upgrade.maxRank)
     local currentItemLevel = tonumber(itemLevel) or 0
-    local trackMaximum = tonumber(TRACK_MAX_ITEM_LEVEL[track])
+    local trackMaximum = GetTrackMaximumItemLevel(track)
     local projectedItemLevel = trackMaximum and math.max(currentItemLevel, trackMaximum) or currentItemLevel
     local requiresUpgrade = trackMaximum and rank and maxRank and rank < maxRank and projectedItemLevel > currentItemLevel or false
     local factor = requiresUpgrade and ItemBudgetScale(currentItemLevel, projectedItemLevel) or 1
@@ -750,6 +777,7 @@ local function ScanEquipment(specID)
     local mapping = KeyLab.GearLootMapping
     local snapshot = {
         slots = {},
+        allEquippedStats = ZeroStats(),
         lockedStats = ZeroStats(),
         projectedLockedStats = ZeroStats(),
         upgradeAssumptions = {},
@@ -770,9 +798,13 @@ local function ScanEquipment(specID)
                 ProjectOwnedItem(stats, priority, slot.itemLevel, upgrade)
             local currentStats = AddStats(stats, enhancements)
             local projectedStats = AddStats(projectedBaseStats, enhancements)
-            snapshot.lockedStats = AddStats(snapshot.lockedStats, currentStats)
-            snapshot.projectedLockedStats = AddStats(snapshot.projectedLockedStats, projectedStats)
-            if requiresUpgrade then
+            local isTrinket = slotInstance == "Trinket 1" or slotInstance == "Trinket 2"
+            snapshot.allEquippedStats = AddStats(snapshot.allEquippedStats, currentStats)
+            if not isTrinket then
+                snapshot.lockedStats = AddStats(snapshot.lockedStats, currentStats)
+                snapshot.projectedLockedStats = AddStats(snapshot.projectedLockedStats, projectedStats)
+            end
+            if requiresUpgrade and not isTrinket then
                 table.insert(snapshot.upgradeAssumptions, {
                     slotInstance = slotInstance,
                     itemID = tonumber(slot.itemID),
@@ -995,10 +1027,10 @@ local function BuildPositions(specID, itemType, snapshot, suppliedCandidates)
     local bySlot, mainWeapons, offHandItems, dualWeapons = PartitionCandidates(specID, itemType, suppliedCandidates)
     local positions, unmatchedSlots, skipSlot = {}, {}, {}
 
-    -- Two open ring or trinket slots normally share the same candidate list.
+    -- Two open ring slots normally share the same candidate list.
     -- If the selected pool contains only one distinct item, filling the second
     -- slot would reject every otherwise-valid combination as a duplicate.
-    for _, pair in ipairs({ { "Finger 1", "Finger 2" }, { "Trinket 1", "Trinket 2" } }) do
+    for _, pair in ipairs({ { "Finger 1", "Finger 2" } }) do
         local first, second = pair[1], pair[2]
         local firstOpen = not (snapshot.slots[first] and snapshot.slots[first].itemID)
         local secondOpen = not (snapshot.slots[second] and snapshot.slots[second].itemID)
@@ -1008,7 +1040,8 @@ local function BuildPositions(specID, itemType, snapshot, suppliedCandidates)
     end
 
     for order, slotInstance in ipairs(SLOT_ORDER) do
-        if slotInstance ~= "Main Hand" and slotInstance ~= "Off Hand" then
+        if slotInstance ~= "Main Hand" and slotInstance ~= "Off Hand"
+            and slotInstance ~= "Trinket 1" and slotInstance ~= "Trinket 2" then
             local equipped = snapshot.slots[slotInstance] and snapshot.slots[slotInstance].itemID
             if not equipped then
                 if skipSlot[slotInstance] then
@@ -1310,6 +1343,71 @@ local function ReducedEfficiencyAt(context, key, itemStats)
     return localRate < (baseRate * 0.995)
 end
 
+local function BuildStatSupportItems(specID, candidates, best, goals, projection, openTrinketSlotCount, itemSource, ownedRecords)
+    local supports, records, byID = {}, {}, {}
+    if not best or (tonumber(openTrinketSlotCount) or 0) < 1 then return supports, records, byID end
+
+    local corePercentages = ProjectPercentages(best.stats, projection)
+    local deficitStats = {}
+    for _, key in ipairs(SECONDARY) do
+        if (tonumber(corePercentages[key]) or 0) < (tonumber(goals[key]) or 0) - GOAL_MATCH_TOLERANCE then
+            deficitStats[key] = true
+        end
+    end
+    if not next(deficitStats) then return supports, records, byID end
+
+    for _, item in ipairs(candidates or {}) do
+        local itemID = tonumber(item and item.itemID)
+        if itemID and not byID[itemID] and (item.slot == "Trinket" or item.equipLoc == "INVTYPE_TRINKET") then
+            local stats = ItemStats(item, specID)
+            local withTrinket = AddStats(best.stats, stats)
+            local withPercentages = ProjectPercentages(withTrinket, projection)
+            local helpful, entersReducedEfficiency = {}, false
+            for _, key in ipairs(SECONDARY) do
+                if deficitStats[key] and (tonumber(stats[key]) or 0) > 0 then
+                    local gain = (tonumber(withPercentages[key]) or 0) - (tonumber(corePercentages[key]) or 0)
+                    if gain > 0.0001 then
+                        if ReducedEfficiencyAt(projection, key, withTrinket) then
+                            entersReducedEfficiency = true
+                        else
+                            table.insert(helpful, key)
+                        end
+                    end
+                end
+            end
+            if #helpful > 0 and not entersReducedEfficiency then
+                local sourceRecord = itemSource == "owned" and ownedRecords and ownedRecords[itemID] or item
+                local support = {
+                    itemID = itemID,
+                    name = sourceRecord and sourceRecord.name or item.name or ("Item " .. tostring(itemID)),
+                    sourceName = sourceRecord and sourceRecord.sourceName or item.sourceName or "",
+                    itemLink = sourceRecord and (sourceRecord.itemLink or sourceRecord.link) or item.itemLink or item.link,
+                    matcherStats = CopyStats(stats),
+                    supportStats = CopyArray(helpful),
+                    upgradeTrack = sourceRecord and sourceRecord.upgradeTrack or item.upgradeTrack,
+                    upgradeRank = sourceRecord and sourceRecord.upgradeRank or item.upgradeRank,
+                    upgradeMaxRank = sourceRecord and sourceRecord.upgradeMaxRank or item.upgradeMaxRank,
+                    itemLevel = tonumber(sourceRecord and sourceRecord.itemLevel or item.itemLevel),
+                    projectedItemLevel = tonumber(sourceRecord and sourceRecord.projectedItemLevel or item.projectedItemLevel),
+                    requiresUpgrade = sourceRecord and sourceRecord.requiresUpgrade == true or item.requiresUpgrade == true,
+                }
+                table.insert(supports, support)
+                byID[itemID] = true
+                if itemSource == "owned" and sourceRecord then table.insert(records, CopyTable(sourceRecord)) end
+            end
+        end
+    end
+    table.sort(supports, function(a, b)
+        if tostring(a.name or "") ~= tostring(b.name or "") then return tostring(a.name or "") < tostring(b.name or "") end
+        return tonumber(a.itemID or 0) < tonumber(b.itemID or 0)
+    end)
+    table.sort(records, function(a, b)
+        if tostring(a.name or "") ~= tostring(b.name or "") then return tostring(a.name or "") < tostring(b.name or "") end
+        return tonumber(a.itemID or 0) < tonumber(b.itemID or 0)
+    end)
+    return supports, records, byID
+end
+
 local function BuildReachability(positions, initialStats, actualStats, finalStats, goals, projection)
     local minimumStats, maximumStats = CopyStats(initialStats), CopyStats(initialStats)
     local availabilityByStat = {}
@@ -1325,7 +1423,7 @@ local function BuildReachability(positions, initialStats, actualStats, finalStat
         end
     end
 
-    local currentPercentages = CopyStats(projection and projection.currentSheet)
+    local currentPercentages = ProjectPercentages(actualStats, projection)
     local foundationPercentages = ProjectPercentages(initialStats, projection)
     local minimumPercentages = ProjectPercentages(minimumStats, projection)
     local maximumPercentages = ProjectPercentages(maximumStats, projection)
@@ -1462,7 +1560,8 @@ local function RefreshSelectedItemDetails(result)
     return result
 end
 
-local function BuildResult(specID, itemType, itemSource, ownedRecords, best, goals, projection, estimate, mode, positions, unmatchedSlots, snapshot)
+local function BuildResult(specID, itemType, itemSource, ownedRecords, best, goals, projection, estimate, mode, positions, unmatchedSlots, snapshot,
+    statSupportItems, statSupportItemRecords, statSupportItemsByID, openTrinketSlotCount)
     if not best then return nil end
     local matchedItems, matchedItemRecords = {}, {}
     for _, assignment in ipairs(best.assignments or {}) do
@@ -1512,13 +1611,22 @@ local function BuildResult(specID, itemType, itemSource, ownedRecords, best, goa
     if #unmatchedSlots > 0 then
         table.insert(reachability.messages, "No different eligible item was available for: " .. table.concat(unmatchedSlots, ", ") .. ".")
     end
+    table.insert(reachability.messages,
+        "Trinket secondary stats are excluded from the goal projection. Stat Support suggestions are advisory and do not count toward reaching your goals.")
     return {
         specID = specID,
         itemType = itemType,
         itemSource = itemSource or "master",
         completedAt = time and time() or 0,
+        seasonKey = CurrentSeasonKey(),
+        mnSeason = 2,
         matchedItems = matchedItems,
         matchedItemRecords = matchedItemRecords,
+        statSupportItems = statSupportItems or {},
+        statSupportItemRecords = statSupportItemRecords or {},
+        statSupportItemsByID = statSupportItemsByID or {},
+        openTrinketSlotCount = tonumber(openTrinketSlotCount) or 0,
+        trinketsExcludedFromProjection = true,
         assignments = best.assignments,
         selectedItems = selectedItems,
         upgradeAssumptions = upgradeAssumptions,
@@ -1538,7 +1646,7 @@ local function BuildResult(specID, itemType, itemSource, ownedRecords, best, goa
         openPositionCount = #positions,
         matchedSlotCount = #(best.assignments or {}),
         unmatchedOpenSlots = CopyArray(unmatchedSlots),
-        scoringModel = "character_percent_slot_aware_v5",
+        scoringModel = "character_percent_slot_aware_v6",
         matchStyle = projection and projection.matchStyle or "balanced",
     }
 end
@@ -1559,9 +1667,15 @@ local function RunJob(job)
     end
     local goals = GetGoals(specID)
     local matchStyle = job.matchStyle == "priority" and "priority" or "balanced"
-    local projection = BuildProjectionContext(snapshot.lockedStats, specID, matchStyle)
+    local projection = BuildProjectionContext(snapshot.allEquippedStats, specID, matchStyle)
     local positions, unmatchedSlots = BuildPositions(specID, job.itemType, snapshot, suppliedCandidates)
     AnalyzeAndSortPositions(positions, snapshot.projectedLockedStats, goals, projection)
+    local openTrinketSlotCount = 0
+    for _, slotInstance in ipairs({ "Trinket 1", "Trinket 2" }) do
+        if not (snapshot.slots[slotInstance] and snapshot.slots[slotInstance].itemID) then
+            openTrinketSlotCount = openTrinketSlotCount + 1
+        end
+    end
     if #positions == 0 then
         if #unmatchedSlots > 0 then
             return {
@@ -1571,21 +1685,28 @@ local function RunJob(job)
                     or ("No matching database item was found for: " .. table.concat(unmatchedSlots, ", ") .. ". Try Dungeon and Raid Items or open a different slot."),
             }
         end
-        return { ok = false, message = "Unequip at least one eligible item so KeyLab has a slot to fill." }
+        if openTrinketSlotCount == 0 then
+            return { ok = false, message = "Unequip at least one eligible item so KeyLab has a slot to fill." }
+        end
     end
 
     SyncRecognizedTargets(specID, snapshot.recognized)
-    local estimate = EstimateCombinations(positions)
+    local estimate = #positions > 0 and EstimateCombinations(positions) or 0
     local initialState = { stats = snapshot.projectedLockedStats, priority = ZeroPriority(), assignments = {}, usedJewelry = {}, usedOwned = {}, key = "" }
-    local mode = estimate <= EXACT_COMBINATION_LIMIT and "Exact" or "Bounded"
+    local mode = #positions == 0 and "Advisory" or estimate <= EXACT_COMBINATION_LIMIT and "Exact" or "Bounded"
     local best
-    if mode == "Exact" then
+    if mode == "Advisory" then
+        best = initialState
+    elseif mode == "Exact" then
         best = RunExact(job, positions, initialState, goals, projection, estimate)
     else
         best = RunBeam(job, positions, initialState, goals, projection)
     end
     if job.cancelled then return { ok = false, cancelled = true, message = "Matcher cancelled." } end
-    local result = BuildResult(specID, job.itemType, job.itemSource, ownedRecords, best, goals, projection, estimate, mode, positions, unmatchedSlots, snapshot)
+    local statSupportItems, statSupportItemRecords, statSupportItemsByID = BuildStatSupportItems(
+        specID, suppliedCandidates, best, goals, projection, openTrinketSlotCount, job.itemSource, ownedRecords)
+    local result = BuildResult(specID, job.itemType, job.itemSource, ownedRecords, best, goals, projection, estimate, mode, positions, unmatchedSlots, snapshot,
+        statSupportItems, statSupportItemRecords, statSupportItemsByID, openTrinketSlotCount)
     if not result then return { ok = false, message = "KeyLab could not find a valid item combination for the unequipped slots." } end
     return { ok = true, result = result }
 end
@@ -1646,9 +1767,7 @@ end
 function Matcher.GetResult(specID)
     specID = tonumber(specID or CurrentSpecID()) or 0
     local result = GetSavedResults()[specID]
-    local currentStyle = KeyLab.StatGoalsDB and KeyLab.StatGoalsDB.GetMatchStyle and KeyLab.StatGoalsDB.GetMatchStyle(specID) or "balanced"
-    local resultStyle = result and (result.matchStyle == "priority" and "priority" or "balanced") or nil
-    return result and result.scoringModel == "character_percent_slot_aware_v5" and resultStyle == currentStyle
+    return result and result.scoringModel == "character_percent_slot_aware_v6"
         and RefreshSelectedItemDetails(result) or nil
 end
 
@@ -1658,7 +1777,7 @@ function Matcher.GetCurrentShares()
     local stats = ZeroStats()
     for _, slotInstance in ipairs(SLOT_ORDER) do
         local slot = equipped[slotInstance]
-        if slot and slot.itemID then
+        if slot and slot.itemID and slotInstance ~= "Trinket 1" and slotInstance ~= "Trinket 2" then
             local itemStats, _, enhancements = GetLiveItemStats(slot.itemLink or slot.link, slot.tooltipLinesRaw)
             stats = AddStats(stats, AddStats(itemStats, enhancements))
         end
@@ -1675,7 +1794,11 @@ function Matcher.GetCurrentShares()
 end
 
 function Matcher.GetCurrentCharacterPercentages()
-    local sheet = CurrentSheetPercentages()
+    local specID = CurrentSpecID()
+    local snapshot = ScanEquipment(specID)
+    local matchStyle = KeyLab.StatGoalsDB and KeyLab.StatGoalsDB.GetMatchStyle and KeyLab.StatGoalsDB.GetMatchStyle(specID) or "balanced"
+    local projection = BuildProjectionContext(snapshot.allEquippedStats, specID, matchStyle)
+    local sheet = ProjectPercentages(snapshot.lockedStats, projection)
     return {
         crit = tonumber(sheet.Crit),
         haste = tonumber(sheet.Haste),
@@ -1689,13 +1812,28 @@ function Matcher.IsGoalMatch(itemID, specID)
     return result and result.matchedItems and result.matchedItems[tonumber(itemID)] == true or false
 end
 
+function Matcher.IsStatSupport(itemID, specID)
+    local result = Matcher.GetResult(specID)
+    return result and result.statSupportItemsByID and result.statSupportItemsByID[tonumber(itemID)] == true or false
+end
+
 function Matcher.ClearResult(specID)
     GetSavedResults()[tonumber(specID or CurrentSpecID()) or 0] = nil
 end
 
 function Matcher.ClearAllResults()
     KeyLabDB = type(KeyLabDB) == "table" and KeyLabDB or {}
-    KeyLabDB.statGoalMatcherResults = {}
+    KeyLabDB.statGoalMatcherResults = { MN_S1 = {}, MN_S2 = {} }
+    KeyLabDB.statGoalMatcherSeasonVersion = 1
+end
+
+function Matcher.ClearSeasonResults(seasonKey)
+    seasonKey = NormalizeSeasonKey(seasonKey, "MN_S1")
+    local bucket = GetSavedResults(seasonKey)
+    local count = 0
+    for _ in pairs(bucket) do count = count + 1 end
+    KeyLabDB.statGoalMatcherResults[seasonKey] = {}
+    return count
 end
 
 function Matcher.GetConstants()
@@ -1730,9 +1868,9 @@ function Matcher.RunDevelopmentRegressionTests()
     )
     Check("unknown owned track stays current", Near(unknownStats.Crit, 50) and unknownLevel == 250 and unknownUpgrade == false)
     local heroStats, _, heroLevel, heroUpgrade = ProjectOwnedItem(
-        { Crit = 50, Haste = 50 }, unknownPriority, 259, { track = "Hero", rank = 1, maxRank = 6 }
+        { Crit = 50, Haste = 50 }, unknownPriority, 305, { track = "Hero", rank = 1, maxRank = 6 }
     )
-    Check("known owned track projects to maximum", heroStats.Crit > 50 and heroLevel == 276 and heroUpgrade == true)
+    Check("known owned track projects to maximum", heroStats.Crit > 50 and heroLevel == 315 and heroUpgrade == true)
 
     local unavailablePosition = {
         name = "Head",
@@ -1800,6 +1938,43 @@ function Matcher.RunDevelopmentRegressionTests()
         if coroutine.status(thread) == "dead" then beam = payload end
     end
     Check("exact and bounded searches agree", not beamError and exact and beam and StatsSignature(exact.stats) == StatsSignature(beam.stats))
+
+    local trinketOnlySnapshot = { slots = {} }
+    for _, slotInstance in ipairs(SLOT_ORDER) do trinketOnlySnapshot.slots[slotInstance] = { itemID = 9000 } end
+    trinketOnlySnapshot.slots["Trinket 1"] = {}
+    trinketOnlySnapshot.slots["Trinket 2"] = {}
+    local trinketPositions, trinketUnmatched = BuildPositions(1, nil, trinketOnlySnapshot, {
+        { itemID = 7001, name = "Support Trinket", slot = "Trinket", equipLoc = "INVTYPE_TRINKET",
+            eligibleSlotInstances = { "Trinket 1", "Trinket 2" }, matcherStats = { Crit = 20 } },
+    })
+    Check("trinkets are excluded from core match positions", #trinketPositions == 0 and #trinketUnmatched == 0)
+
+    local supportCandidates = {
+        { itemID = 7001, name = "Critical Support", slot = "Trinket", equipLoc = "INVTYPE_TRINKET", matcherStats = { Crit = 20 } },
+        { itemID = 7002, name = "Unneeded Support", slot = "Trinket", equipLoc = "INVTYPE_TRINKET", matcherStats = { Haste = 20 } },
+    }
+    local supportItems = BuildStatSupportItems(1, supportCandidates,
+        { stats = { Crit = 50 }, assignments = {} }, { Crit = 10, Haste = 0, Mastery = 0, Vers = 0 }, projection, 1, "master")
+    Check("needed trinket stat becomes advisory support", #supportItems == 1 and supportItems[1].itemID == 7001)
+
+    local reducedProjection = {
+        baselineRatings = ZeroStats(),
+        basePercentages = ZeroStats(),
+        masteryCoefficient = 1,
+        matchStyle = "balanced",
+        priorityWeights = { Crit = 1, Haste = 1, Mastery = 1, Vers = 1 },
+        bonusCache = { Crit = {}, Haste = {}, Mastery = {}, Vers = {} },
+    }
+    for _, key in ipairs(SECONDARY) do
+        for rating = 0, 1000 do
+            reducedProjection.bonusCache[key][tostring(rating)] = key == "Crit" and
+                (rating <= 60 and rating / 10 or 6 + ((rating - 60) / 20)) or rating / 10
+        end
+    end
+    local reducedSupports = BuildStatSupportItems(1, {
+        { itemID = 7003, name = "Reduced Support", slot = "Trinket", equipLoc = "INVTYPE_TRINKET", matcherStats = { Crit = 30 } },
+    }, { stats = { Crit = 50 }, assignments = {} }, { Crit = 10, Haste = 0, Mastery = 0, Vers = 0 }, reducedProjection, 1, "master")
+    Check("trinket support is withheld in reduced efficiency", #reducedSupports == 0)
 
     local mapping = KeyLab.GearLootMapping
     if mapping and type(mapping.GetItemStats) == "function" then

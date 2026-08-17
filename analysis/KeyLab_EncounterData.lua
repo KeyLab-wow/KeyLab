@@ -572,12 +572,18 @@ function EncounterData.GetEncounterList(options)
     end
 
     local list = {}
+    local seasonKey = options.seasonKey
+        or (KeyLab.SeasonData and KeyLab.SeasonData.GetSelectedSeasonKey and KeyLab.SeasonData.GetSelectedSeasonKey())
     for _, encounter in pairs(raw or {}) do
         local flags = encounter and encounter.flags or {}
         local hasCompletedResult = encounter and encounter.status ~= "capture_failed" and HasCompletedResultSignal(encounter)
         local keep = true
 
-        if options.includeInterrupted ~= true then
+        if keep and seasonKey and KeyLab.SeasonData and KeyLab.SeasonData.Matches then
+            keep = KeyLab.SeasonData.Matches(encounter, seasonKey)
+        end
+
+        if keep and options.includeInterrupted ~= true then
             keep = hasCompletedResult or (flags.interrupted ~= true and not (encounter and encounter.interrupted == true))
         end
 

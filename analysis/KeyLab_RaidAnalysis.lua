@@ -46,9 +46,13 @@ end
 function RaidAnalysis.GetEncounters()
     local list = {}
     local source = KeyLab.DB and KeyLab.DB.Raids and KeyLab.DB.Raids.GetEncounters and KeyLab.DB.Raids.GetEncounters() or {}
+    local seasonKey = KeyLab.SeasonData and KeyLab.SeasonData.GetSelectedSeasonKey
+        and KeyLab.SeasonData.GetSelectedSeasonKey() or nil
     for _, encounter in ipairs(source) do
         local raid = encounter and encounter.raid or {}
-        if encounter.contentType == "raid" and raid.encounterID and PlayerMatches(encounter) then
+        local seasonMatches = not seasonKey or not KeyLab.SeasonData or not KeyLab.SeasonData.Matches
+            or KeyLab.SeasonData.Matches(encounter, seasonKey)
+        if seasonMatches and encounter.contentType == "raid" and raid.encounterID and PlayerMatches(encounter) then
             table.insert(list, encounter)
         end
     end
@@ -144,12 +148,34 @@ function RaidAnalysis.TrendHigherIsBetter(metricKey)
     return info.higherIsBetter ~= false
 end
 
-function RaidAnalysis.GetBossOptions(encounters)
+function RaidAnalysis.GetRaidOptions(encounters)
+    local seen = {}
+    local options = {{ value = nil, label = "All Raids" }}
+    for _, encounter in ipairs(encounters or {}) do
+        local raid = RaidAnalysis.GetRaid(encounter)
+        local id = Number(raid.instanceID)
+        if id and not seen[id] then
+            seen[id] = true
+            table.insert(options, {
+                value = id,
+                label = raid.instanceName or ("Raid " .. tostring(id)),
+            })
+        end
+    end
+    table.sort(options, function(a, b)
+        if a.value == nil then return b.value ~= nil end
+        if b.value == nil then return false end
+        return tostring(a.label) < tostring(b.label)
+    end)
+    return options
+end
+
+function RaidAnalysis.GetBossOptions(encounters, instanceID)
     local seen, options = {}, {}
     for _, encounter in ipairs(encounters or {}) do
         local raid = RaidAnalysis.GetRaid(encounter)
         local id = Number(raid.encounterID)
-        if id and not seen[id] then
+        if (not instanceID or Number(raid.instanceID) == Number(instanceID)) and id and not seen[id] then
             seen[id] = true
             table.insert(options, { value = id, label = raid.encounterName or ("Encounter " .. tostring(id)) })
         end
@@ -201,12 +227,13 @@ function RaidAnalysis.GetSpecOptions(encounters, encounterID, difficultyID)
     return options
 end
 
-function RaidAnalysis.Filter(encounters, encounterID, difficultyID, spec)
+function RaidAnalysis.Filter(encounters, encounterID, difficultyID, spec, instanceID)
     local filtered = {}
     if not encounterID then return filtered end
     for _, encounter in ipairs(encounters or {}) do
         local raid = RaidAnalysis.GetRaid(encounter)
         local matches = raid.encounterID == encounterID
+        if matches and instanceID then matches = Number(raid.instanceID) == Number(instanceID) end
         if matches and difficultyID then matches = raid.difficultyID == difficultyID end
         if matches and spec then matches = RaidAnalysis.GetSpecName(encounter) == spec end
         if matches then table.insert(filtered, encounter) end
