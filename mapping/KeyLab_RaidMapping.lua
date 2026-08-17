@@ -12,31 +12,29 @@ local Raids = KeyLab.Mapping.Raids
 -- different map instance ID, so encounter IDs are also used to resolve the
 -- configured raid at pull start.
 Raids.instances = {
-    [1314] = {
-        instanceID = 1314,
-        name = "Dreamrift",
-        encounters = { [2795] = true },
-    },
-    [1307] = {
-        instanceID = 1307,
-        name = "Voidspire",
+    [1320] = {
+        instanceID = 1320,
+        name = "The Venomous Abyss",
         encounters = {
-            [2733] = true, [2734] = true, [2735] = true,
-            [2736] = true, [2737] = true, [2738] = true,
+            [2888] = true, [2874] = true, [2894] = true, [2882] = true,
+            [2871] = true, [2887] = true, [2883] = true, [2895] = true,
+        },
+        encounterNames = {
+            [2888] = "Nek'zali the Soulcoiler",
+            [2874] = "Entombed Sentinels",
+            [2894] = "The Lost Explorers",
+            [2882] = "Vashnik the Malignant",
+            [2871] = "Sszorak",
+            [2887] = "The Twin Fangs",
+            [2883] = "The Coiled Altar",
+            [2895] = "Ula'tek",
         },
     },
-    [1308] = {
-        instanceID = 1308,
-        name = "March on Quel'Danas",
-        encounters = { [2739] = true, [2740] = true },
-    },
-    [1305] = {
-        instanceID = 1305,
-        name = "Sporefall",
-        -- 3159 is the live ENCOUNTER_START/END ID for Rotmire. 2711 is
-        -- retained because it is the Encounter Journal boss ID used by the
-        -- loot database and preview records.
-        encounters = { [3159] = true, [2711] = true },
+    [1317] = {
+        instanceID = 1317,
+        name = "The Tidebound Grotto",
+        encounters = { [2849] = true },
+        encounterNames = { [2849] = "Nymrissa Wavecaller" },
     },
 }
 

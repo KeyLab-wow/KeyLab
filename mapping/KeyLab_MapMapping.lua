@@ -17,6 +17,7 @@ KeyLab.Mapping.Maps = {
     [402] = { keylabKey = "map402", name = "Algeth'ar Academy", store = true },
     [503] = { keylabKey = "map503", name = "Ara-Kara, City of Echoes", store = true },
     [244] = { keylabKey = "map244", name = "Atal'Dazar", store = true },
+    [588] = { keylabKey = "map588", name = "Altar of Fangs", store = true },
     [164] = { keylabKey = "map164", name = "Auchindoun", store = true },
     [199] = { keylabKey = "map199", name = "Black Rook Hold", store = true },
     [163] = { keylabKey = "map163", name = "Bloodmaul Slag Mines", store = true },
@@ -30,6 +31,7 @@ KeyLab.Mapping.Maps = {
     [463] = { keylabKey = "map463", name = "Dawn of the Infinite: Galakrond's Fall", store = true },
     [464] = { keylabKey = "map464", name = "Dawn of the Infinite: Murozond's Rise", store = true },
     [377] = { keylabKey = "map377", name = "De Other Side", store = true },
+    [586] = { keylabKey = "map586", name = "Den of Nalorakk", store = true },
     [542] = { keylabKey = "map542", name = "Eco-Dome Al'dani", store = true },
     [197] = { keylabKey = "map197", name = "Eye of Azshara", store = true },
     [245] = { keylabKey = "map245", name = "Freehold", store = true },
@@ -43,6 +45,7 @@ KeyLab.Mapping.Maps = {
     [249] = { keylabKey = "map249", name = "Kings' Rest", store = true },
     [558] = { keylabKey = "map558", name = "Magisters' Terrace", store = true },
     [560] = { keylabKey = "map560", name = "Maisara Caverns", store = true },
+    [587] = { keylabKey = "map587", name = "Murder Row", store = true },
     [208] = { keylabKey = "map208", name = "Maw of Souls", store = true },
     [375] = { keylabKey = "map375", name = "Mists of Tirna Scithe", store = true },
     [60]  = { keylabKey = "map60",  name = "Mogu'shan Palace", store = true },
@@ -78,6 +81,7 @@ KeyLab.Mapping.Maps = {
     [2]   = { keylabKey = "map2",   name = "Temple of the Jade Serpent", store = true },
     [209] = { keylabKey = "map209", name = "The Arcway", store = true },
     [401] = { keylabKey = "map401", name = "The Azure Vault", store = true },
+    [584] = { keylabKey = "map584", name = "The Blinding Vale", store = true },
     [505] = { keylabKey = "map505", name = "The Dawnbreaker", store = true },
     [168] = { keylabKey = "map168", name = "The Everbloom", store = true },
     [247] = { keylabKey = "map247", name = "The MOTHERLODE!!", store = true },
@@ -94,20 +98,20 @@ KeyLab.Mapping.Maps = {
     [403] = { keylabKey = "map403", name = "Uldaman: Legacy of Tyr", store = true },
     [167] = { keylabKey = "map167", name = "Upper Blackrock Spire", store = true },
     [207] = { keylabKey = "map207", name = "Vault of the Wardens", store = true },
+    [585] = { keylabKey = "map585", name = "Voidscar Arena", store = true },
     [248] = { keylabKey = "map248", name = "Waycrest Manor", store = true },
     [557] = { keylabKey = "map557", name = "Windrunner Spire", store = true },
 }
 
 KeyLab.Mapping.MythicPlusTimerSeconds = {
-    [558] = 34 * 60, -- Magisters' Terrace
-    [560] = 33 * 60, -- Maisara Caverns
-    [559] = 30 * 60, -- Nexus-Point Xenas
-    [557] = 33 * 60, -- Windrunner Spire
-    [402] = 31 * 60, -- Algeth'ar Academy
-    [556] = 30 * 60, -- Pit of Saron
-    [239] = 34 * 60, -- Seat of the Triumvirate
-    [583] = 34 * 60, -- Seat of the Triumvirate
-    [161] = 28 * 60, -- Skyreach
+    [588] = 30 * 60, -- Altar of Fangs
+    [587] = 34 * 60, -- Murder Row
+    [586] = 32 * 60, -- Den of Nalorakk
+    [584] = 30 * 60, -- The Blinding Vale
+    [585] = 30 * 60, -- Voidscar Arena
+    [249] = 33 * 60, -- Kings' Rest
+    [399] = 28 * 60, -- Ruby Life Pools
+    [250] = 32 * 60, -- Temple of Sethraliss
 }
 
 KeyLab.Mapping.MythicPlusChestRules = {
