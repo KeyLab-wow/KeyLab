@@ -11,50 +11,31 @@ local LEGACY_PREFIX = "keylab-preview-raid-"
 
 local RAID_DEFINITIONS = {
     {
-        instanceID = 1307,
-        instanceName = "The Voidspire",
+        instanceID = 1320,
+        instanceName = "The Venomous Abyss",
         difficultyID = 15,
         difficultyName = "Heroic",
         daysAgo = 0,
         latestSample = true,
         bosses = {
-            { encounterID = 2733, encounterName = "Imperator Averzian", pulls = 3, killPull = 3, offset = -25000 },
-            { encounterID = 2734, encounterName = "Vorasius", pulls = 4, killPull = 4, offset = 15000 },
-            { encounterID = 2735, encounterName = "Fallen-King Salhadaar", pulls = 7, killPull = 7, offset = 35000 },
-            { encounterID = 2736, encounterName = "Vaelgor & Ezzorak", pulls = 4, killPull = 4, offset = 60000 },
-            { encounterID = 2737, encounterName = "Lightblinded Vanguard", pulls = 12, killPull = 12, offset = 20000 },
-            { encounterID = 2738, encounterName = "Crown of the Cosmos", pulls = 8, killPull = 8, offset = 75000 },
+            { encounterID = 2888, encounterName = "Nek'zali the Soulcoiler", pulls = 3, killPull = 3, offset = -25000 },
+            { encounterID = 2874, encounterName = "Entombed Sentinels", pulls = 4, killPull = 4, offset = 15000 },
+            { encounterID = 2894, encounterName = "The Lost Explorers", pulls = 7, killPull = 7, offset = 35000 },
+            { encounterID = 2882, encounterName = "Vashnik the Malignant", pulls = 4, killPull = 4, offset = 60000 },
+            { encounterID = 2871, encounterName = "Sszorak", pulls = 8, killPull = 8, offset = 20000 },
+            { encounterID = 2887, encounterName = "The Twin Fangs", pulls = 9, killPull = 9, offset = 50000 },
+            { encounterID = 2883, encounterName = "The Coiled Altar", pulls = 10, killPull = 10, offset = 65000 },
+            { encounterID = 2895, encounterName = "Ula'tek", pulls = 12, killPull = 12, offset = 90000 },
         },
     },
     {
-        instanceID = 1314,
-        instanceName = "The Dreamrift",
+        instanceID = 1317,
+        instanceName = "The Tidebound Grotto",
         difficultyID = 14,
         difficultyName = "Normal",
         daysAgo = 12,
         bosses = {
-            { encounterID = 2795, encounterName = "Chimaerus the Undreamt God", pulls = 8, killPull = 8, offset = 45000 },
-        },
-    },
-    {
-        instanceID = 1308,
-        instanceName = "March on Quel'Danas",
-        difficultyID = 15,
-        difficultyName = "Heroic",
-        daysAgo = 5,
-        bosses = {
-            { encounterID = 2739, encounterName = "Belo'ren, Child of Al'ar", pulls = 6, killPull = 6, offset = 30000 },
-            { encounterID = 2740, encounterName = "Midnight Falls", pulls = 11, killPull = 11, offset = 90000 },
-        },
-    },
-    {
-        instanceID = 1305,
-        instanceName = "Sporefall",
-        difficultyID = 15,
-        difficultyName = "Heroic",
-        daysAgo = 2,
-        bosses = {
-            { encounterID = 2711, encounterName = "Rotmire", pulls = 10, killPull = 10, offset = 55000 },
+            { encounterID = 2849, encounterName = "Nymrissa Wavecaller", pulls = 8, killPull = 8, offset = 45000 },
         },
     },
 }
@@ -78,7 +59,7 @@ local GEAR_SLOTS = {
 
 local function BuildGearProfile(variantIndex)
     local slots, signature = {}, {}
-    local level = 264 + (variantIndex * 2)
+    local level = 302 + (variantIndex * 3)
     for slotIndex, slotName in ipairs(GEAR_SLOTS) do
         local itemID = 991000 + (variantIndex * 100) + slotIndex
         local itemName = string.format("%s Setup %s", slotName, string.char(64 + variantIndex))

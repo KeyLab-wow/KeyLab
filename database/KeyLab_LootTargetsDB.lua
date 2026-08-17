@@ -5,8 +5,8 @@ _G.KeyLab = KeyLab
 KeyLab.LootTargetsDB = KeyLab.LootTargetsDB or {}
 local LootTargetsDB = KeyLab.LootTargetsDB
 
-local TARGET_SCHEMA_VERSION = 2
-local MIGRATION_VERSION = 2
+local TARGET_SCHEMA_VERSION = 3
+local MIGRATION_VERSION = 3
 
 local STATUS_LABELS = {
     target = "Target",
@@ -33,8 +33,8 @@ KeyLab_LootTargetsDB.lua
 
 Owns saved Gear Target choices. The current model is character + spec + slot:
 
-KeyLabDB.gearTargets[characterKey][specID] = {
-    schemaVersion = 2,
+KeyLabDB.seasonGearTargets[seasonKey][characterKey][specID] = {
+    schemaVersion = 3,
     slots = {
         ["Head"] = {
             target = { itemID, sourceID, slotInstance, status, savedAt },
@@ -46,13 +46,15 @@ KeyLabDB.gearTargets[characterKey][specID] = {
 
 Pending records preserve legacy choices that could not be placed safely and
 temporary choices made by the old UI before the slot picker is introduced.
-The legacy lootTargets and lootTargetStatuses tables are kept as a backup.
+The legacy gearTargets, lootTargets, and lootTargetStatuses tables are kept as
+migration backups until the player explicitly erases MN S1 data.
 ]]
 
 local function EnsureRoot()
     if KeyLab.DB and KeyLab.DB.Get then KeyLab.DB.Get() end
     KeyLabDB = KeyLabDB or {}
     KeyLabDB.gearTargets = KeyLabDB.gearTargets or {}
+    KeyLabDB.seasonGearTargets = KeyLabDB.seasonGearTargets or {}
     KeyLabDB.lootTargets = KeyLabDB.lootTargets or {}
     KeyLabDB.lootTargetStatuses = KeyLabDB.lootTargetStatuses or {}
     return KeyLabDB
@@ -86,21 +88,51 @@ local function NormalizeLegacyStatus(status, selected)
     return selected == true and "target" or nil
 end
 
-local function GetSpecStoreForCharacter(characterKey, specID, create)
+local function NormalizeSeasonKey(value, fallback)
+    if KeyLab.SeasonData and KeyLab.SeasonData.NormalizeSeasonKey then
+        return KeyLab.SeasonData.NormalizeSeasonKey(value, fallback)
+    end
+    if value == 1 or value == "1" or value == "MN_S1" then return "MN_S1" end
+    if value == 2 or value == "2" or value == "MN_S2" then return "MN_S2" end
+    return fallback
+end
+
+local function CurrentSeasonKey()
+    if KeyLab.SeasonData and KeyLab.SeasonData.GetCurrentSeasonKey then
+        return KeyLab.SeasonData.GetCurrentSeasonKey()
+    end
+    return "MN_S2"
+end
+
+local function AssignmentSeasonKey(itemOrItemID)
+    if type(itemOrItemID) == "table" then
+        return NormalizeSeasonKey(itemOrItemID.seasonKey)
+            or NormalizeSeasonKey(itemOrItemID.mnSeason)
+            or CurrentSeasonKey()
+    end
+    return CurrentSeasonKey()
+end
+
+local function GetSpecStoreForCharacter(characterKey, specID, create, seasonKey)
     local db = EnsureRoot()
     characterKey = tostring(characterKey or CurrentCharacterKey())
     specID = tonumber(specID) or 0
+    seasonKey = NormalizeSeasonKey(seasonKey, CurrentSeasonKey())
     if create then
-        db.gearTargets[characterKey] = db.gearTargets[characterKey] or {}
-        db.gearTargets[characterKey][specID] = db.gearTargets[characterKey][specID] or {
+        db.seasonGearTargets[seasonKey] = db.seasonGearTargets[seasonKey] or {}
+        db.seasonGearTargets[seasonKey][characterKey] = db.seasonGearTargets[seasonKey][characterKey] or {}
+        db.seasonGearTargets[seasonKey][characterKey][specID] = db.seasonGearTargets[seasonKey][characterKey][specID] or {
             schemaVersion = TARGET_SCHEMA_VERSION,
+            seasonKey = seasonKey,
             slots = {},
             pending = {},
         }
     end
-    local store = db.gearTargets[characterKey] and db.gearTargets[characterKey][specID] or nil
+    local seasonRoot = db.seasonGearTargets[seasonKey]
+    local store = seasonRoot and seasonRoot[characterKey] and seasonRoot[characterKey][specID] or nil
     if store and create then
         store.schemaVersion = TARGET_SCHEMA_VERSION
+        store.seasonKey = seasonKey
         store.slots = store.slots or {}
         store.pending = store.pending or {}
     end
@@ -155,6 +187,11 @@ local function NewRecord(itemID, sourceID, slotInstance, status, extra)
         savedAt = time and time() or 0,
     }
     for key, value in pairs(extra or {}) do record[key] = value end
+    local seasonKey = NormalizeSeasonKey(record.seasonKey)
+        or NormalizeSeasonKey(record.mnSeason)
+        or CurrentSeasonKey()
+    record.seasonKey = seasonKey
+    record.mnSeason = seasonKey == "MN_S1" and 1 or 2
     return record
 end
 
@@ -238,6 +275,9 @@ local function AssignmentMetadata(itemOrItemID)
         itemLevel = tonumber(itemOrItemID.itemLevel),
         projectedItemLevel = tonumber(itemOrItemID.projectedItemLevel),
         mnSeason = tonumber(itemOrItemID.mnSeason),
+        seasonKey = NormalizeSeasonKey(itemOrItemID.seasonKey)
+            or NormalizeSeasonKey(itemOrItemID.mnSeason)
+            or CurrentSeasonKey(),
     }
 end
 
@@ -296,9 +336,9 @@ function LootTargetsDB.GetSlotOrder()
     return out
 end
 
-function LootTargetsDB.GetSpecStore(specID)
+function LootTargetsDB.GetSpecStore(specID, seasonKey)
     specID = tonumber(specID or LootTargetsDB.GetCurrentSpecID()) or 0
-    local store = GetSpecStoreForCharacter(CurrentCharacterKey(), specID, true)
+    local store = GetSpecStoreForCharacter(CurrentCharacterKey(), specID, true, seasonKey)
     local mainHand = GetSlotStore(store, "Main Hand", false)
     if mainHand and mainHand.target then
         mainHand.target.closesOffHand = ItemClosesOffHand(mainHand.target.itemID, specID) == true
@@ -318,26 +358,27 @@ function LootTargetsDB.GetStatusLabel(status)
     return status and STATUS_LABELS[status] or "Unmarked"
 end
 
-function LootTargetsDB.GetTargetForSlot(specID, slotInstance)
-    local slotStore = GetSlotStore(LootTargetsDB.GetSpecStore(specID), slotInstance, false)
+function LootTargetsDB.GetTargetForSlot(specID, slotInstance, seasonKey)
+    local slotStore = GetSlotStore(LootTargetsDB.GetSpecStore(specID, seasonKey), slotInstance, false)
     return slotStore and slotStore.target or nil
 end
 
-function LootTargetsDB.GetAlternativesForSlot(specID, slotInstance)
-    local slotStore = GetSlotStore(LootTargetsDB.GetSpecStore(specID), slotInstance, false)
+function LootTargetsDB.GetAlternativesForSlot(specID, slotInstance, seasonKey)
+    local slotStore = GetSlotStore(LootTargetsDB.GetSpecStore(specID, seasonKey), slotInstance, false)
     return slotStore and slotStore.alternatives or {}
 end
 
-function LootTargetsDB.GetPendingAssignments(specID)
-    return LootTargetsDB.GetSpecStore(specID).pending
+function LootTargetsDB.GetPendingAssignments(specID, seasonKey)
+    return LootTargetsDB.GetSpecStore(specID, seasonKey).pending
 end
 
 function LootTargetsDB.GetAssignmentsForItem(specID, itemOrItemID)
     return FindAssignments(LootTargetsDB.GetSpecStore(specID), GetItemID(itemOrItemID))
 end
 
-function LootTargetsDB.CanAssign(specID, itemOrItemID, status, slotInstance, replaceExisting)
+function LootTargetsDB.CanAssign(specID, itemOrItemID, status, slotInstance, replaceExisting, seasonKey)
     specID = tonumber(specID or LootTargetsDB.GetCurrentSpecID()) or 0
+    seasonKey = NormalizeSeasonKey(seasonKey, AssignmentSeasonKey(itemOrItemID))
     local itemID = GetItemID(itemOrItemID)
     status = NormalizeStatus(status)
     if not itemID then return false, "invalid_item" end
@@ -345,7 +386,7 @@ function LootTargetsDB.CanAssign(specID, itemOrItemID, status, slotInstance, rep
     if not VALID_SLOTS[slotInstance] then return false, "slot_required" end
     if not Contains(GetEligibleSlots(itemOrItemID, specID), slotInstance) then return false, "invalid_slot" end
 
-    local store = LootTargetsDB.GetSpecStore(specID)
+    local store = LootTargetsDB.GetSpecStore(specID, seasonKey)
     local slotStore = GetSlotStore(store, slotInstance, true)
     if slotInstance == "Off Hand" then
         local mainHand = GetSlotStore(store, "Main Hand", false)
@@ -382,22 +423,25 @@ end
 
 function LootTargetsDB.SetAssignment(specID, itemOrItemID, status, slotInstance, sourceID, replaceExisting)
     specID = tonumber(specID or LootTargetsDB.GetCurrentSpecID()) or 0
+    local seasonKey = AssignmentSeasonKey(itemOrItemID)
     local itemID = GetItemID(itemOrItemID)
     status = NormalizeStatus(status)
     if not itemID then return false, "invalid_item" end
-    local store = LootTargetsDB.GetSpecStore(specID)
+    local store = LootTargetsDB.GetSpecStore(specID, seasonKey)
     if not status then
         RemoveItemEverywhere(store, itemID, specID)
         return true
     end
 
-    local allowed, reason = LootTargetsDB.CanAssign(specID, itemOrItemID, status, slotInstance, replaceExisting)
+    local allowed, reason = LootTargetsDB.CanAssign(specID, itemOrItemID, status, slotInstance, replaceExisting, seasonKey)
     if not allowed then return false, reason end
     sourceID = tonumber(sourceID or type(itemOrItemID) == "table" and itemOrItemID.sourceID)
     store.pending[itemID] = nil
     local slotStore = GetSlotStore(store, slotInstance, true)
     local closesOffHand = status == "target" and slotInstance == "Main Hand" and ItemClosesOffHand(itemOrItemID, specID)
     local metadata = AssignmentMetadata(itemOrItemID)
+    metadata.seasonKey = seasonKey
+    metadata.mnSeason = seasonKey == "MN_S1" and 1 or 2
     metadata.closesOffHand = closesOffHand == true
     local record = NewRecord(itemID, sourceID, slotInstance, status, metadata)
     if status == "target" then
@@ -515,18 +559,22 @@ local function EnrichRecord(record, specID)
         itemLevel = record.itemLevel,
         projectedItemLevel = record.projectedItemLevel,
         ownedMatcherItem = record.ownedMatcherItem == true,
+        seasonKey = record.seasonKey,
+        mnSeason = record.mnSeason,
     }
     item.status = record.status
     item.slotInstance = record.slotInstance
     item.sourceID = record.sourceID or item.sourceID
     item.requiresSlot = record.requiresSlot == true
+    item.seasonKey = NormalizeSeasonKey(record.seasonKey, CurrentSeasonKey())
+    item.mnSeason = item.seasonKey == "MN_S1" and 1 or 2
     return item
 end
 
-function LootTargetsDB.GetAllTargetsForSpec(specID)
+function LootTargetsDB.GetAllTargetsForSpec(specID, seasonKey)
     specID = tonumber(specID or LootTargetsDB.GetCurrentSpecID()) or 0
     local out = {}
-    local store = LootTargetsDB.GetSpecStore(specID)
+    local store = LootTargetsDB.GetSpecStore(specID, seasonKey)
     for _, slotName in ipairs(SLOT_ORDER) do
         local slotStore = GetSlotStore(store, slotName, false)
         if slotStore and slotStore.target then table.insert(out, EnrichRecord(slotStore.target, specID)) end
@@ -537,10 +585,10 @@ function LootTargetsDB.GetAllTargetsForSpec(specID)
     return out
 end
 
-function LootTargetsDB.GetAllAlternativesForSpec(specID)
+function LootTargetsDB.GetAllAlternativesForSpec(specID, seasonKey)
     specID = tonumber(specID or LootTargetsDB.GetCurrentSpecID()) or 0
     local out = {}
-    local store = LootTargetsDB.GetSpecStore(specID)
+    local store = LootTargetsDB.GetSpecStore(specID, seasonKey)
     for _, slotName in ipairs(SLOT_ORDER) do
         local slotStore = GetSlotStore(store, slotName, false)
         for _, record in pairs(slotStore and slotStore.alternatives or {}) do table.insert(out, EnrichRecord(record, specID)) end
@@ -551,8 +599,8 @@ function LootTargetsDB.GetAllAlternativesForSpec(specID)
     return out
 end
 
-function LootTargetsDB.GetSavedTargetsForSpec(specID)
-    local list = LootTargetsDB.GetAllTargetsForSpec(specID)
+function LootTargetsDB.GetSavedTargetsForSpec(specID, seasonKey)
+    local list = LootTargetsDB.GetAllTargetsForSpec(specID, seasonKey)
     table.sort(list, function(a, b)
         if tostring(a.sourceName or "") ~= tostring(b.sourceName or "") then
             return tostring(a.sourceName or "") < tostring(b.sourceName or "")
@@ -565,8 +613,8 @@ function LootTargetsDB.GetSavedTargetsForSpec(specID)
     return list
 end
 
-function LootTargetsDB.ClearSpec(specID)
-    local store = LootTargetsDB.GetSpecStore(specID)
+function LootTargetsDB.ClearSpec(specID, seasonKey)
+    local store = LootTargetsDB.GetSpecStore(specID, seasonKey)
     store.slots = {}
     store.pending = {}
 end
@@ -575,7 +623,56 @@ function LootTargetsDB.MigrateLegacy()
     local db = EnsureRoot()
     local currentMigrationVersion = tonumber(db.gearTargetsMigrationVersion) or 0
     if currentMigrationVersion >= MIGRATION_VERSION then return db.gearTargetsMigrationReport end
-    local report = { migrated = 0, assigned = 0, pending = 0, ignored = 0 }
+    local report = { migrated = 0, assigned = 0, pending = 0, alternatives = 0, ignored = 0 }
+
+    -- Move the slot-aware schema-2 records into timestamp-labeled season
+    -- containers. A record without a timestamp predates season labeling and
+    -- therefore belongs to MN S1.
+    for characterKey, specs in pairs(db.gearTargets or {}) do
+        if type(specs) == "table" then
+            for specID, oldStore in pairs(specs) do
+                specID = tonumber(specID) or 0
+                if type(oldStore) == "table" then
+                    for slotName, oldSlot in pairs(oldStore.slots or {}) do
+                        if VALID_SLOTS[slotName] and type(oldSlot) == "table" then
+                            if type(oldSlot.target) == "table" then
+                                local seasonKey = KeyLab.SeasonData and KeyLab.SeasonData.GetSeasonKeyForTimestamp
+                                    and KeyLab.SeasonData.GetSeasonKeyForTimestamp(oldSlot.target.savedAt, "MN_S1") or "MN_S1"
+                                local store = GetSpecStoreForCharacter(characterKey, specID, true, seasonKey)
+                                local slotStore = GetSlotStore(store, slotName, true)
+                                oldSlot.target.seasonKey = seasonKey
+                                oldSlot.target.mnSeason = seasonKey == "MN_S1" and 1 or 2
+                                if not slotStore.target then slotStore.target = oldSlot.target; report.assigned = report.assigned + 1 end
+                            end
+                            for itemID, record in pairs(oldSlot.alternatives or {}) do
+                                if type(record) == "table" then
+                                    local seasonKey = KeyLab.SeasonData and KeyLab.SeasonData.GetSeasonKeyForTimestamp
+                                        and KeyLab.SeasonData.GetSeasonKeyForTimestamp(record.savedAt, "MN_S1") or "MN_S1"
+                                    local store = GetSpecStoreForCharacter(characterKey, specID, true, seasonKey)
+                                    local slotStore = GetSlotStore(store, slotName, true)
+                                    record.seasonKey = seasonKey
+                                    record.mnSeason = seasonKey == "MN_S1" and 1 or 2
+                                    slotStore.alternatives[tonumber(itemID) or itemID] = record
+                                    report.alternatives = report.alternatives + 1
+                                end
+                            end
+                        end
+                    end
+                    for itemID, record in pairs(oldStore.pending or {}) do
+                        if type(record) == "table" then
+                            local seasonKey = KeyLab.SeasonData and KeyLab.SeasonData.GetSeasonKeyForTimestamp
+                                and KeyLab.SeasonData.GetSeasonKeyForTimestamp(record.savedAt, "MN_S1") or "MN_S1"
+                            local store = GetSpecStoreForCharacter(characterKey, specID, true, seasonKey)
+                            record.seasonKey = seasonKey
+                            record.mnSeason = seasonKey == "MN_S1" and 1 or 2
+                            store.pending[tonumber(itemID) or itemID] = record
+                            report.pending = report.pending + 1
+                        end
+                    end
+                end
+            end
+        end
+    end
     local characterKeys = {}
     for key in pairs(db.lootTargets or {}) do characterKeys[key] = true end
     for key in pairs(db.lootTargetStatuses or {}) do characterKeys[key] = true end
@@ -594,7 +691,7 @@ function LootTargetsDB.MigrateLegacy()
             local itemIDs = {}
             for itemID in pairs(itemSet) do if tonumber(itemID) then table.insert(itemIDs, tonumber(itemID)) end end
             table.sort(itemIDs)
-            local store = GetSpecStoreForCharacter(characterKey, specID, true)
+            local store = GetSpecStoreForCharacter(characterKey, specID, true, "MN_S1")
 
             for _, itemID in ipairs(itemIDs) do
                 local status = NormalizeLegacyStatus(statuses[itemID] or statuses[tostring(itemID)], selected[itemID] or selected[tostring(itemID)])
@@ -614,6 +711,8 @@ function LootTargetsDB.MigrateLegacy()
                             slotStore.target = NewRecord(itemID, nil, slotInstance, "target", {
                                 migratedFrom = string.lower(tostring(statuses[itemID] or statuses[tostring(itemID)] or "selected")),
                                 closesOffHand = closesOffHand == true,
+                                seasonKey = "MN_S1",
+                                mnSeason = 1,
                             })
                             report.assigned = report.assigned + 1
                             assigned = true
@@ -624,6 +723,8 @@ function LootTargetsDB.MigrateLegacy()
                         store.pending[itemID] = NewRecord(itemID, nil, nil, "target", {
                             migratedFrom = string.lower(tostring(statuses[itemID] or statuses[tostring(itemID)] or "selected")),
                             requiresSlot = true,
+                            seasonKey = "MN_S1",
+                            mnSeason = 1,
                         })
                         report.pending = report.pending + 1
                     end
@@ -635,6 +736,25 @@ function LootTargetsDB.MigrateLegacy()
     db.gearTargetsMigrationVersion = MIGRATION_VERSION
     db.gearTargetsMigrationReport = report
     return report
+end
+
+function LootTargetsDB.ClearSeasonForAllCharacters(seasonKey)
+    local db = EnsureRoot()
+    seasonKey = NormalizeSeasonKey(seasonKey, "MN_S1")
+    local removed = 0
+    for _, specs in pairs(db.seasonGearTargets[seasonKey] or {}) do
+        for _, store in pairs(type(specs) == "table" and specs or {}) do
+            for _, slotStore in pairs(type(store) == "table" and store.slots or {}) do
+                if type(slotStore) == "table" then
+                    if slotStore.target then removed = removed + 1 end
+                    for _ in pairs(slotStore.alternatives or {}) do removed = removed + 1 end
+                end
+            end
+            for _ in pairs(type(store) == "table" and store.pending or {}) do removed = removed + 1 end
+        end
+    end
+    db.seasonGearTargets[seasonKey] = {}
+    return removed
 end
 
 return LootTargetsDB

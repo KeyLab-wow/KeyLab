@@ -25,6 +25,7 @@ local DB_VERSION = "0.1.9"
 local DEFAULT_SETTINGS = {
     completedMythicPlusOnly = true,
     contentMode = "mplus",
+    selectedSeasonKey = "MN_S2",
     autoShowGroupFinderHelper = true,
     autoMinimizeForBlizzardPanels = true,
 }
@@ -56,6 +57,7 @@ function DB.Initialize()
     EnsureTable(KeyLabDB, "tierSets")
     EnsureTable(KeyLabDB, "statGoals")
     EnsureTable(KeyLabDB, "statGoalMatcherResults")
+    EnsureTable(KeyLabDB, "seasonGearTargets")
     EnsureTable(KeyLabDB, "practiceSessions")
     EnsureTable(KeyLabDB, "performanceLeaderboards")
     EnsureTable(KeyLabDB, "activityCounts")
@@ -159,6 +161,7 @@ function DB.ResetAll()
         tierSets = {},
         statGoals = {},
         statGoalMatcherResults = {},
+        seasonGearTargets = {},
         practiceSessions = {},
         performanceLeaderboards = {},
         activityCounts = { schemaVersion = 1, characters = {} },

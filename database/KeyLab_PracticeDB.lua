@@ -85,6 +85,9 @@ function PracticeDB.AddSession(session)
 
     local sessions = GetSessionsTable()
     session.timestamp = session.timestamp or time()
+    if KeyLab.SeasonData and KeyLab.SeasonData.LabelRecord then
+        KeyLab.SeasonData.LabelRecord(session, session.timestamp)
+    end
     session.id = session.id or ("practice-" .. tostring(session.timestamp) .. "-" .. tostring(#sessions + 1))
     table.insert(sessions, session)
     if journal and journal.ApplyRetention then journal.ApplyRetention() end

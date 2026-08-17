@@ -147,6 +147,9 @@ function EncountersDB.AddEncounter(encounter)
     local encounters = GetEncountersTable()
 
     encounter.timestamp = encounter.timestamp or time()
+    if KeyLab.SeasonData and KeyLab.SeasonData.LabelRecord then
+        KeyLab.SeasonData.LabelRecord(encounter, encounter.timestamp)
+    end
     encounter.id = encounter.id or ("encounter-" .. tostring(encounter.timestamp) .. "-" .. tostring(#encounters + 1))
 
     table.insert(encounters, encounter)

@@ -56,6 +56,9 @@ function Raids.AddEncounter(encounter)
 
     local encounters = GetTable("raidEncounters")
     encounter.timestamp = encounter.timestamp or time()
+    if KeyLab.SeasonData and KeyLab.SeasonData.LabelRecord then
+        KeyLab.SeasonData.LabelRecord(encounter, encounter.timestamp)
+    end
     encounter.id = encounter.id or ("raid-encounter-" .. tostring(encounter.timestamp) .. "-" .. tostring(#encounters + 1))
     table.insert(encounters, encounter)
     if KeyLab.DB.ActivityCounters and KeyLab.DB.ActivityCounters.RecordEncounter then
@@ -78,6 +81,9 @@ function Raids.AddNight(night)
 
     local nights = GetTable("raidNights")
     night.endTime = night.endTime or time()
+    if KeyLab.SeasonData and KeyLab.SeasonData.LabelRecord then
+        KeyLab.SeasonData.LabelRecord(night, night.endTime)
+    end
     night.id = night.id or ("raid-night-" .. tostring(night.endTime) .. "-" .. tostring(#nights + 1))
 
     -- Raid-night checkpoints use the same ID so /reload and reconnects can
@@ -115,13 +121,31 @@ function Raids.GetNights()
     return CopyAndSort(GetTable("raidNights"), "endTime")
 end
 
-function Raids.GetLatestNight()
-    return Raids.GetNights()[1]
+local function GetDisplayNights(seasonKey)
+    if KeyLab.SeasonData and KeyLab.SeasonData.NormalizeSeasonKey then
+        seasonKey = KeyLab.SeasonData.NormalizeSeasonKey(
+            seasonKey,
+            KeyLab.SeasonData.GetSelectedSeasonKey and KeyLab.SeasonData.GetSelectedSeasonKey() or nil
+        )
+    end
+    local out = {}
+    for _, night in ipairs(Raids.GetNights()) do
+        if not seasonKey or not KeyLab.SeasonData or not KeyLab.SeasonData.Matches
+            or KeyLab.SeasonData.Matches(night, seasonKey)
+        then
+            table.insert(out, night)
+        end
+    end
+    return out
 end
 
-function Raids.GetLatestNightForCurrentCharacter()
+function Raids.GetLatestNight(seasonKey)
+    return GetDisplayNights(seasonKey)[1]
+end
+
+function Raids.GetLatestNightForCurrentCharacter(seasonKey)
     local encounterData = KeyLab.EncounterData or (KeyLab.Analysis and KeyLab.Analysis.EncounterData)
-    for _, night in ipairs(Raids.GetNights()) do
+    for _, night in ipairs(GetDisplayNights(seasonKey)) do
         local wrapper = { player = night.player }
         local characterMatches = not (encounterData and encounterData.EncounterMatchesCurrentCharacter)
             or encounterData.EncounterMatchesCurrentCharacter(wrapper, { allowMissingIdentity = false })
@@ -164,8 +188,8 @@ local function NightMatchesCurrentCharacter(night)
     return characterMatches and classMatches
 end
 
-function Raids.GetLatestNightForCurrentCharacterAndSpec()
-    for _, night in ipairs(Raids.GetNights()) do
+function Raids.GetLatestNightForCurrentCharacterAndSpec(seasonKey)
+    for _, night in ipairs(GetDisplayNights(seasonKey)) do
         if NightMatchesCurrentCharacter(night) and NightMatchesCurrentSpec(night) then
             return night
         end
@@ -173,9 +197,9 @@ function Raids.GetLatestNightForCurrentCharacterAndSpec()
     return nil
 end
 
-function Raids.GetRecentNightsForCurrentCharacter(days)
+function Raids.GetRecentNightsForCurrentCharacter(days, seasonKey)
     local recent = {}
-    for _, night in ipairs(Raids.GetNights()) do
+    for _, night in ipairs(GetDisplayNights(seasonKey)) do
         if NightMatchesCurrentCharacter(night)
             and NightMatchesCurrentSpec(night)
         then

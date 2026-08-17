@@ -10,14 +10,14 @@ local DATA_PREFIX = "keylab-author-mplus-"
 local LEGACY_PREFIX = "keylab-preview-mplus-"
 
 local DUNGEONS = {
-    { mapID = 558, name = "Magisters' Terrace", timeLimit = 2040, bosses = { "Arcanotron Custos", "Seranel Sunlash", "Gemellus", "Degentrius" } },
-    { mapID = 560, name = "Maisara Caverns", timeLimit = 1980, bosses = { "Muro'jin and Nekraxx", "Vordaza", "Rak'tul, Vessel of Souls" } },
-    { mapID = 559, name = "Nexus-Point Xenas", timeLimit = 1800, bosses = { "Chief Corewright Kasreth", "Corewarden Nysarra", "Lothraxion" } },
-    { mapID = 557, name = "Windrunner Spire", timeLimit = 1980, bosses = { "Emberdawn", "Derelict Duo", "Commander Kroluk", "The Restless Heart" } },
-    { mapID = 161, name = "Skyreach", timeLimit = 1680, bosses = { "Ranjit", "Araknath", "Rukhran", "High Sage Viryx" } },
-    { mapID = 402, name = "Algeth'ar Academy", timeLimit = 1860, bosses = { "Vexamus", "Overgrown Ancient", "Crawth", "Echo of Doragosa" } },
-    { mapID = 556, name = "Pit of Saron", timeLimit = 1800, bosses = { "Forgemaster Garfrost", "Krick and Ick", "Scourgelord Tyrannus" } },
-    { mapID = 583, name = "Seat of the Triumvirate", timeLimit = 2040, bosses = { "Zuraal the Ascended", "Saprish", "Viceroy Nezhar", "L'ura" } },
+    { mapID = 588, name = "Altar of Fangs", timeLimit = 1800, bosses = { "Rav'i", "The Writhing Coil", "Zul'jan" } },
+    { mapID = 587, name = "Murder Row", timeLimit = 2040, bosses = { "Kystia Manaheart", "Zaen Bladesorrow", "Xathuux the Annihilator", "Lithiel Cinderfury" } },
+    { mapID = 586, name = "Den of Nalorakk", timeLimit = 1920, bosses = { "The Hoardmonger", "Sentinel of Winter", "Nalorakk" } },
+    { mapID = 584, name = "The Blinding Vale", timeLimit = 1800, bosses = { "Meittik", "Ikuzz the Light Hunter", "Lightwarden Ruia", "Ziekket" } },
+    { mapID = 585, name = "Voidscar Arena", timeLimit = 1800, bosses = { "Taz'Rah", "Atroxus", "Charonus" } },
+    { mapID = 249, name = "Kings' Rest", timeLimit = 1980, bosses = { "The Golden Serpent", "Mchimba the Embalmer", "The Council of Tribes", "King Dazar" } },
+    { mapID = 399, name = "Ruby Life Pools", timeLimit = 1680, bosses = { "Melidrussa Chillworn", "Kokia Blazehoof", "Kyrakka and Erkhart Stormvein" } },
+    { mapID = 250, name = "Temple of Sethraliss", timeLimit = 1920, bosses = { "Adderis and Aspix", "Merektha", "Galvazzt", "Avatar of Sethraliss" } },
 }
 
 local TALENT_VARIANTS = {
@@ -49,7 +49,7 @@ local GEAR_SLOTS = {
 
 local function BuildGearProfile(variantIndex, progressionIndex)
     local slots, signature = {}, {}
-    local level = 256 + ((progressionIndex or 1) * 2) + variantIndex
+    local level = 288 + ((progressionIndex or 1) * 3) + variantIndex
     for slotIndex, slotName in ipairs(GEAR_SLOTS) do
         local itemID = 990000 + ((progressionIndex or 1) * 1000) + (variantIndex * 100) + slotIndex
         local itemName = string.format("%s Setup %s", slotName, string.char(64 + variantIndex))

@@ -9,7 +9,7 @@ KeyLab.GearingDatabase = KeyLab.GearingDatabase or {}
 local GearingDB = KeyLab.GearingDatabase
 
 GearingDB.Season = {
-    name = "Midnight Season 1",
+    name = "Midnight Season 2",
     note = "Used for Gear Dashboard display and current-season source guidance.",
 }
 
@@ -23,6 +23,42 @@ GearingDB.Tracks = {
     { id = 5, name = "Myth" },
 }
 
+-- Season 2 upgrade-track boundaries. Analysis features use these values when
+-- projecting an owned item to the maximum rank of its current track.
+GearingDB.TrackItemLevels = {
+    Adventurer = { minimum = 266, maximum = 276 },
+    Veteran = { minimum = 279, maximum = 289 },
+    Champion = { minimum = 292, maximum = 302 },
+    Hero = { minimum = 305, maximum = 315 },
+    Myth = { minimum = 318, maximum = 344 },
+}
+
+GearingDB.MythicPlusRewards = {
+    directDrops = {
+        [0] = 292,
+        [2] = 295, [3] = 295,
+        [4] = 298,
+        [5] = 302,
+        [6] = 305, [7] = 305,
+        [8] = 308, [9] = 308,
+        [10] = 311,
+    },
+    greatVault = {
+        [2] = 305, [3] = 305,
+        [4] = 308, [5] = 308,
+        [6] = 311,
+        [7] = 315, [8] = 315, [9] = 315,
+        [10] = 318,
+    },
+    directDropMinimumTrack = "Champion",
+    directDropMaximumTrack = "Hero",
+    mythTrackFromGreatVaultOnly = true,
+}
+
+GearingDB.RaidRewards = {
+    trackStarts = { Champion = 292, Hero = 305, Myth = 318 },
+}
+
 GearingDB.DashboardSlots = {
     left = { "Head", "Neck", "Shoulders", "Back", "Chest", "Wrist", "Main Hand", "Off Hand" },
     right = { "Hands", "Waist", "Legs", "Feet", "Finger 1", "Finger 2", "Trinket 1", "Trinket 2" },
@@ -34,23 +70,22 @@ GearingDB.DisplaySlotLabels = {
 }
 
 GearingDB.DungeonCodes = {
-    ["Skyreach"] = "SKY",
-    ["Algeth'ar Academy"] = "AA",
-    ["Pit of Saron"] = "POS",
-    ["Windrunner Spire"] = "WS",
-    ["Magisters' Terrace"] = "MT",
-    ["Nexus-Point Xenas"] = "NPX",
-    ["Maisara Caverns"] = "MC",
-    ["Seat of the Triumvirate"] = "SEAT",
+    ["Altar of Fangs"] = "AOF",
+    ["Murder Row"] = "MR",
+    ["Den of Nalorakk"] = "DON",
+    ["The Blinding Vale"] = "TBV",
+    ["Voidscar Arena"] = "VSA",
+    ["Kings' Rest"] = "KR",
+    ["King's Rest"] = "KR",
+    ["Ruby Life Pools"] = "RLP",
+    ["Temple of Sethraliss"] = "TOS",
 }
 
 GearingDB.RaidCodes = {
-    ["Sporefall"] = "SF",
-    ["The Voidspire"] = "VS",
-    ["Voidspire"] = "VS",
-    ["March on Quel'Danas"] = "MQD",
-    ["Dreamrift"] = "DR",
-    ["The Dreamrift"] = "DR",
+    ["The Venomous Abyss"] = "VA",
+    ["Venomous Abyss"] = "VA",
+    ["The Tidebound Grotto"] = "TG",
+    ["Tidebound Grotto"] = "TG",
 }
 
 GearingDB.TwoHandOrRangedEquipLocs = {
@@ -111,55 +146,63 @@ GearingDB.GreatVaultSlots = {
 }
 
 GearingDB.CurrencyKeys = {
-    championCrests = { type = "currency", id = 3343, label = "Champion Crests" },
-    heroCrests = { type = "currency", id = 3345, label = "Hero Crests" },
-    mythCrests = { type = "currency", id = 3347, label = "Myth Crests" },
-    catalystCharges = { type = "currency", id = 3378, label = "Catalyst" },
-    dawnlightManaflux = { type = "currency", id = 3378, label = "Catalyst" },
-    nebulousVoidcores = { type = "currency", id = 3418, label = "Voidcore Rolls" },
-    nebulousVoidcore = { type = "currency", id = 3418, label = "Voidcore Rolls" },
-    radiantSparkDust = { type = "currency", id = 3212, label = "Spark Dust" },
-    ascendantVoidcore = { type = "item", id = 268552, label = "Ascendant Voidcore" },
+    adventurerCrests = { type = "currency", id = 3442, label = "Adventurer Mistcrest" },
+    veteranCrests = { type = "currency", id = 3443, label = "Veteran Mistcrest" },
+    championCrests = { type = "currency", id = 3444, label = "Champion Mistcrest" },
+    heroCrests = { type = "currency", id = 3445, label = "Hero Mistcrest" },
+    mythCrests = { type = "currency", id = 3446, label = "Myth Mistcrest" },
+    catalystCharges = { type = "currency", id = 3465, label = "Venomblight Manaflux" },
+    venomblightManaflux = { type = "currency", id = 3465, label = "Venomblight Manaflux" },
+    nebulousVoidcores = { type = "currency", id = 3418, label = "Nebulous Voidcores" },
+    nebulousVoidcore = { type = "currency", id = 3418, label = "Nebulous Voidcores" },
+    sparkOfTides = { type = "item", id = 274476, label = "Spark of Tides" },
+    ascendantVenomstone = { type = "item", id = nil, label = "Ascendant Venomstone", pending = true },
     radiantJewelbinder = { type = "item", id = 263897, label = "Radiant Jewelbinder" },
 }
 
 GearingDB.Voidforge = {
-    ascendantVoidcoreItemID = 268552,
+    ascendantItemName = "Ascendant Venomstone",
+    -- Add ascendantItemID after Blizzard releases the Season 2 item ID.
+    ascendantItemID = nil,
     weaponSlotIDs = { [16] = true },
     trinketSlotIDs = { [13] = true, [14] = true },
     eligibleTracks = { Hero = true, Myth = true },
-    baseMaxItemLevel = { Hero = 276, Myth = 289 },
+    baseMaxItemLevel = { Hero = 315, Myth = 344 },
     requiredRank = 6,
     requiredMaxRank = 6,
 }
 
--- Sporefall gear uses its own two-step label instead of the normal x/6
--- upgrade track. Sporefused weapons and trinkets are not valid Ascendant
--- Voidcore targets, even when their effective tier is Hero or Myth.
+-- Mythic Venomous Abyss items in these lists cannot be upgraded. The same
+-- Venomcursed item IDs remain upgradeable when they drop on LFR, Normal, or
+-- Heroic tracks, so the item-level fallback begins at the Myth track floor.
 GearingDB.SpecialUpgradeSystems = {
-    Sporefused = {
-        label = "Sporefused",
-        tooltipPattern = "^%s*Sporefused:%s*(Hero|Myth)%s*$",
-        allowedTracks = { Hero = true, Myth = true },
-        -- Sporefall items use the same item ID at both difficulties. WoW's
-        -- structured tooltip data can omit the Sporefused line even though it
-        -- remains visible in GameTooltip, so these item levels are a safe
-        -- fallback only for the known Sporefall loot table.
-        itemLevelTracks = { [285] = "Hero", [298] = "Myth" },
+    Venomcursed = {
+        label = "Venomcursed",
+        tooltipPattern = "^%s*Venomcursed:%s*(Myth)%s*$",
+        allowedTracks = { Myth = true },
+        inferredTrack = "Myth",
+        minimumItemLevel = 318,
         itemIDs = {
-            [268282] = true,
-            [268283] = true,
-            [268284] = true,
-            [268285] = true,
-            [268286] = true,
-            [268287] = true,
-            [268288] = true,
-            [268289] = true,
-            [268290] = true,
-            [268291] = true,
-            [268292] = true,
+            [271875] = true, [271874] = true, [268265] = true,
+            [271876] = true, [271878] = true, [268215] = true,
+            [268202] = true, [268207] = true,
         },
-        ascendantVoidcoreEligible = false,
+        ascendantUpgradeEligible = false,
+    },
+    MythicLocked = {
+        label = "Mythic - Not Upgradeable",
+        allowedTracks = { Myth = true },
+        inferredTrack = "Myth",
+        minimumItemLevel = 318,
+        itemIDs = {
+            [270168] = true, [270169] = true, [270175] = true,
+            [270173] = true, [268259] = true, [268256] = true,
+            [268231] = true, [268222] = true, [268225] = true,
+            [268237] = true, [268255] = true, [268211] = true,
+            [268213] = true, [268209] = true, [271093] = true,
+            [271092] = true, [268253] = true, [268243] = true,
+        },
+        ascendantUpgradeEligible = false,
     },
 }
 
@@ -187,6 +230,11 @@ function GearingDB.InferSpecialUpgrade(itemID, itemLevel)
     for systemName, rules in pairs(GearingDB.SpecialUpgradeSystems or {}) do
         local track = rules.itemIDs and rules.itemIDs[itemID]
             and rules.itemLevelTracks and rules.itemLevelTracks[itemLevel] or nil
+        if not track and rules.itemIDs and rules.itemIDs[itemID]
+            and rules.inferredTrack
+            and itemLevel >= (tonumber(rules.minimumItemLevel) or 0) then
+            track = rules.inferredTrack
+        end
         if track and (not rules.allowedTracks or rules.allowedTracks[track] == true) then
             return {
                 system = systemName,

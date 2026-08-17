@@ -126,11 +126,7 @@ end
 function StatGoalsDB.SetMatchStyle(specID, style)
     style = style == "priority" and "priority" or "balanced"
     local goals = EnsureGoals(specID)
-    local changed = goals.matchStyle ~= style
     goals.matchStyle = style
-    if changed and KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.ClearResult then
-        KeyLab.StatGoalMatcher.ClearResult(specID, "match_style_changed")
-    end
     return true
 end
 
@@ -146,9 +142,6 @@ function StatGoalsDB.MoveDisplayStat(specID, statKey, direction)
     local targetIndex = direction == "up" and currentIndex - 1 or direction == "down" and currentIndex + 1 or currentIndex
     if targetIndex < 1 or targetIndex > #order or targetIndex == currentIndex then return false end
     order[currentIndex], order[targetIndex] = order[targetIndex], order[currentIndex]
-    if KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.ClearResult then
-        KeyLab.StatGoalMatcher.ClearResult(specID, "priority_order_changed")
-    end
     return true
 end
 
@@ -160,11 +153,7 @@ function StatGoalsDB.SetTarget(specID, statKey, value)
     if value > 100 then value = 100 end
 
     local goals = EnsureGoals(specID)
-    local changed = tonumber(goals.targets[statKey]) ~= value
     goals.targets[statKey] = value
-    if changed and KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.ClearResult then
-        KeyLab.StatGoalMatcher.ClearResult(specID, "goals_changed")
-    end
     return true
 end
 
@@ -192,14 +181,8 @@ function StatGoalsDB.SetTargets(specID, targets)
     end
 
     local goals = EnsureGoals(specID)
-    local changed = false
     for statKey, value in pairs(normalized) do
-        if tonumber(goals.targets[statKey]) ~= value then changed = true end
         goals.targets[statKey] = value
-    end
-
-    if changed and KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.ClearResult then
-        KeyLab.StatGoalMatcher.ClearResult(specID, "goals_changed")
     end
     return true, nil
 end
