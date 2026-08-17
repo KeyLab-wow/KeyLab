@@ -39,6 +39,9 @@ local CFG = {
         bottomPadding = 22,
         automaticX = -210,
         automaticY = -190,
+        helperButtonHeight = 30,
+        helperButtonGap = 8,
+        helperTopGap = 8,
     },
 
     close = {
@@ -46,14 +49,6 @@ local CFG = {
         y = -20,
         width = 28,
         height = 28,
-    },
-
-    title = {
-        text = "KeyLab",
-        x = 24,
-        y = 0,
-        font = (Theme.fonts and Theme.fonts.heading) or "Fonts\\FRIZQT__.TTF",
-        size = (Theme.fonts and Theme.fonts.titleSize) or 32,
     },
 
     sidebar = {
@@ -133,11 +128,6 @@ end
 local OPTIONAL_TABS = {
     ["Gear Planning"] = true,
 }
-
-local SEASON_2_NOTICE_TEXT =
-    "|cffffd36aSeason 2 Update in Progress|r\n\n" ..
-    "KeyLab remains functional while Season 2 item data is being added. Gear Targets and gearing recommendations may continue to show Season 1 items during this transition.\n\n" ..
-    "The Stat Goal Matcher is still available. Until Season 2 gear is added, we recommend selecting |cffffffffEquipped + Bags Only|r."
 
 -- =========================================================
 -- SMALL UI HELPERS
@@ -321,7 +311,7 @@ function KeyLab.UI:Create()
     backgroundArtwork:SetAlpha(1)
     self.backgroundArtwork = backgroundArtwork
 
-    -- Header background with KeyLab title.
+    -- Header background with the KeyLab logo.
     local header = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     header:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -14)
     header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -14)
@@ -329,24 +319,12 @@ function KeyLab.UI:Create()
     StylePanel(header, CFG.colors.headerBg, CFG.colors.headerBorder)
     self.header = header
 
-    local title = header:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    title:SetPoint("LEFT", header, "LEFT", CFG.title.x, CFG.title.y)
-    title:SetText(CFG.title.text)
-    title:SetFont(CFG.title.font, CFG.title.size, "")
-    title:SetTextColor(CFG.colors.gold[1], CFG.colors.gold[2], CFG.colors.gold[3], CFG.colors.gold[4] or 1)
-    title:SetShadowColor(0, 0, 0, 0.85)
-    title:SetShadowOffset(2, -2)
-    self.title = title
-
     local titleIcon = header:CreateTexture(nil, "ARTWORK", nil, 1)
     titleIcon:SetTexture("Interface\\AddOns\\KeyLab\\Assets\\KeyLabKeyIcon.tga")
     titleIcon:SetTexCoord(0, 1, 1, 0)
     titleIcon:SetSize(58, 58)
     titleIcon:SetPoint("LEFT", header, "LEFT", 14, 0)
     self.titleIcon = titleIcon
-
-    title:ClearAllPoints()
-    title:SetPoint("LEFT", titleIcon, "RIGHT", 10, 0)
 
     local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     close:SetSize(CFG.close.width, CFG.close.height)
@@ -398,11 +376,17 @@ function KeyLab.UI:Create()
         + (CFG.sidebar.modeHeight or 30)
         + CFG.sidebar.buttonGap
         + (CFG.sidebar.paddingBottom or 12)
+    local helperHeight = (CFG.menuOnly.helperTopGap or 8)
+        + (2 * (CFG.menuOnly.helperButtonHeight or 30))
+        + (CFG.menuOnly.helperButtonGap or 8)
 
     sidebar:SetSize(CFG.sidebar.width + 16, sidebarHeight)
     StylePanel(sidebar, CFG.colors.sidebarBg, CFG.colors.sidebarBorder)
     self.sidebar = sidebar
-    self.menuOnlyHeight = math.max(400, -CFG.sidebar.y + sidebarHeight + (CFG.menuOnly.bottomPadding or 22))
+    self.standardSidebarHeight = sidebarHeight
+    self.menuOnlySidebarHeight = sidebarHeight + helperHeight
+    self.menuOnlyHeight = math.max(400,
+        -CFG.sidebar.y + self.menuOnlySidebarHeight + (CFG.menuOnly.bottomPadding or 22))
 
     local content = CreateFrame("Frame", "KeyLabContentFrame", frame, "BackdropTemplate")
     content:SetPoint("TOPLEFT", frame, "TOPLEFT", CFG.content.x, CFG.content.y)
@@ -414,7 +398,8 @@ function KeyLab.UI:Create()
     self.tabFrames = {}
     self.tabButtons = {}
 
-    self:CreateTabButtons()
+    local helperY = self:CreateTabButtons()
+    self:CreateMenuOnlyHelperButtons(helperY - (CFG.menuOnly.helperTopGap or 8))
 
     if not self.sequencerCombatEvents then
         local combatEvents = CreateFrame("Frame")
@@ -460,11 +445,9 @@ function KeyLab.UI:SetMenuOnly(enabled)
             CFG.menuOnly.automaticY or -190
         )
         self.content:Hide()
-        self.titleIcon:Hide()
-
-        self.title:ClearAllPoints()
-        self.title:SetPoint("LEFT", self.header, "LEFT", 16, 0)
-        self.title:SetFont(CFG.title.font, 24, "")
+        self.titleIcon:Show()
+        if self.sidebar then self.sidebar:SetHeight(self.menuOnlySidebarHeight or self.standardSidebarHeight) end
+        for _, button in ipairs(self.menuOnlyHelperButtons or {}) do button:Show() end
 
         self.closeButton:ClearAllPoints()
         self.closeButton:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -10, -20)
@@ -484,10 +467,8 @@ function KeyLab.UI:SetMenuOnly(enabled)
     self.frame:ClearAllPoints()
     self.frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     self.titleIcon:Show()
-
-    self.title:ClearAllPoints()
-    self.title:SetPoint("LEFT", self.titleIcon, "RIGHT", 10, 0)
-    self.title:SetFont(CFG.title.font, CFG.title.size, "")
+    if self.sidebar then self.sidebar:SetHeight(self.standardSidebarHeight or self.sidebar:GetHeight()) end
+    for _, button in ipairs(self.menuOnlyHelperButtons or {}) do button:Hide() end
 
     self.closeButton:ClearAllPoints()
     self.closeButton:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", CFG.close.x, CFG.close.y)
@@ -636,6 +617,63 @@ function KeyLab.UI:CreateTabButtons()
             y = y - (CFG.sidebar.modeHeight or 30) - CFG.sidebar.buttonGap
         end
     end
+    return y
+end
+
+function KeyLab.UI:CreateMenuOnlyHelperButtons(y)
+    self.menuOnlyHelperButtons = {}
+    local height = CFG.menuOnly.helperButtonHeight or 30
+    local gap = CFG.menuOnly.helperButtonGap or 8
+    local definitions = {
+        {
+            label = "Gear & Catalyst Runs",
+            tooltip = "Reopen the saved Gear Target and Tier-slot dungeon list.",
+            onClick = function()
+                if KeyLab.LFGTooltips and KeyLab.LFGTooltips.ReopenShoppingList then
+                    KeyLab.LFGTooltips.ReopenShoppingList()
+                elseif KeyLab.GearTargetsWindow and KeyLab.GearTargetsWindow.ShowManual then
+                    KeyLab.GearTargetsWindow.ShowManual()
+                end
+            end,
+        },
+        {
+            label = "Crafting Shopping List",
+            tooltip = "Reopen the materials list for your saved crafted gear plan.",
+            onClick = function()
+                if KeyLab.CraftingShoppingWindow and KeyLab.CraftingShoppingWindow.Show then
+                    KeyLab.CraftingShoppingWindow.Show(true)
+                end
+            end,
+        },
+    }
+
+    for index, definition in ipairs(definitions) do
+        local button = CreateFrame("Button", nil, self.frame, "BackdropTemplate")
+        button:SetPoint("TOPLEFT", self.frame, "TOPLEFT", CFG.sidebar.x,
+            y - ((index - 1) * (height + gap)))
+        button:SetSize(CFG.sidebar.width, height)
+        StylePanel(button, CFG.colors.buttonSelectedBg or CFG.colors.buttonBg, CFG.colors.buttonBorder)
+        local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        label:SetPoint("CENTER")
+        label:SetSize(CFG.sidebar.width - 16, height - 4)
+        label:SetText(definition.label)
+        ApplyColor(label, CFG.colors.gold)
+        button.label = label
+        button.helperTooltip = definition.tooltip
+        button:SetScript("OnClick", definition.onClick)
+        button:SetScript("OnEnter", function(self)
+            self:SetBackdropBorderColor(unpack(CFG.colors.buttonHover))
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(self.helperTooltip or "KeyLab Helper")
+            GameTooltip:Show()
+        end)
+        button:SetScript("OnLeave", function(self)
+            self:SetBackdropBorderColor(unpack(CFG.colors.buttonBorder))
+            GameTooltip:Hide()
+        end)
+        button:Hide()
+        table.insert(self.menuOnlyHelperButtons, button)
+    end
 end
 
 function KeyLab.UI:ShowSequencerCombatMessage(draftPreserved)
@@ -655,31 +693,6 @@ function KeyLab.UI:ShowSequencerCombatMessage(draftPreserved)
         KeyLab.Tabs.Sequencer:SetStatus("Combat began while editing. Your current fields were preserved for this session.")
     end
     StaticPopup_Show("KEYLAB_SEQUENCER_COMBAT")
-end
-
-function KeyLab.UI:ShowSeason2Notice()
-    if self.season2NoticeShown then return end
-
-    StaticPopupDialogs = StaticPopupDialogs or {}
-    if not StaticPopupDialogs["KEYLAB_SEASON_2_UPDATE"] then
-        StaticPopupDialogs["KEYLAB_SEASON_2_UPDATE"] = {
-            text = SEASON_2_NOTICE_TEXT,
-            button1 = OKAY,
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-        }
-    end
-
-    local dialog = StaticPopup_Show("KEYLAB_SEASON_2_UPDATE")
-    if not dialog then return end
-
-    dialog:SetFrameStrata("FULLSCREEN_DIALOG")
-    dialog:SetFrameLevel(900)
-    if dialog.SetToplevel then dialog:SetToplevel(true) end
-    if dialog.Raise then dialog:Raise() end
-    self.season2NoticeShown = true
 end
 
 function KeyLab.UI:RefreshSequencerNavigationState()
@@ -874,7 +887,6 @@ function KeyLab.UI:Show()
     self:Create()
     self.frame:Show()
     self:SelectTab(self.selectedTab or "Home")
-    self:ShowSeason2Notice()
 end
 
 function KeyLab.UI:Hide()
@@ -896,6 +908,5 @@ function KeyLab.UI:Toggle()
     else
         self.frame:Show()
         self:SelectTab(self.selectedTab or "Home")
-        self:ShowSeason2Notice()
     end
 end

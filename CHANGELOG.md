@@ -1,5 +1,62 @@
 # KeyLab Changelog
 
+## Version 2.0.1 - Tier Targeting and Helper Updates
+
+- Emphasized the Gear Targets **Stat Goal Matcher** as the page's primary action with a brighter KeyLab navy background, gold border and label, thin gold accent, and stronger themed hover state.
+- Replaced the Blizzard-styled Gear Targets search field and Stat Goal Matcher button with shared KeyLab controls, and converted the Settings **Erase MN S1 Data** and **Reset All KeyLab Data** actions to KeyLab buttons without changing their confirmations or behavior.
+- Routed dropdown fields in M+ and Raid Trends, Practice, Gear Targets, Macro Sequencer, Gear Planning's Crafted Gear view, Raid Talent Builds, and Raid Stat Profiles through the shared brighter KeyLab theme treatment used by M+ Stat Profiles.
+- Added the KeyLab logo icon to the Crafted Gear Shopping List popup to match the Gear and Catalyst Runs helper.
+- Removed the redundant **KeyLab** title text from both window modes and displayed the KeyLab logo icon in the full window and compact minimized menu.
+- Added a data-driven **Season 2 Info** sub-tab to Gear Planning with separate Reward Sources, Upgrade Tracks, and Great Vault views; responsive scrollable tables; the complete dungeon, raid, Delve, outdoor, Lair, Prey, PvP, crafted, and Ascendant Venomstone reference values; shared upgrade-track theme colors; and an updated Gear Planning description covering general gearing information, crafted-item planning, and Season 2 references.
+- Restored a bottom Home card explaining that Blizzard's Damage Meter and Auto Reset Damage Meter settings are required for KeyLab's Mythic+, raid, and Practice recording.
+- Fixed developer-note labels and bodies rendering beneath their card backdrops, restoring readable blue and white text; restyled the August 14/August 13 Hotfixes selector as a full-width segmented tab bar matching Class Changes/PvP.
+- Fixed News & Events and Game Updates article selection being interrupted when the reusable reader attempted to clear button scripts from ordinary content panels.
+- Rebuilt Home with internal **Home**, **News & Events**, and **Game Updates** views, a data-driven two-pane article reader, independent post/article scrolling, responsive wrapped class navigation, Class Changes/PvP modes, fully expanded specialization sections, developer-note cards, and nested tuning changes.
+- Added a dedicated Hotfixes reader with newest-date defaults, wrapped date/category/submenu navigation, direct category rendering when no submenu exists, content headings, and themed developer notes; added the complete August 14 and August 13 hotfix entries.
+- Replaced the Class Tuning design sample with the complete August 18 tuning article dated August 14, including ordered Class Changes and PvP navigation, all supplied classes and specializations, class-level notes, content groups, and verbatim tuning changes.
+- Removed the Class Tuning specialization accordions so every specialization and hero-talent content group for the selected class is listed openly in article order without chevrons or hidden changes.
+- Added the initial News & Events article collection covering the Curse of Ula’tek launch and pre-season, the Sorcerer’s Grassy Garb Twitch Drop, housing updates, and four new neighborhood Endeavors, ordered newest-first by publication date.
+- Updated Season 2 Tier-slot gearing rules so a saved Target overrides the broad Catalyst dungeon list and the Gear Dashboard shows only that item's specific saved source.
+- Changed unknown equipped-item fallback handling: checked Tier slots remain Tier, while unchecked items absent from the current gear database are treated as Crafted and excluded from Nebulous/Ascendant guidance.
+- Restyled the LFG Dungeon Runs section with an individual bordered card for each dungeon, item/slot counts, alternating rows, blue Target cards, and purple-violet Catalyst/Tier cards.
+- Added Tier-slot Catalyst dungeon guidance to the LFG Gear Targets helper in a second column beside saved Target dungeons, including checked Tier slots that still need a non-Myth replacement path.
+- Added **Gear & Catalyst Runs** and **Crafting Shopping List** buttons to KeyLab's minimized menu so either helper can be reopened after being closed.
+- Increased the background contrast of filter dropdowns in M+ and Raid Encounters, Talent Builds, Stat Profiles, and Gear Profiles so the controls stand out from their filter cards.
+- Restored the Gear Targets filter name to **Goal Match Items** and preserved the last completed Goal Match through logout, login, gear changes, goal edits, matching-style changes, and priority-order changes until another successful matcher run replaces it.
+- Fixed newly saved Gear Targets not immediately appearing on the Gear Dashboard and made the saved Target name/source take precedence over the equipped item's upgrade suggestion for that slot.
+- Added a permanent About Trinkets notice to completed Stat Goal Matcher results explaining that KeyLab does not recommend trinkets and does not count their stats toward completing goal percentages.
+- Separated trinkets from Stat Goal Matcher calculations: trinket secondary stats no longer count toward projected goals, while eligible trinkets may appear separately as advisory **Stat Support** when a needed passive stat stays below reduced efficiency.
+- Added Stat Support labels, filtering, tooltips, and a dedicated results section explaining that KeyLab does not evaluate trinket roles, Use or Equip effects, tuning, or overall performance.
+
+## Version 2.0.0 - Midnight Season 2
+
+Released on CurseForge
+
+- Brought M+ Trends, Raid Trends, and Practice into the shared KeyLab analysis layout, including uniform headers, filter spacing, margins, result/detail placement, and KeyLab-styled controls.
+- Removed duplicate no-data instruction cards from Trends and Practice so their filter summaries carry the empty-state information without repeating it in the content area.
+- Unified M+ and Raid Encounters, Talent Builds, Stat Profiles, and Gear Profiles around shared Name/Description, Filter Header, five-result, fixed Details, and pagination layout rules.
+- Replaced the Encounters Back and Next controls with KeyLab-styled buttons and removed duplicate empty-state instructions from the standardized analysis tabs.
+- Fixed the selected-season check being overwritten while Mythic+ encounter data was filtered, which could allow MN S1 runs to appear while MN S2 was selected.
+- Replaced the remaining Blizzard-textured dropdowns and context menus with KeyLab's dark blue and gold controls matching the Macro Sequencer.
+- Removed the automatic Season 2 update popup when opening KeyLab.
+- Increased multi-line Crest and Heraldry row heights in the Crafted Gear Shopping List so the final PvP Heraldry line is no longer clipped.
+- Restored the **Nebulous Voidcores** label in the Gear Dashboard's Crests & Seasonal Currency card.
+- Added automatic Midnight season labeling using the August 11, 2026 7:00 AM Pacific / 10:00 AM Eastern / 14:00 UTC cutoff.
+- Added MN S1 and MN S2 filters, defaulting to MN S2, across M+ and Raid Encounters, Last Run/Last Raid, Talent Builds, Stat Profiles, Gear Profiles, Trends, and Practice.
+- Restored the dedicated Raid Talent Builds and Raid Stat Profiles screens with visible Season selectors and raid-specific filtering.
+- Removed the old Season Leaderboards / Top 5 DPS / Top 5 HPS wording from Raid Talent Builds and added Raid before Raid Boss, Difficulty, Spec, and Performance Metric filters.
+- Isolated saved Gear Targets, Alternatives, pending target choices, and Stat Goal Matcher results by Midnight season.
+- Added a protected Settings action that erases MN S1 encounters, raid pulls and nights, derived profiles and trends, Practice sessions, targets, alternatives, and matcher results while preserving MN S2 data and all Macro Sequences.
+- Restored the M+ Talent Builds, Stat Profiles, and Gear Profiles files to the addon load list so those tabs register normally.
+- Rebuilt the dungeon and raid gear database from the reviewed Season 2 Gear Loot Probe results.
+- Added the eight Season 2 Mythic+ dungeons, their Challenge Mode map IDs, and their live timers.
+- Added The Venomous Abyss and The Tidebound Grotto raid mappings and boss encounter IDs.
+- Updated upgrade-track item levels and Mythic+ drop and Great Vault levels for Season 2.
+- Added Mythic Venomcursed and other non-upgradeable Venomous Abyss item handling.
+- Updated the Gear Dashboard and Crafted Gear Shopping List for Mistcrests, Venomblight Manaflux, and Spark of Tides.
+- Rebuilt the crafted recipe database with the Season 2 crests, heraldry, and optional reagents.
+- Added Ascendant Venomstone as pending until its item ID is released.
+
 ## Version 1.8.146 - Season 2 Transition
 
 Released August 11, 2026

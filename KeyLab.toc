@@ -20,6 +20,7 @@ mapping/KeyLab_Formatters.lua
 mapping/KeyLab_GearLootColumnMapping.lua
 
 database/KeyLab_DB.lua
+database/KeyLab_SeasonData.lua
 database/KeyLab_JournalData.lua
 database/KeyLab_EncountersDB.lua
 database/KeyLab_MythicPlusPreviewData.lua
@@ -60,6 +61,9 @@ capture/KeyLab_Capture.lua
 capture/KeyLab_PracticeCapture.lua
 
 ui/KeyLab_UITheme.lua
+database/KeyLab_GameUpdatesData.lua
+database/KeyLab_Season2GearInfo.lua
+ui/KeyLab_SeasonFilter.lua
 ui/KeyLab_Accordion.lua
 KeyLab_UI.lua
 ui/KeyLab_Minimap.lua
@@ -68,8 +72,11 @@ ui/KeyLab_Encounters.lua
 ui/KeyLab_LastRun.lua
 ui/KeyLab_RaidEncounters.lua
 ui/KeyLab_RaidSummary.lua
-ui/KeyLab_RaidAnalytics.lua
 ui/KeyLab_PerformanceLeaderboards.lua
+ui/KeyLab_RaidAnalytics.lua
+ui/KeyLab_TalentBuilds.lua
+ui/KeyLab_StatProfiles.lua
+ui/KeyLab_GearProfiles.lua
 ui/KeyLab_Trends.lua
 ui/KeyLab_Practice.lua
 ui/KeyLab_GearPlanning.lua

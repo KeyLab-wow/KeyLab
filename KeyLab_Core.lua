@@ -120,6 +120,7 @@ local function Initialize()
         KeyLabDB.lootTargets = KeyLabDB.lootTargets or {}
         KeyLabDB.lootTargetStatuses = KeyLabDB.lootTargetStatuses or {}
         KeyLabDB.gearTargets = KeyLabDB.gearTargets or {}
+        KeyLabDB.seasonGearTargets = KeyLabDB.seasonGearTargets or {}
         KeyLabDB.tierSets = KeyLabDB.tierSets or {}
         KeyLabDB.statGoals = KeyLabDB.statGoals or {}
         KeyLabDB.activityCounts = KeyLabDB.activityCounts or {}
@@ -130,6 +131,9 @@ local function Initialize()
     end
     if KeyLab.StatGoalsDB and KeyLab.StatGoalsDB.CleanupLegacy then
         KeyLab.StatGoalsDB.CleanupLegacy()
+    end
+    if KeyLab.SeasonData and KeyLab.SeasonData.Initialize then
+        KeyLab.SeasonData.Initialize()
     end
 
     if KeyLab.Capture and KeyLab.Capture.Sessions and KeyLab.Capture.Sessions.EnsureCaptureDB then
