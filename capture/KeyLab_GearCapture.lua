@@ -475,8 +475,8 @@ local function ScanEquippedSlot(slotName)
     local isVoidforgeTrack = voidforgeRules.eligibleTracks and voidforgeRules.eligibleTracks[trackName] == true
     local isMaxRank = tonumber(upgradeRank) == tonumber(voidforgeRules.requiredRank or 6)
         and tonumber(upgradeMaxRank) == tonumber(voidforgeRules.requiredMaxRank or 6)
-    -- Ascendant Voidcores apply only to eligible Hero/Myth-track Main Hand
-    -- weapons and trinkets. Crafted items have no upgrade track.
+    -- The seasonal Ascendant upgrade item applies only to eligible Hero/Myth-
+    -- track Main Hand weapons and trinkets. Crafted items have no upgrade track.
     local craftedWeaponVoidforgeCandidate = false
     local weaponVoidforgeCandidate = voidforgeRules.weaponSlotIDs
         and voidforgeRules.weaponSlotIDs[tonumber(slotDef.slotID) or 0] == true
@@ -764,7 +764,9 @@ end
 function Capture.GetCurrencySnapshot()
     local snapshot = {}
     for key, entry in pairs(DB().CurrencyKeys or {}) do
-        if entry.type == "item" then
+        if not entry.id then
+            snapshot[key] = 0
+        elseif entry.type == "item" then
             snapshot[key] = Capture.GetItemCount(entry.id) or 0
         else
             snapshot[key] = Capture.GetCurrencyAmount(entry.id) or 0
@@ -947,6 +949,8 @@ function Capture.GetRunHistory()
             includeExcluded = false,
             completedOnly = true,
             allowMissingIdentity = true,
+            seasonKey = KeyLab.SeasonData and KeyLab.SeasonData.GetCurrentSeasonKey
+                and KeyLab.SeasonData.GetCurrentSeasonKey() or "MN_S2",
         })
         usedSharedList = true
     end
