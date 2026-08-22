@@ -1,5 +1,5 @@
 -- KeyLab_GearingAnalysis.lua
--- Builds the Gear Dashboard from equipped gear, manual Tier choices, and saved targets.
+-- Builds the Gear Dashboard from equipped gear, automatic item classification, and saved targets.
 
 local ADDON_NAME, KeyLab = ...
 KeyLab = KeyLab or {}
@@ -29,6 +29,10 @@ end
 
 local function TierDB()
     return KeyLab and KeyLab.TierSetDB or {}
+end
+
+local function ClassificationDB()
+    return KeyLab and KeyLab.ItemClassificationDB or {}
 end
 
 local function Mapping()
@@ -193,9 +197,19 @@ end
 local function IsMasterDatabaseItem(itemID)
     itemID = tonumber(itemID)
     if not itemID then return false end
+    if ClassificationDB().IsMasterItem then return ClassificationDB().IsMasterItem(itemID) end
     local db = KeyLab and KeyLab.GearLootDatabase
     if not db or type(db.items) ~= "table" then return nil end
     return db.items[itemID] ~= nil
+end
+
+local function ClassifyItem(itemID, tierFallback)
+    if ClassificationDB().ClassifyItem then return ClassificationDB().ClassifyItem(itemID) end
+    itemID = tonumber(itemID)
+    if not itemID then return { key = "EMPTY", label = "", known = false } end
+    if tierFallback then return { key = "TIER_SET", label = "Tier Set Piece", known = true } end
+    if IsMasterDatabaseItem(itemID) then return { key = "MASTER", label = "Master Database Item", known = true } end
+    return { key = "OTHER", label = "Other Item", known = false }
 end
 
 local function GetUpgradeResources()
@@ -246,19 +260,21 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
     slot = slot or EmptySlot(slotName)
     resources = resources or {}
     local tierEligible = TIER_SLOTS[slotName] == true
-    local tierChecked = tierEligible and tierState.slots and tierState.slots[slotName] == true or false
+    local tierFallback = not ClassificationDB().ClassifyItem
+        and tierEligible and tierState.slots and tierState.slots[slotName] == true or false
+    local classification = ClassifyItem(slot.itemID, tierFallback)
+    local classificationKey = tostring(classification.key or "OTHER")
+    local tierChecked = classificationKey == "TIER_SET"
+    local nativeTierOffPiece = classificationKey == "NATIVE_TIER_OFFPIECE"
+    local craftedItem = classificationKey == "CRAFTED"
+    local otherItem = classificationKey == "OTHER"
     local tierNeeded = tierEligible and not tierChecked and not tierState.complete
+        and (classificationKey == "EMPTY" or classificationKey == "MASTER")
     local targetEquipped = target and tonumber(target.itemID) == tonumber(slot.itemID) or false
     local masterDatabaseItem = IsMasterDatabaseItem(slot.itemID)
     local trackName = tostring(slot.upgradeTrack or slot.trackName or "")
     local upgradeRank = tonumber(slot.upgradeRank)
     local upgradeMaxRank = tonumber(slot.upgradeMaxRank or slot.upgradeMax)
-    local explicitlyCrafted = slot.isCrafted == true or slot.craftedDetected == true
-    -- Tier is identified by the player's Tier checkbox. If an equipped item is
-    -- absent from the current gear database and that Tier slot is not checked,
-    -- keep the broad Crafted fallback so older crafted items remain recognized.
-    local craftedItem = slot.itemID and not tierChecked
-        and (explicitlyCrafted or masterDatabaseItem == false) or false
     local catalystItem = false
     local voidforgedItem = slot.voidforgedDetected == true or slot.ascendantVoidforgedDetected == true
     local voidforgeRules = GearingDB().Voidforge or {}
@@ -271,6 +287,7 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
         and upgradeMaxRank == tonumber(voidforgeRules.requiredMaxRank or 6)
     local voidforgeAvailable = not voidforgedItem
         and not craftedItem
+        and not otherItem
         and not (specialUpgradeRules and specialUpgradeRules.ascendantUpgradeEligible == false)
         and slot.voidforgeCandidate == true
         and ascendantRankReady
@@ -279,6 +296,7 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
     local isMythTrack = trackName == "Myth"
     local nebulousAvailable = isHeroTrack
         and not craftedItem
+        and not otherItem
         and (tonumber(resources.nebulousVoidcores) or 0) > 0
     local upgradeAction = UpgradeAction(slot)
     local action
@@ -287,6 +305,10 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
         action = "Not used with equipped weapon"
     elseif target then
         action = targetEquipped and "Target Equipped" or ("Target: " .. ShortName(target.name or target.itemNameClean, 24))
+    elseif otherItem then
+        action = "Other Item"
+    elseif craftedItem then
+        action = "Crafted Item"
     elseif tierNeeded then
         action = slot.itemID and "Catalyst for Tier" or "Find a Tier base item"
     elseif voidforgeAvailable then
@@ -296,11 +318,11 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
     elseif voidforgedItem then
         action = isHeroTrack and "Ascendant Voidforged - Upgrade to Myth" or "Ascendant Voidforged"
     elseif tierChecked then
-        action = upgradeAction or ""
+        action = upgradeAction or "Tier Set Piece"
+    elseif nativeTierOffPiece then
+        action = upgradeAction or "Native Tier Off-piece"
     elseif catalystItem then
         action = upgradeAction or "Catalyst Item"
-    elseif craftedItem then
-        action = "Crafted Item"
     elseif upgradeAction then
         action = upgradeAction
     elseif slot.itemID then
@@ -314,10 +336,18 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
     if target then
         guidanceSources = target.sourcesForDashboard or {}
         sourceLabel = #guidanceSources == 1 and "Target Source:" or "Target Sources:"
-    elseif tierNeeded or (tierChecked and not isMythTrack) then
+    elseif not otherItem and not craftedItem and (tierNeeded or (tierChecked and not isMythTrack)) then
         guidanceSources = TierSources(specID, slotName, season)
         sourceLabel = "Catalyst Sources:"
     end
+
+    local tierBadge = ""
+    if tierChecked then tierBadge = "Tier"
+    elseif nativeTierOffPiece then tierBadge = "Off-piece"
+    elseif craftedItem then tierBadge = "Crafted"
+    elseif otherItem then tierBadge = "Other"
+    elseif tierNeeded then tierBadge = "Need Tier"
+    elseif catalystItem then tierBadge = "Catalyst" end
 
     return {
         slot = slotName,
@@ -336,11 +366,15 @@ local function BuildSlotPlan(slotName, slot, target, tierState, specID, season, 
         tierEligible = tierEligible,
         tierChecked = tierChecked,
         tierNeeded = tierNeeded,
-        tierBadge = tierChecked and "Tier" or (tierNeeded and "Need Tier" or (catalystItem and "Catalyst" or "")),
+        tierBadge = tierBadge,
+        classification = classification,
+        classificationKey = classificationKey,
         target = target,
         targetEquipped = targetEquipped,
         masterDatabaseItem = masterDatabaseItem,
         craftedItem = craftedItem,
+        nativeTierOffPiece = nativeTierOffPiece,
+        otherItem = otherItem,
         catalystItem = catalystItem,
         voidforgedItem = voidforgedItem,
         voidforgeAvailable = voidforgeAvailable,
@@ -761,9 +795,9 @@ end
 local function BuildDashboardState(forceEquipped)
     local specID, specName = CurrentSpec()
     local season = CurrentSeason()
-    local tierState = TierDB().GetState and TierDB().GetState(season) or { slots = {}, count = 0, complete = false }
     local resources = GetUpgradeResources()
     local slotsByName = GetEquippedSlots(forceEquipped == true)
+    local tierState = TierDB().GetState and TierDB().GetState(season, slotsByName) or { slots = {}, count = 0, complete = false }
     local mainHand = slotsByName["Main Hand"] or EmptySlot("Main Hand")
     local mainHandBlocksOffHand = Capture().IsTwoHandOrRangedWeapon and Capture().IsTwoHandOrRangedWeapon(mainHand)
         and specID ~= 72 and not (slotsByName["Off Hand"] and slotsByName["Off Hand"].itemID)
@@ -831,11 +865,12 @@ end
 function Analysis.GetLogicSummary()
     local ascendantItemName = tostring((GearingDB().Voidforge or {}).ascendantItemName or "Ascendant upgrade item")
     return {
-        "The dashboard uses equipped gear, saved Targets, saved Alternatives, and the manual Tier Set checklist.",
-        "Tier slots without a saved Target use broad Catalyst sources until four manually selected Tier slots are complete.",
-        "Hero-track checked Tier pieces keep broad Dungeon guidance or Target-specific Dungeon/Raid guidance until they reach Myth.",
-        "Equipped items outside the Master Item Database are identified as Tier when their Tier slot is checked; otherwise they use the Crafted fallback.",
-        "Nebulous availability appears for eligible non-crafted Hero-track items when a Nebulous Voidcore is owned, regardless of current upgrade rank.",
+        "The dashboard uses equipped gear, saved Targets, saved Alternatives, and automatic item-ID classification.",
+        "Known native Tier set pieces automatically advance the 2/4-piece display; native Tier off-pieces do not count toward the set bonus.",
+        "Hero-track Tier pieces keep broad Dungeon guidance or Target-specific Dungeon/Raid guidance until they reach Myth.",
+        "Known crafted item IDs are labeled Crafted. Equipped IDs outside both databases are labeled Other Item.",
+        "Other Items receive no upgrade, Catalyst, or Nebulous guidance; a saved Target may still show its specific source.",
+        "Nebulous availability appears for eligible known non-crafted Hero-track items when a Nebulous Voidcore is owned, regardless of current upgrade rank.",
         "Ascendant availability appears only for a fully upgraded 6/6 Hero- or Myth-track eligible weapon or trinket when an " .. ascendantItemName .. " is owned.",
         "Ascendant Voidforged weapons and trinkets retain their Hero or Myth base track at the upgraded item level.",
         "A saved Target always overrides broad Catalyst-source guidance for its Tier slot and keeps its specific item and source visible on the dashboard.",
@@ -870,8 +905,11 @@ function Analysis.PrintGearDebug()
             track = row.trackName,
             rank = row.rankText,
             tierBadge = row.tierBadge,
+            classification = row.classificationKey,
             action = row.actionText,
             craftedItem = row.craftedItem,
+            nativeTierOffPiece = row.nativeTierOffPiece,
+            otherItem = row.otherItem,
             catalystItem = row.catalystItem,
             voidforgedItem = row.voidforgedItem,
             voidforgeAvailable = row.voidforgeAvailable,
