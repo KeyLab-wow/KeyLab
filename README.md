@@ -4,7 +4,7 @@
 
 Stop trying to remember which build, stats, or gear you used three runs ago.
 
-KeyLab connects the choices you make with the results they produce. Plan your setup, test it at a training dummy, take it into Mythic+ or raid, and review what happened—all inside one personal gameplay journal.
+KeyLab connects the choices you make with the results they produce. Plan your setup, test it at a training dummy, take it into Mythic+ or raid, and review what happened all inside one personal gameplay journal.
 
 ## <span style="color:#dabd89;">Plan it. Practice it. Play it. Improve it.</span>
 
@@ -28,7 +28,7 @@ KeyLab connects the choices you make with the results they produce. Plan your se
 * News, Events, and Game Updates
 * Seasonal Record Management
 
-Your builds, gear, stats, combat results, and progress finally have one place to live—turning every run into another step in your personal journey.
+Your builds, gear, stats, combat results, and progress finally have one place to live turning every run into another step in your personal journey.
 
 ## Requirements
 
