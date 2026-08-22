@@ -328,40 +328,25 @@ function GearDashboard:BuildCurrencyCard(parent)
 end
 
 function GearDashboard:BuildTierCard(parent)
-    self.tierCount = MakeText(parent, "0 / 4", "GameFontHighlightSmall", 11, COLORS.gold, "RIGHT")
+    self.tierCount = MakeText(parent, "0 pieces", "GameFontHighlightSmall", 11, COLORS.gold, "RIGHT")
     self.tierCount:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -14, -10)
-    self.tierCount:SetSize(70, 16)
+    self.tierCount:SetSize(92, 16)
 
-    self.tierChecks = {}
+    self.tierComplete = MakeText(parent, "No Tier Pieces Equipped — 2-Piece is Next", "GameFontHighlightSmall", 10, COLORS.gold, "CENTER")
+    self.tierComplete:SetPoint("TOP", parent, "TOP", 0, -34)
+    self.tierComplete:SetSize(CENTER_WIDTH - 24, 28)
+
+    self.tierSlotRows = {}
     local slots = TierDB().GetSlots and TierDB().GetSlots() or { "Head", "Shoulders", "Chest", "Hands", "Legs" }
     for index, slotName in ipairs(slots) do
-        local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-        check:SetPoint("TOPLEFT", parent, "TOPLEFT", 23, -31 - ((index - 1) * 25))
-        check:SetSize(22, 22)
-        check.slotName = slotName
-        check.label = MakeText(parent, slotName, "GameFontHighlightSmall", 11, COLORS.text)
-        check.label:SetPoint("LEFT", check, "RIGHT", 5, 0)
-        check.label:SetSize(170, 20)
-        check:SetScript("OnClick", function(button)
-            local checked = button:GetChecked() == true
-            local current = TierDB().GetState and TierDB().GetState() or { count = 0 }
-            if checked and not (current.slots and current.slots[button.slotName]) and (tonumber(current.count) or 0) >= 4 then
-                button:SetChecked(false)
-                GearDashboard.tierHelp:SetText("Uncheck one Tier slot before choosing another.")
-                GearDashboard.tierHelp:SetTextColor(unpack(COLORS.orange))
-                return
-            end
-            if TierDB().SetChecked then TierDB().SetChecked(button.slotName, checked) end
-            GearDashboard:Refresh()
-        end)
-        self.tierChecks[slotName] = check
+        local row = MakeText(parent, "○ " .. slotName .. " — Not Equipped", "GameFontHighlightSmall", 10, COLORS.muted)
+        row:SetPoint("TOPLEFT", parent, "TOPLEFT", 24, -68 - ((index - 1) * 22))
+        row:SetSize(CENTER_WIDTH - 48, 18)
+        row:SetWordWrap(false)
+        self.tierSlotRows[slotName] = row
     end
 
-    self.tierComplete = MakeText(parent, "", "GameFontHighlightSmall", 11, COLORS.green, "CENTER")
-    self.tierComplete:SetPoint("TOP", parent, "TOP", 0, -154)
-    self.tierComplete:SetSize(CENTER_WIDTH - 24, 18)
-
-    self.tierHelp = MakeText(parent, "Only 4 of the 5 eligible slots are required for your 4-piece Tier Set.", "GameFontDisableSmall", 9, COLORS.muted, "CENTER")
+    self.tierHelp = MakeText(parent, "Detected automatically from equipped item IDs. Only the five core set slots count.", "GameFontDisableSmall", 9, COLORS.muted, "CENTER")
     self.tierHelp:SetPoint("BOTTOM", parent, "BOTTOM", 0, 8)
     self.tierHelp:SetSize(CENTER_WIDTH - 28, 26)
 end
@@ -515,14 +500,23 @@ function GearDashboard:RefreshSlotRow(row, plan)
     row.itemLink = plan.itemLink
     row.itemName = plan.target and plan.target.name or plan.displayName
 
-    SetBadge(row.tierBadge, plan.tierBadge,
-        plan.tierChecked and COLORS.green or (plan.catalystItem and COLORS.blue or COLORS.yellow))
+    local classificationColor = COLORS.yellow
+    if plan.tierChecked then classificationColor = COLORS.green
+    elseif plan.nativeTierOffPiece then classificationColor = COLORS.purple
+    elseif plan.craftedItem then classificationColor = COLORS.blue
+    elseif plan.otherItem then classificationColor = COLORS.orange
+    elseif plan.catalystItem then classificationColor = COLORS.blue end
+    SetBadge(row.tierBadge, plan.tierBadge, classificationColor)
     row.trackBadge:SetWidth(plan.specialUpgradeSystem and 125 or 82)
     SetBadge(row.trackBadge, plan.trackLabel, TrackColor(plan.trackName))
     SetBadge(row.rankBadge, plan.rankText, TrackColor(plan.trackName))
     row.action:SetText(plan.actionText or "")
     if plan.targetEquipped or plan.tierChecked or plan.nebulousAvailable or plan.voidforgeAvailable then
         row.action:SetTextColor(unpack(COLORS.green))
+    elseif plan.otherItem then
+        row.action:SetTextColor(unpack(COLORS.orange))
+    elseif plan.craftedItem then
+        row.action:SetTextColor(unpack(COLORS.blue))
     elseif plan.tierNeeded then
         row.action:SetTextColor(unpack(COLORS.yellow))
     else
@@ -534,17 +528,16 @@ end
 function GearDashboard:RefreshTier(state)
     local tier = state.tier or { slots = {}, count = 0, complete = false }
     local count = tonumber(tier.count) or 0
-    self.tierCount:SetText(math.min(count, 4) .. " / 4")
-    for slotName, check in pairs(self.tierChecks or {}) do check:SetChecked(tier.slots and tier.slots[slotName] == true) end
-    if tier.complete then
-        self.tierComplete:SetText("4-Piece Complete")
-        self.tierComplete:Show()
-        self.tierHelp:SetText("Uncheck one slot first if you want to change which four Tier pieces you use.")
-    else
-        self.tierComplete:SetText("")
-        self.tierComplete:Hide()
-        self.tierHelp:SetText("Only 4 of the 5 eligible slots are required for your 4-piece Tier Set.")
+    self.tierCount:SetText(count .. (count == 1 and " piece" or " pieces"))
+    self.tierComplete:SetText(TierDB().GetStatusText and TierDB().GetStatusText(tier)
+        or (tier.complete and "4-Piece Tier Set Complete" or (count .. " / 4 Tier Pieces")))
+    self.tierComplete:SetTextColor(unpack(tier.complete and COLORS.green or (count >= 2 and COLORS.blue or COLORS.gold)))
+    for slotName, row in pairs(self.tierSlotRows or {}) do
+        local equipped = tier.slots and tier.slots[slotName] == true
+        row:SetText((equipped and "● " or "○ ") .. slotName .. (equipped and " — Tier Set Piece" or " — Not Equipped"))
+        row:SetTextColor(unpack(equipped and COLORS.green or COLORS.muted))
     end
+    self.tierHelp:SetText("Detected automatically from equipped item IDs. Only the five core set slots count.")
     self.tierHelp:SetTextColor(unpack(COLORS.muted))
 end
 

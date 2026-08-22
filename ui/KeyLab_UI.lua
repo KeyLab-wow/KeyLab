@@ -634,9 +634,10 @@ function KeyLab.UI:CreateTabButtons()
 end
 
 function KeyLab.UI:ShowSequencerCombatMessage(draftPreserved)
-    StaticPopupDialogs = StaticPopupDialogs or {}
-    if not StaticPopupDialogs["KEYLAB_SEQUENCER_COMBAT"] then
-        StaticPopupDialogs["KEYLAB_SEQUENCER_COMBAT"] = {
+    local dialogs = _G.StaticPopupDialogs
+    if type(dialogs) ~= "table" or type(StaticPopup_Show) ~= "function" then return end
+    if not dialogs["KEYLAB_SEQUENCER_COMBAT"] then
+        dialogs["KEYLAB_SEQUENCER_COMBAT"] = {
             text = "The Macro Sequencer Editor cannot open during combat. Your saved sequence and binding still work. Leave combat to edit it.",
             button1 = OKAY,
             timeout = 0,

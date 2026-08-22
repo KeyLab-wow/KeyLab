@@ -190,8 +190,9 @@ local function Dropdown(parent,width,optionsProvider,getValue,setValue)
     return dropdown
 end
 local function Confirm(key,textValue,onAccept)
-    StaticPopupDialogs=StaticPopupDialogs or {}
-    StaticPopupDialogs[key]=StaticPopupDialogs[key] or {
+    local dialogs=_G.StaticPopupDialogs
+    if type(dialogs)~="table" or type(StaticPopup_Show)~="function" then return end
+    dialogs[key]=dialogs[key] or {
         text="%s",button1=YES,button2=NO,timeout=0,whileDead=true,hideOnEscape=true,preferredIndex=3,
         OnAccept=function(_,data) if data and data.onAccept then data.onAccept() end end,
     }
@@ -398,8 +399,9 @@ function Sequencer:SaveDraft(afterSave)
 end
 function Sequencer:RequestSwitch(callback)
     if not self:HasUnsavedChanges() then callback(); return true end
-    StaticPopupDialogs=StaticPopupDialogs or {}
-    StaticPopupDialogs.KEYLAB_SEQUENCE_UNSAVED=StaticPopupDialogs.KEYLAB_SEQUENCE_UNSAVED or {
+    local dialogs=_G.StaticPopupDialogs
+    if type(dialogs)~="table" or type(StaticPopup_Show)~="function" then return false end
+    dialogs.KEYLAB_SEQUENCE_UNSAVED=dialogs.KEYLAB_SEQUENCE_UNSAVED or {
         text="This sequence has unsaved changes.",button1="Save Changes",button2="Discard",button3=CANCEL,
         timeout=0,whileDead=true,hideOnEscape=true,preferredIndex=3,
         OnAccept=function(_,data) if data then Sequencer:SaveDraft(data.callback) end end,
@@ -631,8 +633,9 @@ end
 function Sequencer:RenameVersion()
     if self.viewOnly then self:SetStatus("Reference examples are read-only.","error"); return end
     local version=self:CurrentVersion(); if not version then return end
-    StaticPopupDialogs=StaticPopupDialogs or {}
-    StaticPopupDialogs.KEYLAB_RENAME_VERSION={
+    local dialogs=_G.StaticPopupDialogs
+    if type(dialogs)~="table" or type(StaticPopup_Show)~="function" then return end
+    dialogs.KEYLAB_RENAME_VERSION={
         text="Rename version",button1=SAVE,button2=CANCEL,hasEditBox=true,timeout=0,whileDead=true,hideOnEscape=true,preferredIndex=3,
         OnShow=function(self,data) local box=self.EditBox or self.editBox; if box then box:SetText(data.current or ""); box:HighlightText(); box:SetFocus() end end,
         OnAccept=function(self,data) local box=self.EditBox or self.editBox; local value=Trim(box and box:GetText() or ""); if value~="" then data.accept(value) end end,
