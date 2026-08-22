@@ -1,5 +1,35 @@
 # KeyLab Changelog
 
+## Version 2.0.6 - Recommended Gear Paused
+
+- Removed the Recommended Gear tab and its recommendation database from the live addon while the feature is on the back burner.
+- Restored Gear Planning to its Guide, Crafted Gear, and Season 2 Info views.
+
+## Version 2.0.5 - Current-Spec Recommended Gear
+
+- Added a Recommended Gear tab to Gear Planning that automatically follows the logged-in character's active class and specialization.
+- Added separate Dungeon, Raid, and Raid + Dungeon theorycraft views for all 40 specializations, including the proposed stat priority, pattern evidence, theory, and complete 16-slot gear profiles.
+- Added 1,920 reviewed slot recommendations with item names, item levels, stat patterns, stat lines, sources, item tooltips, and the reason each item won its slot.
+- Preserved class armor and weapon legality, distinct Ring and Trinket choices, dual-wield rules, and two-handed weapon/off-hand restrictions from the workbook analysis.
+- Clearly labeled trinkets as advisory and the recommendations as KeyLab loot-table theorycraft rather than simulation results or official Blizzard stat priorities.
+
+## Version 2.0.4 - August 19 Hotfixes
+
+- Added Blizzard's complete August 19 and August 18, 2026 hotfix notes to Game Updates.
+- Preserved Blizzard's wording and organized the notes through the existing date, category, class, specialization, dungeon, encounter, and general-section navigation.
+
+## Version 2.0.3 - Blizzard Popup Taint Fix
+
+- Stopped KeyLab from replacing Blizzard's global Static Popup dialog table when registering Macro Sequencer confirmations and the combat notice.
+- Kept KeyLab's confirmation dialogs registered inside Blizzard's existing table so protected actions such as confirming an item upgrade are not tainted by KeyLab.
+
+## Version 2.0.2 - Automatic Tier Item Recognition
+
+- Added all 117 native Season 2 Tier items to the Master Item Database, including scaled Myth 6/6 item data, legal class/spec information, source details, and identification of the five core set slots versus the four matching off-pieces.
+- Added item-ID classification for native Tier set pieces, native Tier off-pieces, known crafted equipment, Master Item Database gear, and Other Items.
+- Replaced the manual Tier checkboxes with automatic equipped-item detection and readable 1-piece, 2-piece, 3-piece, and 4-piece progress.
+- Updated Gear Dashboard guidance so known crafted and Other Items are labeled correctly, native Tier off-pieces do not count toward the set bonus, and Other Items receive no automatic upgrade guidance unless the player has saved a Target.
+
 ## Version 2.0.1 - Tier Targeting and Helper Updates
 
 - Emphasized the Gear Targets **Stat Goal Matcher** as the page's primary action with a brighter KeyLab navy background, gold border and label, thin gold accent, and stronger themed hover state.
