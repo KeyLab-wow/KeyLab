@@ -1,5 +1,7 @@
 # KeyLab
 
+### Releases always have the most updated version
+
 ## Your gameplay. Your progress. Your journey.
 
 Stop trying to remember which build, stats, or gear you used three runs ago.
