@@ -39,6 +39,32 @@ local function CountKeys(value)
     return count
 end
 
+local function RequiredRoleMetricKeys(player)
+    player = type(player) == "table" and player or {}
+    local role = player.blizzardRole or player.role
+    local classSpecs = KeyLab.Mapping and KeyLab.Mapping.ClassSpecs
+    if classSpecs and classSpecs.GetRole then
+        role = classSpecs.GetRole(player.specID, player.class or player.className, player.spec or player.specName) or role
+    end
+
+    if role == "Healer" or role == "HEALER" then
+        return { "hps", "healingDone" }
+    end
+    if role == "Tank" or role == "TANK" then
+        return { "damageTaken", "healingDone" }
+    end
+    return { "dps", "damageDone" }
+end
+
+local function MissingRoleMetricKeys(metrics, player)
+    metrics = type(metrics) == "table" and metrics or {}
+    local missing = {}
+    for _, metricKey in ipairs(RequiredRoleMetricKeys(player)) do
+        if metrics[metricKey] == nil then table.insert(missing, metricKey) end
+    end
+    return missing
+end
+
 local function SafeCall(func, ...)
     if type(func) ~= "function" then return false end
     return pcall(func, ...)
@@ -371,8 +397,15 @@ FinalizePull = function(finalAttempt, token)
         .. (metricError and (" note=" .. tostring(metricError)) or "")
     )
 
-    if (type(metrics) ~= "table" or next(metrics) == nil) and finalAttempt ~= true and C_Timer then
-        Probe("WAITING four more seconds for the boss Damage Meter session")
+    local missingRoleMetrics = MissingRoleMetricKeys(metrics, pull.player)
+    local incompleteRoleMetrics = #missingRoleMetrics > 0
+    if (type(metrics) ~= "table" or next(metrics) == nil or incompleteRoleMetrics)
+        and finalAttempt ~= true and C_Timer
+    then
+        Probe(
+            "WAITING four more seconds for the boss Damage Meter session"
+            .. (incompleteRoleMetrics and ("; missing " .. table.concat(missingRoleMetrics, ", ")) or "")
+        )
         C_Timer.After(4, function() FinalizePull(true, pull.token) end)
         return false, metricError
     end
@@ -419,6 +452,11 @@ FinalizePull = function(finalAttempt, token)
     }
     if metricError then
         encounter.captureNotes = { damageMeter = metricError }
+    end
+    if incompleteRoleMetrics then
+        encounter.captureNotes = type(encounter.captureNotes) == "table" and encounter.captureNotes or {}
+        encounter.captureNotes.rolePerformance = "Blizzard Damage Meter did not provide "
+            .. table.concat(missingRoleMetrics, ", ") .. " after KeyLab retried this raid pull."
     end
 
     AddPullToNight(night, encounter)

@@ -57,6 +57,27 @@ local function SafeNumber(value)
     return nil
 end
 
+local function SafeText(value)
+    if value == nil then return nil end
+    if KeyLab.Utils and KeyLab.Utils.SafeText then
+        local text = KeyLab.Utils.SafeText(value)
+        if type(text) == "string" then return text end
+    end
+
+    local ok, text = pcall(function()
+        return tostring(value)
+    end)
+    return ok and type(text) == "string" and text or nil
+end
+
+local function SafeStringFind(text, pattern)
+    if type(text) ~= "string" then return false end
+    local ok, found = pcall(function()
+        return string.find(text, pattern) ~= nil
+    end)
+    return ok and found == true
+end
+
 local function SafeGreaterThanZero(value)
     local number = SafeNumber(value)
     if number == nil then return false end
@@ -104,7 +125,7 @@ end
 
 local function GetSessionName(sessionInfo)
     if type(sessionInfo) == "table" then
-        return sessionInfo.name or sessionInfo.sessionName
+        return SafeText(sessionInfo.name or sessionInfo.sessionName)
     end
 
     return nil
@@ -330,8 +351,14 @@ end
 local function IsPlayerSource(source)
     if type(source) ~= "table" then return false end
     if source.isLocalPlayer == true then return true end
-    if type(source.sourceGUID) == "string" and string.find(source.sourceGUID, "^Player%-") then return true end
-    return type(source.classFilename) == "string" and source.classFilename ~= ""
+
+    local okClass, classFile = pcall(function() return source.classFilename end)
+    classFile = okClass and SafeText(classFile) or nil
+    if classFile and classFile ~= "" then return true end
+
+    local okGUID, sourceGUID = pcall(function() return source.sourceGUID end)
+    sourceGUID = okGUID and SafeText(sourceGUID) or nil
+    return SafeStringFind(sourceGUID, "^Player%-")
 end
 
 local function BuildLocalRank(rawSession, metricInfo)
@@ -405,15 +432,15 @@ local function ReadAnySourceField(source, fieldName)
 end
 
 local function NormalizeSessionInfo(sessionInfo)
-    local name = GetSessionName(sessionInfo) or ""
+    local name = SafeText(GetSessionName(sessionInfo)) or ""
 
     return {
         sessionID = GetSessionID(sessionInfo),
         sessionName = name,
         name = name,
         durationSeconds = GetSessionDuration(sessionInfo),
-        isBossSession = string.find(name, "%(!%)") ~= nil,
-        isTrashSession = name ~= "" and string.find(name, "%(!%)") == nil,
+        isBossSession = SafeStringFind(name, "%(!%)"),
+        isTrashSession = name ~= "" and not SafeStringFind(name, "%(!%)"),
     }
 end
 
@@ -422,11 +449,11 @@ local function NormalizeLocalSource(source)
 
     return {
         isLocalPlayer = source.isLocalPlayer == true,
-        sourceName = ReadAnySourceField(source, "name"),
+        sourceName = SafeText(ReadAnySourceField(source, "name")),
         totalAmount = SafeNumber(ReadAnySourceField(source, "totalAmount")),
         amountPerSecond = SafeNumber(ReadAnySourceField(source, "amountPerSecond")),
-        classFile = ReadAnySourceField(source, "classFilename"),
-        sourceGUID = ReadAnySourceField(source, "sourceGUID"),
+        classFile = SafeText(ReadAnySourceField(source, "classFilename")),
+        sourceGUID = SafeText(ReadAnySourceField(source, "sourceGUID")),
     }
 end
 
@@ -468,9 +495,9 @@ local function ReadDeathEvents(rawSession)
             end
 
             table.insert(out.events, {
-                sourceName = ReadAnySourceField(source, "name"),
-                classFile = ReadAnySourceField(source, "classFilename"),
-                sourceGUID = ReadAnySourceField(source, "sourceGUID"),
+                sourceName = SafeText(ReadAnySourceField(source, "name")),
+                classFile = SafeText(ReadAnySourceField(source, "classFilename")),
+                sourceGUID = SafeText(ReadAnySourceField(source, "sourceGUID")),
                 isLocalPlayer = source.isLocalPlayer == true,
                 deathCount = value,
                 deathRecapID = SafeNumber(ReadAnySourceField(source, "deathRecapID")),
@@ -485,7 +512,9 @@ end
 local function AnonymousSourceID(source, fallbackIndex)
     if type(source) ~= "table" then return nil end
     if source.isLocalPlayer == true then return "player" end
-    local identity = tostring(ReadAnySourceField(source, "sourceGUID") or ReadAnySourceField(source, "name") or "")
+    local identity = SafeText(ReadAnySourceField(source, "sourceGUID"))
+        or SafeText(ReadAnySourceField(source, "name"))
+        or ""
     if identity == "" then return "member-unknown-" .. tostring(fallbackIndex or 0) end
     local hash = 5381
     for index = 1, #identity do
