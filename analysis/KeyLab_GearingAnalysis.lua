@@ -653,6 +653,51 @@ local function ShoppingItemIsOwned(item, dashboardState, bagItems)
     return FindEquippedItemPlan(itemID, dashboardState) ~= nil
 end
 
+local SHOPPING_TRACK_RANK = {
+    Adventurer = 1,
+    Veteran = 2,
+    Champion = 3,
+    Hero = 4,
+    Myth = 5,
+}
+
+local function GetBestOwnedTargetTrack(itemID, dashboardState, bagItems)
+    itemID = tonumber(itemID)
+    if not itemID then return nil, false end
+    local bestTrack
+    local owned = false
+
+    local function Consider(track)
+        if track == nil or track == "" then return end
+        track = tostring(track)
+        if not bestTrack
+            or (SHOPPING_TRACK_RANK[track] or 0) > (SHOPPING_TRACK_RANK[bestTrack] or 0) then
+            bestTrack = track
+        end
+    end
+
+    local bagRecord = bagItems and bagItems[itemID]
+    if bagRecord then
+        owned = true
+        Consider(bagRecord.track)
+    end
+    for _, plan in pairs(dashboardState and dashboardState.plansBySlot or {}) do
+        if tonumber(plan and plan.itemID) == itemID then
+            owned = true
+            Consider(plan.trackName)
+        end
+    end
+    return bestTrack, owned
+end
+
+local function ShoppingTargetWithOwnedTrack(item, ownedTrack, owned)
+    local copy = {}
+    for key, value in pairs(item or {}) do copy[key] = value end
+    copy.ownedTargetCopy = owned == true
+    copy.ownedTrack = ownedTrack
+    return copy
+end
+
 local function BuildCatalystDungeonGroups(dashboardState)
     local groupsByKey, groups = {}, {}
     local slotOrder = {}
@@ -661,11 +706,17 @@ local function BuildCatalystDungeonGroups(dashboardState)
     for index, slotName in ipairs(Analysis.RightSlots or {}) do slotOrder[slotName] = offset + index end
 
     for slotName, plan in pairs(dashboardState and dashboardState.plansBySlot or {}) do
-        -- Match the Tier guidance used by the Gear Dashboard. Unchecked slots
-        -- remain relevant until four pieces are chosen, and checked slots keep
-        -- their replacement path while the equipped item is below Myth track.
-        local needsTierSource = not plan.target and (plan.tierNeeded == true
-            or (plan.tierChecked == true and plan.isMythTrack ~= true))
+        -- The LFG shopping popup uses a stricter rule than the Gear Dashboard:
+        -- only a current-season set-bonus piece protects a Tier slot. An older
+        -- Tier piece, a regular item, or an empty slot still needs Season gear.
+        -- A saved Target remains the first choice and suppresses this broad list.
+        local tierRecord = plan.classification and plan.classification.tier or nil
+        local currentSeasonTier = plan.tierChecked == true
+            and (not tierRecord
+                or tonumber(tierRecord.mnSeason) == tonumber(dashboardState and dashboardState.season))
+        local needsTierSource = TIER_SLOTS[slotName] == true
+            and not plan.target
+            and not currentSeasonTier
         if needsTierSource then
             for _, source in ipairs(TierSources(
                 dashboardState.specID,
@@ -692,7 +743,6 @@ local function BuildCatalystDungeonGroups(dashboardState)
                         table.insert(group.items, {
                             slotName = slotName,
                             displaySlot = plan.displayName or slotName,
-                            tierChecked = plan.tierChecked == true,
                         })
                     end
                 end
@@ -727,19 +777,14 @@ local function BuildGearShoppingPlan(filters)
     local targets, alternatives, ownedHeroTargets = {}, {}, {}
 
     for _, item in ipairs(allTargets) do
-        if ShoppingItemIsOwned(item, dashboardState, bagItems) then
-            local bagRecord = bagItems[tonumber(item.itemID)]
-            local equippedPlan = FindEquippedItemPlan(item.itemID, dashboardState)
-            -- What the player has equipped is the deciding copy. A lower-track
-            -- duplicate in the bags must not make an equipped Myth Target look
-            -- eligible for a Nebulous Voidcore roll.
-            local ownedTrack = equippedPlan and equippedPlan.trackName
-                or bagRecord and bagRecord.track
-            if ownedTrack == "Hero" then
-                table.insert(ownedHeroTargets, item)
-            end
-        else
-            table.insert(targets, item)
+        local ownedTrack, owned = GetBestOwnedTargetTrack(item.itemID, dashboardState, bagItems)
+        -- The item ID alone does not finish a Target. Champion and Hero copies
+        -- remain active so the player can keep pursuing the same item at a
+        -- higher track; only a confirmed Myth copy completes the Target.
+        if ownedTrack ~= "Myth" then
+            local activeTarget = ShoppingTargetWithOwnedTrack(item, ownedTrack, owned)
+            table.insert(targets, activeTarget)
+            if ownedTrack == "Hero" then table.insert(ownedHeroTargets, activeTarget) end
         end
     end
     for _, item in ipairs(allAlternatives) do
