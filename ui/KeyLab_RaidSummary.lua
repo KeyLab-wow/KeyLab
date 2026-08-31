@@ -611,35 +611,53 @@ local function CreateBossGraph(parent, group, y, profile)
     DrawLine(card, graphX, graphBottomY + graphHeight / 2, graphX + graphWidth, graphBottomY + graphHeight / 2, Color("divider"), 1)
 
     local maxByMetric = {}
+    local scaleByMetric = {}
+    local hasValueByMetric = {}
+    local unavailableCountByMetric = {}
     for _, metricKey in ipairs(metrics) do
         for _, pull in ipairs(group.pulls) do
             local value = MetricValue(pull, metricKey)
-            if value and value > (maxByMetric[metricKey] or 0) then maxByMetric[metricKey] = value end
+            if value ~= nil then
+                hasValueByMetric[metricKey] = true
+                if value > (maxByMetric[metricKey] or 0) then maxByMetric[metricKey] = value end
+            else
+                unavailableCountByMetric[metricKey] = (unavailableCountByMetric[metricKey] or 0) + 1
+            end
         end
-        if (maxByMetric[metricKey] or 0) <= 0 then maxByMetric[metricKey] = 1 end
+        scaleByMetric[metricKey] = math.max(1, maxByMetric[metricKey] or 0)
     end
 
     if profile.scale == "perMetric" or #metrics > 1 then
         Place(card, "High", 8, graphTopY + 6, 38, "GameFontDisableSmall", nil, Color("muted"), "RIGHT")
         Place(card, "Mid", 8, graphBottomY + graphHeight / 2 + 6, 38, "GameFontDisableSmall", nil, Color("muted"), "RIGHT")
     else
-        local maximum = maxByMetric[metrics[1]] or 1
-        Place(card, FormatMetric(metrics[1], maximum), 2, graphTopY + 6, 44, "GameFontDisableSmall", nil, Color("muted"), "RIGHT")
-        Place(card, FormatMetric(metrics[1], maximum / 2), 2, graphBottomY + graphHeight / 2 + 6, 44, "GameFontDisableSmall", nil, Color("muted"), "RIGHT")
+        local metricKey = metrics[1]
+        local maximum = maxByMetric[metricKey] or 0
+        local highText = hasValueByMetric[metricKey] and FormatMetric(metricKey, maximum) or "N/A"
+        local midText = hasValueByMetric[metricKey] and maximum > 0 and FormatMetric(metricKey, maximum / 2) or "-"
+        Place(card, highText, 2, graphTopY + 6, 44, "GameFontDisableSmall", nil, Color("muted"), "RIGHT")
+        Place(card, midText, 2, graphBottomY + graphHeight / 2 + 6, 44, "GameFontDisableSmall", nil, Color("muted"), "RIGHT")
     end
     Place(card, "0", 8, graphBottomY + 6, 38, "GameFontDisableSmall", nil, Color("muted"), "RIGHT")
 
-    for _, metricKey in ipairs(metrics) do
-        local lastX, lastY
-        local metricColor = MetricColor(metricKey)
-        for index, pull in ipairs(visiblePulls) do
+    local metricCount = math.max(1, #metrics)
+    local metricGap = metricCount > 1 and 2 or 0
+    local preferredBarGroupWidth = metricCount == 1 and 20 or ((metricCount * 10) + ((metricCount - 1) * metricGap))
+    local barGroupWidth = math.max(metricCount * 2, math.min(preferredBarGroupWidth, pullSlotWidth - 12))
+    local barWidth = math.max(2, math.floor((barGroupWidth - ((metricCount - 1) * metricGap)) / metricCount))
+    barGroupWidth = (barWidth * metricCount) + ((metricCount - 1) * metricGap)
+    for index, pull in ipairs(visiblePulls) do
+        local raid = pull.raid or {}
+        local resultColor = raid.killed == true and Color("green") or Color("red")
+        local groupLeft = PullSlotCenter(index) - (barGroupWidth / 2)
+        for metricIndex, metricKey in ipairs(metrics) do
             local value = MetricValue(pull, metricKey)
             if value ~= nil then
-                local x = PullSlotCenter(index)
-                local yValue = graphBottomY + ((value / maxByMetric[metricKey]) * graphHeight)
-                if lastX and lastY then DrawLine(card, lastX, lastY, x, yValue, metricColor, 2) end
-                DrawDot(card, x, yValue, metricColor)
-                lastX, lastY = x, yValue
+                local barHeight = math.max(2, math.floor(((value / scaleByMetric[metricKey]) * graphHeight) + 0.5))
+                local bar = CreateFrame("Frame", nil, card, "BackdropTemplate")
+                bar:SetPoint("BOTTOMLEFT", card, "TOPLEFT", groupLeft + ((metricIndex - 1) * (barWidth + metricGap)), graphBottomY)
+                bar:SetSize(barWidth, barHeight)
+                Style(bar, { resultColor[1], resultColor[2], resultColor[3], 0.78 }, MetricColor(metricKey))
             end
         end
     end
@@ -669,7 +687,8 @@ local function CreateBossGraph(parent, group, y, profile)
             for _, metricKey in ipairs(metrics) do
                 local value = MetricValue(pullRecord, metricKey)
                 local rank = PullRank(pullRecord, metricKey)
-                local line = GraphMetricLabel(profile, metricKey) .. ": " .. FormatMetric(metricKey, value)
+                local line = GraphMetricLabel(profile, metricKey) .. ": "
+                    .. (value == nil and "Unavailable" or FormatMetric(metricKey, value))
                 if rank then line = line .. "  |  Rank " .. RankLabel(rank) end
                 GameTooltip:AddLine(line, 0.76, 0.84, 1)
             end
@@ -684,7 +703,8 @@ local function CreateBossGraph(parent, group, y, profile)
         local lineY = -72 - ((index - 1) * 45)
         DrawLine(card, legendX, lineY, legendX + 24, lineY, MetricColor(metricKey), 2)
         Place(card, GraphMetricLabel(profile, metricKey), legendX, lineY - 8, 132, "GameFontNormalSmall", nil, Color("gold"))
-        Place(card, "High: " .. FormatMetric(metricKey, maxByMetric[metricKey]), legendX, lineY - 25, 132, "GameFontDisableSmall", nil, MetricColor(metricKey))
+        local highText = hasValueByMetric[metricKey] and FormatMetric(metricKey, maxByMetric[metricKey] or 0) or "Unavailable"
+        Place(card, "High: " .. highText, legendX, lineY - 25, 132, "GameFontDisableSmall", nil, MetricColor(metricKey))
     end
 
     local rankCardY = #metrics >= 3 and -190 or -138
@@ -699,6 +719,26 @@ local function CreateBossGraph(parent, group, y, profile)
     Place(rankCard, "Kill Pull", 8, -78, 70, "GameFontDisableSmall", nil, Color("muted"))
     Place(rankCard, RankLabel(KillRank(group.pulls, primaryRankKey)), 78, -78, 54, "GameFontNormalSmall", nil, group.killed and Color("green") or Color("muted"), "RIGHT")
     Place(card, string.format("Pulls %d-%d of %d  |  Page %d / %d", startIndex, endIndex, #group.pulls, page, pageCount), graphX, -255, 250, "GameFontDisableSmall", nil, Color("muted"))
+    local primaryMetricKey = metrics[1]
+    local unavailableCount = unavailableCountByMetric[primaryMetricKey] or 0
+    if unavailableCount > 0 then
+        Place(
+            card,
+            string.format(
+                "%d pull%s missing %s",
+                unavailableCount,
+                unavailableCount == 1 and "" or "s",
+                GraphMetricLabel(profile, primaryMetricKey)
+            ),
+            312,
+            -255,
+            188,
+            "GameFontDisableSmall",
+            nil,
+            Color("warning"),
+            "RIGHT"
+        )
+    end
     if pageCount > 1 then
         CreateGraphPageButton(card, "< Back", 510, -252, page > 1, function()
             RaidSummary.graphPages[pageKey] = page - 1
@@ -765,7 +805,7 @@ function RaidSummary:Refresh()
     CreateNightResultCards(self.content, night, -158)
 
     Place(self.content, "Boss Pull Performance", 18, -406, 500, "GameFontNormalLarge", 16, Color("gold"))
-    Place(self.content, "Each boss has its own role-based graph. Pull numbers are red for wipes and green for kills.", 18, -430, 700, "GameFontDisableSmall", nil, Color("muted"))
+    Place(self.content, "Each boss has its own role-based graph. Vertical bars are red for wipes and green for kills.", 18, -430, 700, "GameFontDisableSmall", nil, Color("muted"))
     AddLegend(self.content, 724, -411, Color("red"), "Wipe")
     AddLegend(self.content, 796, -411, Color("green"), "Kill")
 

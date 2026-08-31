@@ -80,6 +80,40 @@ local function ConfigureText(region, value, size, color, width, justify)
     return height
 end
 
+local ARTICLE_SEARCH_CACHE = setmetatable({}, { __mode = "k" })
+
+local function CollectArticleSearchText(value, parts, seen)
+    local valueType = type(value)
+    if valueType == "string" or valueType == "number" then
+        parts[#parts + 1] = tostring(value)
+        return
+    end
+    if valueType ~= "table" or seen[value] then return end
+    seen[value] = true
+    for _, child in pairs(value) do
+        CollectArticleSearchText(child, parts, seen)
+    end
+end
+
+local function ArticleSearchText(article)
+    if ARTICLE_SEARCH_CACHE[article] then return ARTICLE_SEARCH_CACHE[article] end
+    local parts = {}
+    CollectArticleSearchText(article, parts, {})
+    local text = table.concat(parts, " "):lower():gsub("%s+", " ")
+    ARTICLE_SEARCH_CACHE[article] = text
+    return text
+end
+
+local function ArticleMatchesSearch(article, query)
+    query = tostring(query or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+    if query == "" then return true end
+    local articleText = ArticleSearchText(article)
+    for token in query:gmatch("%S+") do
+        if not articleText:find(token, 1, true) then return false end
+    end
+    return true
+end
+
 local function CreatePreviewCard(parent, label)
     local card = CreateFrame("Button", nil, parent, "BackdropTemplate")
     Theme.StylePanel(card, Colors.cardBg, Colors.cardBorder)
@@ -533,11 +567,160 @@ local function RenderHotfixBlocks(reader, blocks, x, y, width)
         elseif block.type == "heading" then
             local _, height = AddText(reader, block.text or "", 15, Colors.text, x, y, width)
             y = y + height + 10
+        elseif block.type == "paragraph" then
+            local _, height = AddText(reader, block.text or "", 12, Colors.text, x, y, width)
+            y = y + height + 14
         else
             y = AddChange(reader, { text = block.text or "" }, 0, x, y, width)
         end
     end
     return y
+end
+
+local function HasHotfixContent(node)
+    if #(node and node.content or {}) > 0 then return true end
+    for _, section in ipairs(node and node.sections or {}) do
+        if #(section.content or {}) > 0 then return true end
+    end
+    for _, submenu in ipairs(node and node.submenus or {}) do
+        if HasHotfixContent(submenu) then return true end
+    end
+    return false
+end
+
+local function RenderUpdateAccordionHeader(reader, label, expanded, depth, x, y, width, onClick)
+    depth = tonumber(depth) or 0
+    local indent = depth * 18
+    local button = Acquire(reader, "tab")
+    button.label:SetText((expanded and "−  " or "+  ") .. string.upper(label or "SECTION"))
+    button.label:SetJustifyH("LEFT")
+    button:ClearAllPoints()
+    button:SetPoint("TOPLEFT", reader.scroll.content, "TOPLEFT", x + indent, -y)
+    button:SetSize(math.max(80, width - indent), depth == 0 and 36 or 32)
+    button:SetSelected(expanded)
+    button:SetScript("OnClick", onClick)
+    return y + (depth == 0 and 44 or 40)
+end
+
+local function RenderUpdateCategoryBody(reader, category, x, y, width)
+    if #(category.content or {}) > 0 then
+        y = RenderHotfixBlocks(reader, category.content, x + 20, y, width - 20) + 6
+    end
+
+    local submenus = {}
+    for _, submenu in ipairs(category.submenus or {}) do
+        if HasHotfixContent(submenu) then submenus[#submenus + 1] = submenu end
+    end
+    if #submenus == 0 then return y end
+
+    local selectedSubmenu
+    if reader.selectedHotfixSubmenuID ~= false then
+        selectedSubmenu = FindByID(submenus, reader.selectedHotfixSubmenuID) or submenus[1]
+        reader.selectedHotfixSubmenuID = selectedSubmenu and selectedSubmenu.id or false
+    end
+
+    for _, submenu in ipairs(submenus) do
+        local submenuData = submenu
+        local expanded = selectedSubmenu and selectedSubmenu.id == submenuData.id
+        y = RenderUpdateAccordionHeader(reader, submenuData.label, expanded, 1, x, y, width, function()
+            if reader.selectedHotfixSubmenuID == submenuData.id then
+                reader.selectedHotfixSubmenuID = false
+            else
+                reader.selectedHotfixSubmenuID = submenuData.id
+                reader.selectedHotfixSectionID = nil
+            end
+            reader:Render(false)
+        end)
+
+        if expanded then
+            if #(submenuData.content or {}) > 0 then
+                y = RenderHotfixBlocks(reader, submenuData.content, x + 38, y, width - 38) + 4
+            end
+
+            local sections = {}
+            for index, section in ipairs(submenuData.sections or {}) do
+                if #(section.content or {}) > 0 then
+                    sections[#sections + 1] = {
+                        id = submenuData.id .. "-section-" .. tostring(index),
+                        heading = section.heading or "General",
+                        content = section.content,
+                    }
+                end
+            end
+
+            local selectedSection
+            if #sections > 0 and reader.selectedHotfixSectionID ~= false then
+                selectedSection = FindByID(sections, reader.selectedHotfixSectionID) or sections[1]
+                reader.selectedHotfixSectionID = selectedSection.id
+            end
+
+            for _, section in ipairs(sections) do
+                local sectionData = section
+                local sectionExpanded = selectedSection and selectedSection.id == sectionData.id
+                y = RenderUpdateAccordionHeader(reader, sectionData.heading, sectionExpanded, 2, x, y, width, function()
+                    if reader.selectedHotfixSectionID == sectionData.id then
+                        reader.selectedHotfixSectionID = false
+                    else
+                        reader.selectedHotfixSectionID = sectionData.id
+                    end
+                    reader:Render(false)
+                end)
+                if sectionExpanded then
+                    y = RenderHotfixBlocks(reader, sectionData.content, x + 56, y, width - 56) + 6
+                end
+            end
+        end
+    end
+    return y
+end
+
+local function RenderGameUpdateArticle(reader, article, x, y, width)
+    local modes = article.modes or {}
+    local selectedMode = FindByID(modes, reader.selectedModeID) or modes[1]
+    if not selectedMode then return y end
+    reader.selectedModeID = selectedMode.id
+
+    y = RenderSegmentedArticleNavigation(reader, modes, selectedMode.id, x, y, width, function(modeData)
+        reader.selectedModeID = modeData.id
+        reader.selectedHotfixCategoryID = nil
+        reader.selectedHotfixSubmenuID = nil
+        reader.selectedHotfixSectionID = nil
+        reader:Render(true)
+    end)
+
+    local categories = {}
+    for _, category in ipairs(selectedMode.categories or {}) do
+        if HasHotfixContent(category) then categories[#categories + 1] = category end
+    end
+    if #categories == 0 then
+        local _, height = AddText(reader, "No entries are available for this view.", 12, Colors.muted, x, y, width)
+        return y + height + 16
+    end
+
+    local selectedCategory
+    if reader.selectedHotfixCategoryID ~= false then
+        selectedCategory = FindByID(categories, reader.selectedHotfixCategoryID) or categories[1]
+        reader.selectedHotfixCategoryID = selectedCategory and selectedCategory.id or false
+    end
+
+    for _, category in ipairs(categories) do
+        local categoryData = category
+        local expanded = selectedCategory and selectedCategory.id == categoryData.id
+        y = RenderUpdateAccordionHeader(reader, categoryData.label, expanded, 0, x, y, width, function()
+            if reader.selectedHotfixCategoryID == categoryData.id then
+                reader.selectedHotfixCategoryID = false
+            else
+                reader.selectedHotfixCategoryID = categoryData.id
+                reader.selectedHotfixSubmenuID = nil
+                reader.selectedHotfixSectionID = nil
+            end
+            reader:Render(false)
+        end)
+        if expanded then
+            y = RenderUpdateCategoryBody(reader, categoryData, x, y, width) + 6
+        end
+    end
+    return y + 4
 end
 
 local function RenderHotfixArticle(reader, article, x, y, width)
@@ -644,7 +827,8 @@ local function CreateArticleListEntry(reader, article)
     return entry
 end
 
-local function CreateArticleReader(parent, tabID)
+local function CreateArticleReader(parent, tabID, options)
+    options = options or {}
     local reader = CreateFrame("Frame", nil, parent)
     reader:SetAllPoints(parent)
     reader.tabID = tabID
@@ -658,7 +842,12 @@ local function CreateArticleReader(parent, tabID)
     Theme.StylePanel(reader.listPanel, Colors.analysisRowBg, Colors.cardBorder)
 
     reader.readerPanel = CreateFrame("Frame", nil, reader, "BackdropTemplate")
-    reader.readerPanel:SetPoint("TOPLEFT", reader.listPanel, "TOPRIGHT", Layout.articlePaneGap, 0)
+    if options.hideArticleList then
+        reader.listPanel:Hide()
+        reader.readerPanel:SetPoint("TOPLEFT", reader, "TOPLEFT", 0, 0)
+    else
+        reader.readerPanel:SetPoint("TOPLEFT", reader.listPanel, "TOPRIGHT", Layout.articlePaneGap, 0)
+    end
     reader.readerPanel:SetPoint("TOPRIGHT", reader, "TOPRIGHT", 0, 0)
     reader.readerPanel:SetPoint("BOTTOMRIGHT", reader, "BOTTOMRIGHT", 0, 0)
     Theme.StylePanel(reader.readerPanel, Colors.transparent, Colors.transparent, 0)
@@ -677,6 +866,30 @@ local function CreateArticleReader(parent, tabID)
         reader.entries[index] = entry
     end
     reader.listScroll:SetContentHeight(math.max(1, #reader.entries * (Layout.listRowHeight + Layout.listRowGap)))
+    reader.noMatches = Text(reader.listScroll.content, "No matching articles.", 11, Colors.muted, "CENTER")
+    reader.noMatches:SetPoint("TOPLEFT", reader.listScroll.content, "TOPLEFT", 8, -24)
+    reader.noMatches:SetPoint("TOPRIGHT", reader.listScroll.content, "TOPRIGHT", -8, -24)
+    reader.noMatches:SetHeight(30)
+    reader.noMatches:Hide()
+
+    function reader:ApplySearch(query)
+        self.searchQuery = tostring(query or "")
+        local visibleCount = 0
+        for _, entry in ipairs(self.entries) do
+            local visible = ArticleMatchesSearch(entry.article, self.searchQuery)
+            entry:SetShown(visible)
+            if visible then
+                entry:ClearAllPoints()
+                entry:SetPoint("TOPLEFT", self.listScroll.content, "TOPLEFT", 0, -(visibleCount * (Layout.listRowHeight + Layout.listRowGap)))
+                visibleCount = visibleCount + 1
+            end
+        end
+        local hasQuery = self.searchQuery:match("%S") ~= nil
+        self.noMatches:SetShown(hasQuery and visibleCount == 0)
+        self.listScroll:SetContentHeight(math.max(visibleCount > 0 and (visibleCount * (Layout.listRowHeight + Layout.listRowGap)) or 60, 1))
+        self.listScroll:ScrollToTop()
+        return visibleCount, #self.entries
+    end
 
     function reader:UpdateListSelection()
         for _, entry in ipairs(self.entries) do
@@ -703,6 +916,14 @@ local function CreateArticleReader(parent, tabID)
         self.selectedHotfixCategoryID = firstHotfixCategory and firstHotfixCategory.id or nil
         local firstHotfixSubmenu = firstHotfixCategory and firstHotfixCategory.submenus and firstHotfixCategory.submenus[1]
         self.selectedHotfixSubmenuID = firstHotfixSubmenu and firstHotfixSubmenu.id or nil
+        self.selectedHotfixSectionID = nil
+        if article.articleType == "game_update" then
+            local firstMode = article.modes and article.modes[1]
+            local firstCategory = firstMode and firstMode.categories and firstMode.categories[1]
+            self.selectedHotfixCategoryID = firstCategory and firstCategory.id or nil
+            local firstSubmenu = firstCategory and firstCategory.submenus and firstCategory.submenus[1]
+            self.selectedHotfixSubmenuID = firstSubmenu and firstSubmenu.id or nil
+        end
         self:UpdateListSelection()
         self:Render(true)
     end
@@ -743,6 +964,8 @@ local function CreateArticleReader(parent, tabID)
 
             if article.articleType == "class_tuning" then
                 y = RenderClassArticle(self, article, x, y, width)
+            elseif article.articleType == "game_update" then
+                y = RenderGameUpdateArticle(self, article, x, y, width)
             elseif article.articleType == "hotfixes" then
                 y = RenderHotfixArticle(self, article, x, y, width)
             else
@@ -788,6 +1011,7 @@ local function CreateArticleReader(parent, tabID)
         for _, entry in ipairs(reader.entries) do entry:SetWidth(width) end
         reader.listScroll:Refresh()
     end)
+    reader:ApplySearch("")
     return reader
 end
 
@@ -813,6 +1037,7 @@ function HOME:Create(parent)
     local definitions = {
         { id = "home", label = "HOME", width = 76 },
         { id = "news", label = "NEWS & EVENTS", width = 132 },
+        { id = "issues", label = "S2 COMMON ISSUES", width = 152 },
         { id = "updates", label = "GAME UPDATES", width = 132 },
     }
     local previous
@@ -829,13 +1054,59 @@ function HOME:Create(parent)
         previous = button
     end
 
+    frame.searchHost = CreateFrame("Frame", nil, frame)
+    frame.searchHost:SetSize(356, Layout.subTabHeight)
+    frame.searchHost:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -Layout.outerRight, Layout.subTabsY)
+    frame.searchLabel = Text(frame.searchHost, "SEARCH", 10, Colors.blue)
+    frame.searchLabel:SetPoint("LEFT", frame.searchHost, "LEFT", 0, 0)
+    frame.searchLabel:SetSize(46, Layout.subTabHeight)
+    frame.searchLabel:SetJustifyV("MIDDLE")
+    frame.searchBox = Theme.CreateInput(frame.searchHost, 180, 28)
+    frame.searchBox:SetPoint("LEFT", frame.searchLabel, "RIGHT", 4, 0)
+    frame.searchBox:SetMaxLetters(80)
+    frame.searchBox:SetJustifyH("LEFT")
+    frame.searchPlaceholder = Text(frame.searchBox, "Search current section", 10, Colors.muted)
+    frame.searchPlaceholder:SetPoint("LEFT", frame.searchBox, "LEFT", 8, 0)
+    frame.searchPlaceholder:SetPoint("RIGHT", frame.searchBox, "RIGHT", -8, 0)
+    frame.searchPlaceholder:SetHeight(24)
+    frame.searchPlaceholder:SetJustifyV("MIDDLE")
+    frame.searchStatus = Text(frame.searchHost, "", 10, Colors.muted, "CENTER")
+    frame.searchStatus:SetPoint("LEFT", frame.searchBox, "RIGHT", 6, 0)
+    frame.searchStatus:SetSize(62, Layout.subTabHeight)
+    frame.searchStatus:SetJustifyV("MIDDLE")
+    frame.clearSearchButton = Theme.CreateButton(frame.searchHost, "Clear", 58, 28)
+    frame.clearSearchButton:SetPoint("RIGHT", frame.searchHost, "RIGHT", 0, 0)
+    frame.searchHost:Hide()
+
     frame.contentHost = CreateFrame("Frame", nil, frame)
     frame.contentHost:SetPoint("TOPLEFT", frame, "TOPLEFT", Layout.outerX, Layout.contentY)
     frame.contentHost:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Layout.outerRight, Layout.contentBottom)
     frame.panels = {}
     frame.panels.home = CreateHomeOverview(frame.contentHost, frame)
     frame.panels.news = CreateArticleReader(frame.contentHost, "news")
+    frame.panels.issues = CreateArticleReader(frame.contentHost, "issues", { hideArticleList = true })
     frame.panels.updates = CreateArticleReader(frame.contentHost, "updates")
+
+    function frame:ApplyArticleSearch()
+        local query = self.searchBox:GetText() or ""
+        self.searchPlaceholder:SetShown(query == "")
+        self.clearSearchButton:SetShown(query ~= "")
+        local panel = self.panels[self.selectedSubTab]
+        if not panel or not panel.ApplySearch then
+            self.searchStatus:SetText("")
+            return
+        end
+        local found, total = panel:ApplySearch(query)
+        self.searchStatus:SetText(tostring(found) .. " / " .. tostring(total))
+        Theme.ApplyColor(self.searchStatus, found == 0 and query ~= "" and Colors.red or Colors.muted)
+    end
+
+    frame.searchBox:SetScript("OnTextChanged", function() frame:ApplyArticleSearch() end)
+    frame.searchBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    frame.clearSearchButton:SetScript("OnClick", function()
+        frame.searchBox:SetText("")
+        frame.searchBox:ClearFocus()
+    end)
 
     function frame:SelectSubTab(tabID, articleID)
         tabID = self.panels[tabID] and tabID or "home"
@@ -844,6 +1115,8 @@ function HOME:Create(parent)
         for id, button in pairs(self.subTabs) do button:SetSelected(id == tabID) end
         local panel = self.panels[tabID]
         if tabID == "home" then panel:Refresh() else panel:Refresh(articleID) end
+        self.searchHost:SetShown(tabID == "news" or tabID == "updates")
+        if self.searchHost:IsShown() then self:ApplyArticleSearch() end
     end
 
     function frame:Refresh()

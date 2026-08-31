@@ -469,9 +469,60 @@ function Sequencer:SaveMacroBlock()
     local block=self:CurrentBlock(); if not block then self:SetStatus("Select a macro to update.","error"); return end
     local value=self.macroEdit:GetText() or ""; local valid,message=Lib().ValidateMacroText(value,self.draft and self.draft.name)
     if not valid then self:SetStatus(message,"error"); return end
+    if type(block.groupTarget)=="table" and Lib().ValidateMarkedBlock then
+        local candidate=Copy(block); candidate.enabled=true; candidate.macroText=value; candidate.commands=nil
+        local marked,markedMessage=Lib().ValidateMarkedBlock(candidate)
+        if not marked then self:SetStatus("Group Target: "..tostring(markedMessage),"error"); return end
+        block.groupTarget.sourceTarget=candidate.groupTarget.sourceTarget
+    end
     local enabled=block.enabled~=false
     block.enabled=enabled; block.macroText=value; block.commands=nil
     self.editorBaseline=value; self.editorChanged=false; self:MarkDirty("Selected macro updated."); self:RefreshEditor()
+end
+
+function Sequencer:EnsureGroupTargetDialog()
+    if self.groupTargetDialog then return self.groupTargetDialog end
+    local dialog=CreateFrame("Frame","KeyLabGroupTargetNameDialog",UIParent,"BackdropTemplate")
+    dialog:SetSize(450,204); dialog:SetPoint("CENTER"); dialog:SetFrameStrata("FULLSCREEN_DIALOG"); dialog:SetFrameLevel(9500)
+    Style(dialog,COLORS.bg,COLORS.gold); dialog:EnableMouse(true); dialog:Hide()
+    dialog.title=Text(dialog,"Name This Group Target","GameFontNormal",17,COLORS.gold); dialog.title:SetPoint("TOPLEFT",18,-16); dialog.title:SetSize(360,24)
+    dialog.help=Text(dialog,"This name appears in Group Dashboard -> Macro Targets. KeyLab will only change the temporary group target; your saved macro remains unchanged.","GameFontHighlightSmall",11,COLORS.text)
+    dialog.help:SetPoint("TOPLEFT",18,-48); dialog.help:SetSize(414,46)
+    dialog.nameLabel=Text(dialog,"Macro Target Name","GameFontHighlightSmall",10,COLORS.muted); dialog.nameLabel:SetPoint("TOPLEFT",18,-104)
+    dialog.nameBox=EditBox(dialog,414); dialog.nameBox:SetPoint("TOPLEFT",18,-124); dialog.nameBox:SetMaxLetters(40)
+    dialog.save=Button(dialog,"Save",76,function()
+        local block=Sequencer:CurrentVersion() and Sequencer:CurrentVersion().blocks[dialog.blockIndex]
+        local okay,message=Lib().MarkBlockForGroupTarget and Lib().MarkBlockForGroupTarget(block,dialog.nameBox:GetText())
+        if not okay then Sequencer:SetStatus(message or "That macro could not be marked.","error"); return end
+        dialog:Hide(); Sequencer:MarkDirty(message); Sequencer:RefreshBlockRows()
+    end); dialog.save:SetPoint("BOTTOMRIGHT",-18,14)
+    dialog.cancel=Button(dialog,"Cancel",76,function() dialog:Hide() end); dialog.cancel:SetPoint("RIGHT",dialog.save,"LEFT",-8,0)
+    dialog.remove=Button(dialog,"Remove",76,function()
+        local block=Sequencer:CurrentVersion() and Sequencer:CurrentVersion().blocks[dialog.blockIndex]
+        local okay,message=Lib().UnmarkBlockForGroupTarget and Lib().UnmarkBlockForGroupTarget(block)
+        if not okay then Sequencer:SetStatus(message or "That marker could not be removed.","error"); return end
+        dialog:Hide(); Sequencer:MarkDirty(message); Sequencer:RefreshBlockRows()
+    end); dialog.remove:SetPoint("BOTTOMLEFT",18,14)
+    dialog.nameBox:SetScript("OnEnterPressed",function() dialog.save:Click() end)
+    dialog.nameBox:SetScript("OnEscapePressed",function(self) self:ClearFocus(); dialog:Hide() end)
+    self.groupTargetDialog=dialog
+    return dialog
+end
+
+function Sequencer:ShowGroupTargetDialog(index)
+    if self.viewOnly then self:SetStatus("Reference examples are read-only.","error"); return end
+    if InCombat() then self:SetStatus("Group Target macros cannot be changed during combat.","error"); return end
+    self:RequestEditorDiscard(function()
+        local version=Sequencer:CurrentVersion(); local block=version and version.blocks[index]
+        if not block then return end
+        local source,message=Lib().ValidateGroupTargetBlock and Lib().ValidateGroupTargetBlock(block)
+        if not source then Sequencer:SetStatus(message or "That macro cannot be used as a Group Target.","error"); return end
+        Sequencer.selectedBlockIndex=index; Sequencer:LoadSelectedBlock(); Sequencer:RefreshBlockRows()
+        local dialog=Sequencer:EnsureGroupTargetDialog(); dialog.blockIndex=index
+        local marked=type(block.groupTarget)=="table"
+        dialog.nameBox:SetText(marked and tostring(block.groupTarget.name or "") or "")
+        dialog.remove:SetShown(marked); dialog:Show(); dialog.nameBox:SetFocus(); dialog.nameBox:HighlightText()
+    end)
 end
 function Sequencer:DeleteMacroBlock()
     if self.viewOnly then self:SetStatus("Reference examples are read-only.","error"); return end
@@ -504,6 +555,21 @@ function Sequencer:AcquireBlockRow(poolIndex)
     row.number:SetPoint("LEFT",4,0); row.numberText=Text(row.number,"","GameFontNormal",14,COLORS.gold,"CENTER"); row.numberText:SetAllPoints(); row.numberText:SetJustifyV("MIDDLE")
     row.enabled=CreateFrame("CheckButton",nil,row,"UICheckButtonTemplate"); row.enabled:SetSize(24,24); row.enabled:SetPoint("TOPLEFT",42,-4)
     row.enabledLabel=Text(row,"Enabled","GameFontHighlightSmall",10,COLORS.text); row.enabledLabel:SetPoint("TOPLEFT",68,-8); row.enabledLabel:SetSize(66,18); row.enabledLabel:SetJustifyV("MIDDLE")
+    row.targetButton=Button(row,"Group Target",92,function() Sequencer:ShowGroupTargetDialog(row.index) end,24)
+    row.targetButton:SetPoint("TOPLEFT",44,-31)
+    row.targetButton.defaultBg=COLORS.analysisDropdownBg or {0.050,0.086,0.155,0.96}
+    row.targetButton.defaultBorder=COLORS.blue
+    row.targetButton.defaultText=COLORS.gold
+    ApplyButtonRestingStyle(row.targetButton)
+    row.targetButton:HookScript("OnEnter",function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
+        GameTooltip:AddLine("Group Target",COLORS.gold[1],COLORS.gold[2],COLORS.gold[3])
+        GameTooltip:AddLine("Click to make this block available in Group Dashboard -> Macro Targets and give it a display name.",COLORS.text[1],COLORS.text[2],COLORS.text[3],true)
+        GameTooltip:AddLine("Supported selectors: @target, @focus, @player, @pet, @mouseover, @cursor, @party1-4, and @raid1-40. Mouse-button conditions such as button:1 remain unchanged.",COLORS.muted[1],COLORS.muted[2],COLORS.muted[3],true)
+        GameTooltip:Show()
+    end)
+    row.targetButton:HookScript("OnLeave",function() if GameTooltip then GameTooltip:Hide() end end)
     row.modeDropdown=Dropdown(row,96,MODE_OPTIONS,function() return row.mode end,function(value)
         if Sequencer.viewOnly then Sequencer:SetStatus("Reference examples are read-only.","error"); return false end
         local version=Sequencer:CurrentVersion()
@@ -514,7 +580,7 @@ function Sequencer:AcquireBlockRow(poolIndex)
         Sequencer:MarkDirty("Macro "..tostring(row.index).." mode changed.")
         Sequencer:RefreshEditor()
         return true
-    end); row.modeDropdown:SetPoint("BOTTOMLEFT",38,4)
+    end); row.modeDropdown:SetPoint("BOTTOMLEFT",44,4)
     row.card=CreateFrame("Button",nil,row,"BackdropTemplate"); row.card:SetPoint("TOPLEFT",142,0); row.card:SetPoint("BOTTOMRIGHT",0,0); Style(row.card,COLORS.card or COLORS.panel,COLORS.softBorder or COLORS.border)
     row.textScroll=CreateFrame("ScrollFrame",nil,row.card); row.textScroll:SetPoint("TOPLEFT",10,-7); row.textScroll:SetPoint("BOTTOMRIGHT",-48,7); row.textScroll:EnableMouse(true); row.textScroll:EnableMouseWheel(true)
     row.textChild=CreateFrame("Frame",nil,row.textScroll); row.textChild:SetWidth(420); row.textScroll:SetScrollChild(row.textChild)
@@ -582,10 +648,16 @@ function Sequencer:RefreshBlockRows()
             local block=blocks[index]
             local row=self:AcquireBlockRow(index); row.index=index; row:Show(); row:ClearAllPoints(); row:SetPoint("TOPLEFT",0,-y)
             local macroText=Lib().GetBlockText and Lib().GetBlockText(block) or Lib().GenerateBlock(block) or "Invalid macro"
-            local lines=LineCount(macroText); local visible=math.min(4,math.max(1,lines)); local height=math.max(66,18+(visible*14))
+            local lines=LineCount(macroText); local visible=math.min(4,math.max(1,lines)); local height=math.max(92,18+(visible*14))
             row:SetHeight(height); row.numberText:SetText(tostring(index)); row.enabled:SetChecked(block.enabled~=false); row.macroText:SetText(macroText)
             row.mode=Lib().GetBlockMode and Lib().GetBlockMode(version,block) or block.mode or version.mode or "even_cycle"
-            SetControlEnabled(row.enabled,not self.viewOnly); SetControlEnabled(row.modeDropdown,not self.viewOnly); row.modeDropdown:RefreshText()
+            local marker=type(block.groupTarget)=="table" and block.groupTarget or nil
+            row.targetButton.label:SetText(marker and ("Target: "..tostring(marker.name or "Group Target")) or "Group Target")
+            row.targetButton.defaultBg=marker and (COLORS.noteBg or COLORS.buttonBg) or (COLORS.analysisDropdownBg or {0.050,0.086,0.155,0.96})
+            row.targetButton.defaultBorder=marker and COLORS.green or COLORS.blue
+            row.targetButton.defaultText=marker and COLORS.green or COLORS.gold
+            ApplyButtonRestingStyle(row.targetButton)
+            SetControlEnabled(row.enabled,not self.viewOnly); SetControlEnabled(row.targetButton,not self.viewOnly); SetControlEnabled(row.modeDropdown,not self.viewOnly); row.modeDropdown:RefreshText()
             row.textChild:SetHeight(math.max(height-14,lines*14+4)); row.textScroll:SetVerticalScroll(0); row.longText=lines>4; row.innerTrack:SetShown(row.longText)
             if row.card.SetBackdropBorderColor then row.card:SetBackdropBorderColor(unpack(index==self.selectedBlockIndex and COLORS.gold or (COLORS.softBorder or COLORS.border))) end
             row.up:SetShown(index>1); row.down:SetShown(index<#blocks); SetControlEnabled(row.up,not self.viewOnly); SetControlEnabled(row.down,not self.viewOnly); y=y+height+8
@@ -848,7 +920,15 @@ function Sequencer:SetView(view)
         ButtonAccent(button,active and COLORS.gold or (COLORS.buttonBorder or COLORS.border),active and COLORS.gold or COLORS.text)
     end
     self:RefreshStatusLabels()
-    if self.selectedView=="binding" then self:RefreshBindingList() elseif self.selectedView=="recycle" then self:RefreshRecycleBin() elseif self.selectedView=="editor" then self:RefreshEditor() end
+    if self.selectedView=="binding" then
+        self:RefreshBindingList()
+    elseif self.selectedView=="recycle" then
+        self:RefreshRecycleBin()
+    elseif self.selectedView=="editor" then
+        self:RefreshEditor()
+    elseif self.selectedView=="information" and self.informationScroll then
+        self.informationScroll:ScrollToTop()
+    end
 end
 
 function Sequencer:BuildTop(frame)
@@ -1088,7 +1168,25 @@ local INFORMATION_SECTIONS={
         }),
     },
     {
-        title="9. Global Cooldown and Spell Queue",
+        title="9. Macro Targets",
+        body=InfoJoin({
+            "Temporarily assign a party or raid member as the target of a friendly support macro block.",
+            InfoHeading("Make the Block Available"),
+            "In Macro Sequencer -> Editor, click the Group Target button on the macro block you want to make available. Give it a display name, then save the sequence. Only blocks you intentionally mark will appear in Group Dashboard -> Macro Targets.",
+            InfoHeading("Supported Target Selectors"),
+            "A marked block may use @target, @focus, @player, @pet, @mouseover, @cursor, @party1-4, or @raid1-40 inside its bracket conditions. When you save a temporary assignment, KeyLab replaces those explicit target selectors in the temporary macro with the selected group member. Your saved macro remains unchanged.",
+            "Other macro conditions remain in place. This includes mouse-button conditions such as button:1 through button:5.",
+            InfoHeading("Assign the Temporary Target"),
+            "Select a group member, choose a macro block you previously made available for Macro Targets, and then choose Save Target. KeyLab temporarily updates that block to use the selected member while you remain in the current party or raid.",
+            "You can change or remove the assigned target between pulls or at any other time while out of combat. When you leave the group, KeyLab automatically restores the block’s original target.",
+            InfoHeading("Keybind, Mouseover, and Cursor Macros"),
+            "Macro Targets is designed primarily for macros you activate with a keybind. You may mark a block that originally uses @mouseover or @cursor, but assigning a group member temporarily replaces that selector. While the assignment is active, pressing the keybind targets the assigned member instead of your mouseover unit or cursor location.",
+            "Macro Targets is useful for friendly abilities such as Blessing of Sacrifice, Power Infusion, external defensives, targeted healing, Blessing of Freedom, and Misdirection.",
+            "KeyLab does not select an ability or group member for you, and it does not decide whether a spell, item, or trinket is valid for that target. World of Warcraft makes the final legal cast or use decision.",
+        }),
+    },
+    {
+        title="10. Global Cooldown and Spell Queue",
         body=InfoJoin({
             "KeyLab does not add its own Global Cooldown, delay, timer, click rate, or Spell Queue Window.\n\nWoW decides:\n"..InfoList({
                 "When the Global Cooldown starts and ends",
@@ -1102,7 +1200,7 @@ local INFORMATION_SECTIONS={
         }),
     },
     {
-        title="10. Changes During Combat",
+        title="11. Changes During Combat",
         body=InfoJoin({
             "Your saved sequence can run in combat, but WoW does not allow protected setup changes during combat.\n\nWhile in combat, you cannot:\n"..InfoList({
                 "Open the Sequencer Editor",
@@ -1116,7 +1214,7 @@ local INFORMATION_SECTIONS={
         }),
     },
     {
-        title="11. Supported Use",
+        title="12. Supported Use",
         body=InfoJoin({
             "The KeyLab Macro Sequencer is made for normal WoW macro commands and conditions.\n\nIt does not provide:\n"..InfoList({
                 "Automatic key presses",
@@ -1133,7 +1231,7 @@ local INFORMATION_SECTIONS={
         }),
     },
     {
-        title="12. Recycle Bin",
+        title="13. Recycle Bin",
         body=InfoJoin({
             "Deleted sequences and versions stay in the Recycle Bin for 30 days.\n\nYou can restore them during that time. A restored sequence still needs a unique name. You may also need to set its binding again if that binding is now in use.\n\nAfter 30 days, the deleted item is removed for good.",
         }),
@@ -1145,8 +1243,9 @@ function Sequencer:BuildInformation(frame)
     local header=Panel(view,14,-14,878,68,COLORS.panel,COLORS.border)
     local title=Text(header,"KeyLab Macro Sequencer","GameFontNormalLarge",18,COLORS.gold); title:SetPoint("TOPLEFT",16,-10); title:SetSize(500,24)
     local subtitle=Text(header,"One press moves one step. World of Warcraft always decides what can cast.","GameFontHighlightSmall",12,COLORS.muted); subtitle:SetPoint("TOPLEFT",title,"BOTTOMLEFT",0,-6); subtitle:SetSize(840,22)
-    local scroll=CreateFrame("ScrollFrame",nil,view,"UIPanelScrollFrameTemplate"); scroll:SetPoint("TOPLEFT",18,-98); scroll:SetPoint("BOTTOMRIGHT",-30,18)
-    local content=CreateFrame("Frame",nil,scroll); content:SetSize(840,520); scroll:SetScrollChild(content)
+    local scroll=Theme.CreateScrollArea(view,{step=50}); scroll:SetPoint("TOPLEFT",18,-98); scroll:SetPoint("BOTTOMRIGHT",-18,18)
+    self.informationScroll=scroll
+    local content=scroll.content
     local accordionColors={
         panel=COLORS.panel,
         body=COLORS.card or COLORS.buttonBg or COLORS.panel,
@@ -1164,6 +1263,7 @@ function Sequencer:BuildInformation(frame)
         minHeight=520,
         pixelSnap=true,
         joinBody=true,
+        scrollArea=scroll,
     })
     self.informationContent=content
 end
@@ -1216,7 +1316,11 @@ function Sequencer:Create(parent)
     self:LoadSequence(nil); self:SetView("editor")
     frame.Refresh=function() Sequencer:Refresh() end
     frame:SetScript("OnShow",function() Sequencer:Refresh() end)
-    frame:SetScript("OnHide",function() if Sequencer.captureOverlay then Sequencer.captureOverlay:EnableKeyboard(false); Sequencer.captureOverlay:Hide() end end)
+    frame:SetScript("OnHide",function()
+        if Sequencer.captureOverlay then Sequencer.captureOverlay:EnableKeyboard(false); Sequencer.captureOverlay:Hide() end
+        if Sequencer.groupTargetDialog then Sequencer.groupTargetDialog:Hide() end
+        if activeDropdown and activeDropdown.menu then activeDropdown.menu:Hide(); activeDropdown=nil end
+    end)
     return frame
 end
 

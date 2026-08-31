@@ -55,6 +55,7 @@ function Accordion.Create(content, options)
     local minHeight = tonumber(options.minHeight) or 420
     local pixelSnap = options.pixelSnap == true
     local joinBody = options.joinBody == true
+    local scrollArea = options.scrollArea
 
     local function Point(region, ...)
         if pixelSnap and PixelUtil and PixelUtil.SetPoint then
@@ -213,7 +214,11 @@ function Accordion.Create(content, options)
             end
             y = y - gap
         end
-        Height(self.content, math.max(minHeight, math.abs(y) + 12))
+        local contentHeight = math.max(minHeight, math.abs(y) + 12)
+        Height(self.content, contentHeight)
+        if scrollArea and scrollArea.SetContentHeight then
+            scrollArea:SetContentHeight(contentHeight)
+        end
     end
 
     controller:Layout()

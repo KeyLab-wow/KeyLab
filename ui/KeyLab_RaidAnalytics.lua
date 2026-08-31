@@ -235,6 +235,235 @@ local function AddCopyField(parent, value, y)
     return box
 end
 
+-- Raid Talent Builds and Raid Stat Profiles use the same analysis typography,
+-- comparison bars, and four-column details presentation as their Mythic+
+-- counterparts. Keep these helpers local so Raid Trends remains unchanged.
+local ANALYSIS_TEXT = Theme.analysisText or {
+    rowRank = { size = 12, color = Color("blue") },
+    rowRankSelected = { size = 12, color = Color("gold") },
+    rowTitle = { size = 12, color = Color("text") },
+    rowMeta = { size = 11, color = Color("muted") },
+    rowMetric = { size = 12, color = Color("blue") },
+}
+
+local DETAIL = {
+    padding = 14,
+    rowHeight = 15,
+    colRunX = 16, colRunW = 170,
+    colStatsX = 205, colStatsW = 200,
+    colTalentX = 430, colTalentW = 190,
+    colOutcomesX = 645, colOutcomesW = 245,
+}
+
+local function RoleText(parent, value, role, x, y, width, color, justify, height)
+    local style = ANALYSIS_TEXT[role] or ANALYSIS_TEXT.rowTitle
+    local font = Text(parent, value, "GameFontNormal", style.size, color or style.color, justify)
+    font:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    font:SetSize(width, height or 20)
+    if Theme.ApplyTextRole then Theme.ApplyTextRole(font, role, color) end
+    if justify then font:SetJustifyH(justify) end
+    return font
+end
+
+local function DetailTitle(parent, value, x, y, width, color)
+    local size = Theme.tabHeader and Theme.tabHeader.titleSize or 16
+    local font = Text(parent, value, "GameFontNormalLarge", size, color or Color("gold"))
+    font:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    font:SetSize(width, 22)
+    return font
+end
+
+local function DetailRule(parent, x, y, height)
+    local line = parent:CreateTexture(nil, "ARTWORK")
+    line:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    line:SetSize(1, height or 205)
+    local color = Color("divider")
+    line:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
+end
+
+local function DetailSection(parent, value, x, y, width)
+    return RoleText(parent, value, "rowTitle", x, y, width, Color("gold"), "LEFT", 18)
+end
+
+local function DetailPair(parent, label, value, x, y, width)
+    RoleText(parent, label, "rowMeta", x, y, width, Color("muted"), "LEFT", 16)
+    RoleText(parent, value, "rowTitle", x, y - 13, width, Color("text"), "LEFT", 18)
+    return y - 35
+end
+
+local function FormatDateTime(value)
+    if KeyLab.Formatters and KeyLab.Formatters.DateTime then return KeyLab.Formatters.DateTime(value) end
+    value = tonumber(value)
+    return value and date("%b %d, %Y %I:%M %p", value) or "—"
+end
+
+local function FormatStat(statKey, value)
+    if KeyLab.Formatters and KeyLab.Formatters.Stat then return KeyLab.Formatters.Stat(statKey, value) end
+    value = tonumber(value)
+    return value and string.format("%.1f", value) or "—"
+end
+
+local function FormatMetric(metricKey, value)
+    if KeyLab.Formatters and KeyLab.Formatters.Metric then return KeyLab.Formatters.Metric(metricKey, value) end
+    return FormatNumber(value)
+end
+
+local function StatColor(statKey)
+    if statKey == "crit" then return Color("crit") end
+    if statKey == "haste" then return Color("haste") end
+    if statKey == "mastery" then return Color("mastery") end
+    if statKey == "versatility" then return Color("versatility") end
+    return Color("text")
+end
+
+local function AddStatDetails(parent, encounter, x, y, width)
+    local stats = encounter and encounter.stats or {}
+    local shown, hidden = 0, 0
+    for _, statKey in ipairs(KeyLab.Mapping and KeyLab.Mapping.StatOrder or {}) do
+        local info = KeyLab.Mapping and KeyLab.Mapping.Stats and KeyLab.Mapping.Stats[statKey]
+        local value = tonumber(stats[statKey])
+        if info and info.store == true and value and value > 0 then
+            if shown < 13 then
+                local color = (statKey == "crit" or statKey == "haste" or statKey == "mastery" or statKey == "versatility")
+                    and StatColor(statKey) or Color("text")
+                RoleText(parent, (info.label or statKey) .. ": " .. FormatStat(statKey, value), "rowMeta", x, y, width, color, "LEFT", 16)
+                y, shown = y - DETAIL.rowHeight, shown + 1
+            else
+                hidden = hidden + 1
+            end
+        end
+    end
+    if hidden > 0 then
+        RoleText(parent, "+" .. hidden .. " more stats", "rowMeta", x, y, width, Color("muted"), "LEFT", 16)
+    elseif shown == 0 then
+        RoleText(parent, "No stat snapshot available", "rowMeta", x, y, width, Color("muted"), "LEFT", 16)
+    end
+end
+
+local function AddOutcomeDetails(parent, encounter, x, y, width)
+    local shown = 0
+    for _, metricType in ipairs(KeyLab.Mapping and KeyLab.Mapping.MetricOrder or {}) do
+        local info = KeyLab.Mapping and KeyLab.Mapping.Metrics and KeyLab.Mapping.Metrics[metricType]
+        if info and info.store == true and info.keylabKey then
+            local value = Analysis.GetMetricValue and Analysis.GetMetricValue(encounter, info.keylabKey)
+            if value ~= nil then
+                RoleText(parent, (info.label or info.keylabKey) .. ": " .. FormatMetric(info.keylabKey, value), "rowMeta", x, y, width, Color("text"), "LEFT", 16)
+                y, shown = y - DETAIL.rowHeight, shown + 1
+            end
+        end
+    end
+    if shown == 0 then
+        RoleText(parent, "No captured outcomes available", "rowMeta", x, y, width, Color("muted"), "LEFT", 16)
+    end
+end
+
+local function TalentString(encounter)
+    local talents = encounter and encounter.talents or {}
+    return type(talents.talentString) == "string" and talents.talentString or ""
+end
+
+local function TalentBuildName(group, index)
+    local talents = group and group.bestEncounter and group.bestEncounter.talents or {}
+    local loadoutName = talents.loadoutName
+    if type(loadoutName) ~= "string" or loadoutName == "" then
+        loadoutName = "Talent Variant " .. tostring(index or 1)
+    end
+    return "Raid " .. tostring(group and group.spec or "Unknown Spec") .. " - " .. loadoutName
+end
+
+local function AddTalentCopy(parent, encounter, x, y, width)
+    local talentString = TalentString(encounter)
+    if talentString == "" then
+        RoleText(parent, "No talent string captured", "rowMeta", x, y, width, Color("muted"), "LEFT", 16)
+        return
+    end
+
+    local box = Theme.CreateInput and Theme.CreateInput(parent, width - 8, 30)
+        or CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    box:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 4, y)
+    box:SetSize(width - 8, 30)
+    box:SetAutoFocus(false)
+    box:SetText(talentString)
+    box:SetCursorPosition(0)
+    box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+    local copy = Theme.CreateButton and Theme.CreateButton(parent, "Copy", 72, 22)
+        or CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    copy:SetSize(72, 22)
+    copy:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 4, y - 36)
+    if copy.SetText then copy:SetText("Copy") end
+    copy:SetScript("OnClick", function() box:SetFocus(); box:HighlightText() end)
+    RoleText(parent, "Click Copy, then Ctrl+C.", "rowMeta", x + 4, y - 64, width - 8, Color("muted"), "LEFT", 16)
+end
+
+local function AddMetricBar(parent, x, y, width, height, value, maxValue, minValue, lowerIsBetter, color)
+    local number = tonumber(value) or 0
+    local maximum = tonumber(maxValue) or 0
+    local minimum = tonumber(minValue) or 0
+    local ratio = 0
+    if maximum > 0 then
+        if lowerIsBetter then
+            ratio = maximum == minimum and 1 or 1 - ((number - minimum) / (maximum - minimum))
+        else
+            ratio = number / maximum
+        end
+    end
+    ratio = math.max(0.06, math.min(1, ratio))
+
+    if Theme.CreateProgressBar and Theme.SetProgressBar then
+        local bar = Theme.CreateProgressBar(parent, width, height, color or Color("blue"))
+        bar:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+        Theme.SetProgressBar(bar, ratio, 1, color or Color("blue"))
+        return bar
+    end
+
+    local bar = Panel(parent, x, y, width, height, Color("barBorder"))
+    local fill = bar:CreateTexture(nil, "ARTWORK")
+    fill:SetPoint("TOPLEFT", bar, "TOPLEFT", 1, -1)
+    fill:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", 1, 1)
+    fill:SetWidth(math.max(1, (width - 2) * ratio))
+    local fillColor = color or Color("blue")
+    fill:SetColorTexture(fillColor[1], fillColor[2], fillColor[3], fillColor[4] or 1)
+    return bar
+end
+
+local function AddPriorityLine(parent, priority, x, y)
+    local cursor = x
+    for index, stat in ipairs(priority or {}) do
+        local label = Analysis.GetStatLabel and Analysis.GetStatLabel(stat.key) or stat.key
+        local width = math.max(52, math.min(92, string.len(tostring(label)) * 7))
+        RoleText(parent, label, "rowTitle", cursor, y, width, StatColor(stat.key), "LEFT", 20)
+        cursor = cursor + width
+        if index < #(priority or {}) then
+            RoleText(parent, ">", "rowTitle", cursor, y, 18, Color("soft"), "LEFT", 20)
+            cursor = cursor + 18
+        end
+    end
+end
+
+local function BuildPullColumns(detail, encounter, firstSectionTitle)
+    local raid = Analysis.GetRaid(encounter)
+    local sectionTop = -76
+    DetailRule(detail, DETAIL.colStatsX - 12, sectionTop + 4, 205)
+    DetailRule(detail, DETAIL.colTalentX - 12, sectionTop + 4, 205)
+    DetailRule(detail, DETAIL.colOutcomesX - 12, sectionTop + 4, 205)
+
+    DetailSection(detail, firstSectionTitle, DETAIL.colRunX, sectionTop, DETAIL.colRunW)
+    local pullY = sectionTop - 24
+    pullY = DetailPair(detail, "Date", FormatDateTime(encounter.timestamp), DETAIL.colRunX, pullY, DETAIL.colRunW)
+    pullY = DetailPair(detail, "Boss", raid.encounterName or "Unknown Boss", DETAIL.colRunX, pullY, DETAIL.colRunW)
+    pullY = DetailPair(detail, "Pull", tostring(raid.pullNumber or "?"), DETAIL.colRunX, pullY, DETAIL.colRunW)
+    pullY = DetailPair(detail, "Result", raid.killed and "Kill" or "Wipe", DETAIL.colRunX, pullY, DETAIL.colRunW)
+    DetailPair(detail, "Duration", FormatDuration(raid.durationSeconds), DETAIL.colRunX, pullY, DETAIL.colRunW)
+
+    DetailSection(detail, "Stats (Before Pull)", DETAIL.colStatsX, sectionTop, DETAIL.colStatsW)
+    AddStatDetails(detail, encounter, DETAIL.colStatsX, sectionTop - 24, DETAIL.colStatsW)
+    DetailSection(detail, "Talent String", DETAIL.colTalentX, sectionTop, DETAIL.colTalentW)
+    AddTalentCopy(detail, encounter, DETAIL.colTalentX, sectionTop - 26, DETAIL.colTalentW)
+    DetailSection(detail, "Captured Outcomes", DETAIL.colOutcomesX, sectionTop, DETAIL.colOutcomesW)
+    AddOutcomeDetails(detail, encounter, DETAIL.colOutcomesX, sectionTop - 24, DETAIL.colOutcomesW)
+end
+
 local function BuildTalentContent(tab, encounters)
     if tab.detailsCard then
         Clear(tab.detailsCard)
@@ -249,16 +478,31 @@ local function BuildTalentContent(tab, encounters)
     end
 
     local showCount = math.min(5, #groups)
-    if not tab.selectedKey then tab.selectedKey = groups[1].spec .. "|" .. groups[1].talentString end
-    local selected
+    local selected, selectedIndex
+    for index = 1, showCount do
+        local group = groups[index]
+        if group.spec .. "|" .. group.talentString == tab.selectedKey then
+            selected, selectedIndex = group, index
+            break
+        end
+    end
+    if not selected then
+        selected, selectedIndex = groups[1], 1
+        tab.selectedKey = selected.spec .. "|" .. selected.talentString
+    end
+    local maxValue, minValue = 0, nil
+    for index = 1, showCount do
+        local value = tonumber(groups[index].bestValue) or 0
+        maxValue = math.max(maxValue, value)
+        minValue = minValue == nil and value or math.min(minValue, value)
+    end
+    local lowerIsBetter = Analysis.HigherIsBetter and not Analysis.HigherIsBetter(tab.selectedMetricKey)
     local y = 0
     for index = 1, showCount do
         local group = groups[index]
         local key = group.spec .. "|" .. group.talentString
-        if key == tab.selectedKey then selected = group end
-        local border = key == tab.selectedKey and Color("gold") or Color("cardBorder")
-        local card = Panel(tab.content, 0, y, CONTENT_WIDTH, 44, border)
         local isSelected = key == tab.selectedKey
+        local card = Panel(tab.content, 0, y, CONTENT_WIDTH, 44, isSelected and Color("gold") or Color("cardBorder"))
         if Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(card, isSelected and "selected" or "normal") end
         card:EnableMouse(true)
         card:SetScript("OnMouseUp", function()
@@ -271,19 +515,21 @@ local function BuildTalentContent(tab, encounters)
         card:SetScript("OnLeave", function(self)
             if not isSelected and Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(self, "normal") end
         end)
-        PlaceText(card, string.format("#%d  %s Talent Build", index, group.spec), 16, -11, 330, "GameFontNormal", 14, Color("gold"))
-        PlaceText(card, string.format("%d pull%s", group.pullCount, group.pullCount == 1 and "" or "s"), 350, -11, 130, "GameFontHighlightSmall", nil, Color("muted"), "CENTER")
-        PlaceText(card, Shorten(EncounterContext(group.bestEncounter), 48), 490, -11, 240, "GameFontHighlightSmall", nil, Color("muted"), "CENTER")
-        PlaceText(card, string.format("Best %s: %s", MetricLabel(tab.selectedMetricKey), FormatNumber(group.bestValue)), 730, -11, 182, "GameFontNormal", 14, Color("blue"), "RIGHT")
+        local rankRole = isSelected and "rowRankSelected" or "rowRank"
+        card.rankText = RoleText(card, Theme.FormatRank and Theme.FormatRank(index) or tostring(index), rankRole, 12, -13, 28, nil, "LEFT", 20)
+        RoleText(card, TalentBuildName(group, index), "rowTitle", 46, -12, 370, Color("text"), "LEFT", 20)
+        RoleText(card, MetricLabel(tab.selectedMetricKey) .. ": " .. FormatMetric(tab.selectedMetricKey, group.bestValue), "rowMetric", 430, -12, 130, Color("soft"), "RIGHT", 20)
+        AddMetricBar(card, 575, -17, 335, 9, group.bestValue, maxValue, minValue or 0, lowerIsBetter, Color("blue"))
         y = y - 52
     end
 
-    if not selected then selected = groups[1]; tab.selectedKey = selected.spec .. "|" .. selected.talentString end
     local detail = tab.detailsCard
     if Theme.StyleAnalysisDetails then Theme.StyleAnalysisDetails(detail) else Style(detail, Color("detailBg"), Color("detailBorder")) end
-    PlaceText(detail, "Selected Build Details", 16, -10, 300, "GameFontNormal", 14, Color("gold"))
-    PlaceText(detail, "Talent import string — click the field to select it for copying.", 16, -38, 700, "GameFontHighlightSmall", nil, Color("muted"))
-    AddCopyField(detail, selected.talentString, -66)
+    local encounter = selected.bestEncounter or {}
+    local raid = Analysis.GetRaid(encounter)
+    DetailTitle(detail, TalentBuildName(selected, selectedIndex), DETAIL.padding, -14, CONTENT_WIDTH - 28, Color("gold"))
+    RoleText(detail, string.format("%s • %s • %d pull%s • Best %s: %s", raid.encounterName or "Unknown Boss", raid.difficultyName or "Unknown Difficulty", selected.pullCount or 0, selected.pullCount == 1 and "" or "s", MetricLabel(tab.selectedMetricKey), FormatMetric(tab.selectedMetricKey, selected.bestValue)), "rowMeta", DETAIL.padding, -38, CONTENT_WIDTH - 28, Color("muted"), "LEFT", 18)
+    BuildPullColumns(detail, encounter, "Best Source Pull")
     tab.content:SetHeight(LAYOUT.resultsHeight)
 end
 
@@ -309,13 +555,29 @@ local function BuildStatContent(tab, encounters)
     end
 
     local showCount = math.min(5, #groups)
-    if not tab.selectedKey then tab.selectedKey = groups[1].spec .. "|" .. groups[1].priorityText end
     local selected
+    for index = 1, showCount do
+        local group = groups[index]
+        if group.spec .. "|" .. group.priorityText == tab.selectedKey then
+            selected = group
+            break
+        end
+    end
+    if not selected then
+        selected = groups[1]
+        tab.selectedKey = selected.spec .. "|" .. selected.priorityText
+    end
+    local maxValue, minValue = 0, nil
+    for index = 1, showCount do
+        local value = tonumber(groups[index].metricAverage) or 0
+        maxValue = math.max(maxValue, value)
+        minValue = minValue == nil and value or math.min(minValue, value)
+    end
+    local lowerIsBetter = Analysis.HigherIsBetter and not Analysis.HigherIsBetter(tab.selectedMetricKey)
     local y = 0
     for index = 1, showCount do
         local group = groups[index]
         local key = group.spec .. "|" .. group.priorityText
-        if key == tab.selectedKey then selected = group end
         local isSelected = key == tab.selectedKey
         local card = Panel(tab.content, 0, y, CONTENT_WIDTH, 44, isSelected and Color("gold") or Color("cardBorder"))
         if Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(card, isSelected and "selected" or "normal") end
@@ -327,18 +589,24 @@ local function BuildStatContent(tab, encounters)
         card:SetScript("OnLeave", function(self)
             if not isSelected and Theme.StyleAnalysisRow then Theme.StyleAnalysisRow(self, "normal") end
         end)
-        PlaceText(card, string.format("#%d  %s", index, group.priorityText), 16, -11, 430, "GameFontNormal", 14, Color("gold"))
-        PlaceText(card, string.format("%s • %d pull%s", group.spec, group.pullCount, group.pullCount == 1 and "" or "s"), 450, -11, 240, "GameFontHighlightSmall", nil, Color("muted"), "CENTER")
-        PlaceText(card, string.format("Avg %s: %s", MetricLabel(tab.selectedMetricKey), FormatNumber(group.metricAverage)), 700, -11, 212, "GameFontNormal", 14, Color("blue"), "RIGHT")
+        local rankRole = isSelected and "rowRankSelected" or "rowRank"
+        card.rankText = RoleText(card, Theme.FormatRank and Theme.FormatRank(index) or tostring(index), rankRole, 12, -13, 28, nil, "LEFT", 20)
+        RoleText(card, "Raid " .. tostring(group.spec or "Unknown Spec"), "rowTitle", 46, -12, 175, Color("text"), "LEFT", 20)
+        AddPriorityLine(card, group.priority, 235, -12)
+        RoleText(card, string.format("%d pull%s", group.pullCount or 0, group.pullCount == 1 and "" or "s"), "rowMeta", 602, -13, 72, Color("muted"), "LEFT", 18)
+        RoleText(card, "Avg " .. MetricLabel(tab.selectedMetricKey) .. ": " .. FormatMetric(tab.selectedMetricKey, group.metricAverage), "rowMetric", 680, -12, 105, Color("soft"), "RIGHT", 20)
+        local firstStat = group.priority and group.priority[1] and group.priority[1].key
+        AddMetricBar(card, 805, -17, 105, 9, group.metricAverage, maxValue, minValue or 0, lowerIsBetter, StatColor(firstStat))
         y = y - 52
     end
 
-    if not selected then selected = groups[1]; tab.selectedKey = selected.spec .. "|" .. selected.priorityText end
     local detail = tab.detailsCard
     if Theme.StyleAnalysisDetails then Theme.StyleAnalysisDetails(detail) else Style(detail, Color("detailBg"), Color("detailBorder")) end
-    PlaceText(detail, "Selected Profile Details", 16, -10, 300, "GameFontNormal", 14, Color("gold"))
-    PlaceText(detail, selected.priorityText, 16, -40, 874, "GameFontNormalLarge", 16, Color("text"))
-    PlaceText(detail, StatValueText(selected.bestPriority or selected.priority), 16, -72, 874, "GameFontHighlightSmall", nil, Color("muted"))
+    local encounter = selected.bestEncounter or {}
+    local raid = Analysis.GetRaid(encounter)
+    DetailTitle(detail, "Raid " .. tostring(selected.spec or "Unknown Spec") .. " - " .. tostring(selected.priorityText or "Stat Priority"), DETAIL.padding, -14, CONTENT_WIDTH - 28, Color("gold"))
+    RoleText(detail, string.format("%s • %s • %d pull%s • Avg %s: %s • Best: %s", raid.encounterName or "Unknown Boss", raid.difficultyName or "Unknown Difficulty", selected.pullCount or 0, selected.pullCount == 1 and "" or "s", MetricLabel(tab.selectedMetricKey), FormatMetric(tab.selectedMetricKey, selected.metricAverage), FormatMetric(tab.selectedMetricKey, selected.bestValue)), "rowMeta", DETAIL.padding, -38, CONTENT_WIDTH - 28, Color("muted"), "LEFT", 18)
+    BuildPullColumns(detail, encounter, "Best Source Pull")
     tab.content:SetHeight(LAYOUT.resultsHeight)
 end
 

@@ -403,9 +403,12 @@ end
 local function GetRoleFocusProfile(state)
     local player = state and state.player or {}
     local mapper = KeyLab.Mapping and KeyLab.Mapping.ClassSpecs
+    local participationNote = "Lines show you; skulls show group deaths. A pull may be zero if you died, released, or were returning while the group fought on."
 
     if mapper and mapper.GetRoleFocusProfile then
-        return mapper.GetRoleFocusProfile(player.specID, player.class or player.className, player.spec or player.specName)
+        local profile = mapper.GetRoleFocusProfile(player.specID, player.class or player.className, player.spec or player.specName)
+        if type(profile) == "table" then profile.subtitle = participationNote end
+        return profile
     end
 
     local role = player.role or player.blizzardRole
@@ -413,7 +416,7 @@ local function GetRoleFocusProfile(state)
         return {
             role = "Healer",
             title = "Group Survival by Pull",
-            subtitle = "Healing done, absorbs, and group deaths for each captured combat session.",
+            subtitle = participationNote,
             metrics = { "healingDone", "absorbs", "groupDeaths" },
             optionalMetrics = { absorbs = true },
             metricLabels = {
@@ -428,7 +431,7 @@ local function GetRoleFocusProfile(state)
         return {
             role = "Tank",
             title = "Pull Stability by Pull",
-            subtitle = "Damage taken, avoidable damage, and group deaths by pull.",
+            subtitle = participationNote,
             metrics = { "damageTaken", "avoidableDamageTaken", "groupDeaths" },
             metricLabels = {
                 damageTaken = "Damage Taken",
@@ -442,7 +445,7 @@ local function GetRoleFocusProfile(state)
     return {
         role = "Damage",
         title = "Survival Pressure by Pull",
-        subtitle = "Avoidable damage, player deaths, and healing done for each captured combat session.",
+        subtitle = participationNote,
         metrics = { "avoidableDamageTaken", "deaths", "healingDoneWithAbsorbs" },
         scale = "perMetric",
     }

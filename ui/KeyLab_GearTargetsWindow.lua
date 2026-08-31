@@ -533,6 +533,20 @@ local function AddCardGap(card, height)
     card.cursorY = card.cursorY - (height or 8)
 end
 
+local function TargetTrackSuffix(item, bagItems)
+    if item and item.ownedTargetCopy == true then
+        local track = item.ownedTrack
+        if track and track ~= "" then
+            return " (Owned - " .. tostring(track) .. "; Myth still needed)"
+        end
+        return " (Owned; Myth still needed)"
+    end
+    local bagRecord = bagItems and bagItems[tonumber(item and item.itemID)]
+    local bagTrack = bagRecord and (bagRecord.track or item.upgradeTrack)
+    return (bagTrack == "Hero" or bagTrack == "Myth")
+        and (" (In Bags - " .. bagTrack .. ")") or ""
+end
+
 local function FinishCard(f, card)
     for index = (card.lineIndex or 0) + 1, #(card.lines or {}) do card.lines[index]:Hide() end
     local height = math.max(54, math.abs(card.cursorY or -54) + 10)
@@ -554,7 +568,7 @@ local function AddSavedGearCard(f, title, groups, bagItems, alternativeBudget)
             .. (alternativeCount == 1 and " Alternative" or " Alternatives")
     end
     local card = NewCard(f, title .. "  •  " .. countText, CFG.colors.blue)
-    AddCardLine(card, "Not owned yet. Run the activity below for the saved item.",
+    AddCardLine(card, "Run the activity below for the saved item or a higher-track copy.",
         CFG.colors.muted, 0, "GameFontDisableSmall")
     AddCardGap(card, 3)
     local added = false
@@ -566,10 +580,7 @@ local function AddSavedGearCard(f, title, groups, bagItems, alternativeBudget)
             for _, item in ipairs(group.targets or {}) do
                 local slotName = item.slotInstance or item.slot or "Gear"
                 local itemName = StripColorCodes(item.name or ("Item " .. tostring(item.itemID)))
-                local bagRecord = bagItems and bagItems[tonumber(item.itemID)]
-                local bagTrack = bagRecord and (bagRecord.track or item.upgradeTrack)
-                local suffix = (bagTrack == "Hero" or bagTrack == "Myth")
-                    and (" (In Bags - " .. bagTrack .. ")") or ""
+                local suffix = TargetTrackSuffix(item, bagItems)
                 AddCardLine(card, "•  " .. tostring(slotName) .. " - " .. itemName .. suffix,
                     CFG.colors.text, 16)
             end
@@ -609,7 +620,7 @@ local function AddDungeonRunCard(f, targetGroups, catalystGroups, bagItems, alte
     card.columnY = { card.cursorY, card.cursorY }
 
     AddColumnLine(card, 1, "Saved Target Dungeons", CFG.colors.gold, 0, "GameFontNormal")
-    AddColumnLine(card, 1, "Run these for the dungeon items you chose.",
+    AddColumnLine(card, 1, "Run these for your saved items or higher-track copies.",
         CFG.colors.muted, 0, "GameFontDisableSmall", true)
     local targetAdded = false
     for _, group in ipairs(targetGroups) do
@@ -619,10 +630,7 @@ local function AddDungeonRunCard(f, targetGroups, catalystGroups, bagItems, alte
             for _, item in ipairs(group.targets or {}) do
                 local slotName = item.slotInstance or item.slot or "Gear"
                 local itemName = StripColorCodes(item.name or ("Item " .. tostring(item.itemID)))
-                local bagRecord = bagItems and bagItems[tonumber(item.itemID)]
-                local bagTrack = bagRecord and (bagRecord.track or item.upgradeTrack)
-                local suffix = (bagTrack == "Hero" or bagTrack == "Myth")
-                    and (" (In Bags - " .. bagTrack .. ")") or ""
+                local suffix = TargetTrackSuffix(item, bagItems)
                 table.insert(rows, {
                     text = "•  " .. tostring(slotName) .. " - " .. itemName .. suffix,
                     color = CFG.colors.text,
@@ -653,18 +661,17 @@ local function AddDungeonRunCard(f, targetGroups, catalystGroups, bagItems, alte
     end
 
     AddColumnLine(card, 2, "Tier Slot Catalyst Dungeons", CFG.colors.violet, 0, "GameFontNormal")
-    AddColumnLine(card, 2, "Run these for armor that can fill your selected or remaining Tier slots.",
+    AddColumnLine(card, 2, "Run these for Season 2 armor in Tier slots without a saved Target.",
         CFG.colors.muted, 0, "GameFontDisableSmall", true)
     if #catalystGroups == 0 then
-        AddColumnLine(card, 2, "No Tier-slot dungeon armor is currently needed.", CFG.colors.muted, 0, nil, true)
+        AddColumnLine(card, 2, "No Season 2 Tier-slot dungeon armor is currently needed.", CFG.colors.muted, 0, nil, true)
     else
         for _, group in ipairs(catalystGroups) do
             local rows = {}
             for _, item in ipairs(group.items or {}) do
-                local status = item.tierChecked and "Checked Tier Slot" or "Tier Slot Needed"
                 table.insert(rows, {
-                    text = "•  " .. tostring(item.displaySlot or item.slotName or "Tier") .. " - " .. status,
-                    color = item.tierChecked and CFG.colors.green or CFG.colors.text,
+                    text = "•  " .. tostring(item.displaySlot or item.slotName or "Tier") .. " - Season 2 Tier Slot Needed",
+                    color = CFG.colors.text,
                 })
             end
             AddDungeonRunPanel(card, 2, group.sourceName,

@@ -267,6 +267,12 @@ local function ItemDisplayStats(item)
         or "-"
 end
 
+local function ItemDisplaySource(item)
+    return item and item.displaySourceName and item.displaySourceName ~= "" and item.displaySourceName
+        or item and item.sourceName and item.sourceName ~= "" and item.sourceName
+        or "-"
+end
+
 local function GetItemStatus(itemID)
     return KeyLab.LootTargetsDB and KeyLab.LootTargetsDB.GetStatus and KeyLab.LootTargetsDB.GetStatus(TargetSpecID(), itemID) or nil
 end
@@ -305,6 +311,21 @@ local function SourceLabel(sourceID)
     return source and (source.sourceName or source.name) or "All Sources"
 end
 
+local function LootLocationLabel()
+    if GearTargets.selectedEncounterID and KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetRaidBossListForSpec then
+        for _, boss in ipairs(KeyLab.GearLootMapping.GetRaidBossListForSpec(TargetSpecID()) or {}) do
+            if tonumber(boss.encounterID) == tonumber(GearTargets.selectedEncounterID)
+                and tonumber(boss.sourceID) == tonumber(GearTargets.selectedSourceID) then
+                return boss.text or ((boss.bossName or "Raid Boss") .. " - " .. (boss.raidName or "Raid"))
+            end
+        end
+    end
+    if GearTargets.selectedSourceID then return SourceLabel(GearTargets.selectedSourceID) end
+    if GearTargets.selectedItemType == "Dungeon" then return "All Dungeons" end
+    if GearTargets.selectedItemType == "Raid" then return "All Raids" end
+    return "All Dungeons & Raids"
+end
+
 local function GetSlotOptions()
     local list = { { text = "All Slots", value = nil } }
     if KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetSlotList then
@@ -316,12 +337,29 @@ local function GetSlotOptions()
 end
 
 local function GetSourceOptions()
-    local list = { { text = "All Sources", value = nil } }
-    if KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetSourceList then
-        for _, source in ipairs(KeyLab.GearLootMapping.GetSourceList(GearTargets.selectedItemType) or {}) do
+    local list = {
+        { text = "All Dungeons & Raids", sourceType = nil },
+        { text = "All Dungeons", sourceType = "Dungeon" },
+        { text = "All Raids", sourceType = "Raid" },
+    }
+    if KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetSourceListForSpec then
+        table.insert(list, { text = "Dungeons", title = true })
+        for _, source in ipairs(KeyLab.GearLootMapping.GetSourceListForSpec(TargetSpecID(), "Dungeon") or {}) do
             table.insert(list, {
                 text = source.sourceName or source.name or tostring(source.sourceID),
-                value = source.sourceID,
+                sourceType = "Dungeon",
+                sourceID = source.sourceID,
+            })
+        end
+    end
+    if KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetRaidBossListForSpec then
+        table.insert(list, { text = "Raid Bosses", title = true })
+        for _, boss in ipairs(KeyLab.GearLootMapping.GetRaidBossListForSpec(TargetSpecID()) or {}) do
+            table.insert(list, {
+                text = boss.text or ((boss.bossName or "Raid Boss") .. " - " .. (boss.raidName or "Raid")),
+                sourceType = "Raid",
+                sourceID = boss.sourceID,
+                encounterID = boss.encounterID,
             })
         end
     end
@@ -477,7 +515,7 @@ end
 function GearTargets:GetSortValue(item, key)
     if key == "item" then return CleanSortText(ItemDisplayName(item)) end
     if key == "slot" then return CleanSortText(item and item.slot) end
-    if key == "source" then return CleanSortText(item and item.sourceName) end
+    if key == "source" then return CleanSortText(ItemDisplaySource(item)) end
     if key == "stats" then return CleanSortText(ItemDisplayStats(item)) end
     if key == "match" then
         if KeyLab.StatGoalMatcher and KeyLab.StatGoalMatcher.IsGoalMatch(item.itemID, TargetSpecID()) then return 1 end
@@ -488,7 +526,7 @@ function GearTargets:GetSortValue(item, key)
         local status = GetItemStatus(item.itemID)
         return STATUS_SORT_RANK[status or "unmarked"] or 9, CleanSortText(StatusLabel(status))
     end
-    return CleanSortText(item and item.sourceName)
+    return CleanSortText(ItemDisplaySource(item))
 end
 
 function GearTargets:SortItems(items)
@@ -516,6 +554,7 @@ function GearTargets:GetFilteredItems()
         classID = CurrentClassID(),
         sourceID = self.selectedSourceID,
         sourceType = self.selectedItemType,
+        encounterID = self.selectedEncounterID,
         slot = self.selectedSlot,
         primaryStats = primaryStats,
         secondaryStats = self.selectedSecondaries,
@@ -596,11 +635,34 @@ function GearTargets:MakeHeaderButton(parent, key)
     return button
 end
 
-local function AddItemTooltip(frame, item)
+local function ItemLinkForSpec(item, specID)
+    local link = item and item.link
+    if not link or link == "" then
+        return item and item.itemID and ("item:" .. tostring(item.itemID)) or nil
+    end
+
+    local payload = link:match("|Hitem:([^|]+)|h")
+    specID = tonumber(specID)
+    if not payload or not specID then return link end
+
+    local fields = {}
+    for field in (payload .. ":"):gmatch("(.-):") do table.insert(fields, field) end
+    if #fields < 10 then return link end
+
+    -- Preserve the captured item level, upgrade, difficulty, and bonus data.
+    -- Only the hyperlink's specialization context changes for the current character.
+    fields[10] = tostring(specID)
+    local resolvedPayload = table.concat(fields, ":")
+    return (link:gsub("|Hitem:[^|]+|h", function()
+        return "|Hitem:" .. resolvedPayload .. "|h"
+    end, 1))
+end
+
+local function AddItemTooltip(frame, item, itemLink)
     frame:EnableMouse(true)
     frame:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        if item.link then GameTooltip:SetHyperlink(item.link)
+        if itemLink then GameTooltip:SetHyperlink(itemLink)
         elseif item.itemID then GameTooltip:SetHyperlink("item:" .. tostring(item.itemID)) end
         GameTooltip:Show()
     end)
@@ -619,21 +681,22 @@ function GearTargets:MakeLootRow(parent, item, y)
     icon:SetSize(25, 25)
     if item.icon then icon:SetTexture(item.icon) end
 
-    local name = MakeText(row, item.link or ItemDisplayName(item), "GameFontNormal", nil, CFG.colors.text)
+    local itemLink = ItemLinkForSpec(item, TargetSpecID())
+    local name = MakeText(row, itemLink or ItemDisplayName(item), "GameFontNormal", nil, CFG.colors.text)
     name:SetPoint("LEFT", row, "LEFT", TABLE_COLUMNS.item.x, 0)
     name:SetSize(TABLE_COLUMNS.item.width, 20)
     local itemHover = CreateFrame("Frame", nil, row)
     itemHover:SetPoint("LEFT", row, "LEFT", 5, 0)
     itemHover:SetSize(TABLE_COLUMNS.item.x + TABLE_COLUMNS.item.width - 5, CFG.rowHeight - 4)
     itemHover:SetFrameLevel(row:GetFrameLevel() + 3)
-    AddItemTooltip(itemHover, item)
+    AddItemTooltip(itemHover, item, itemLink)
 
     local slot = MakeText(row, item.slot or "-", "GameFontHighlightSmall", nil, CFG.colors.blue)
     slot:SetPoint("LEFT", row, "LEFT", TABLE_COLUMNS.slot.x, 0)
     slot:SetSize(TABLE_COLUMNS.slot.width, 18)
 
     local sourceColor = item.sourceType == "Raid" and CFG.colors.raid or CFG.colors.muted
-    local source = MakeText(row, item.sourceName or "-", "GameFontHighlightSmall", nil, sourceColor)
+    local source = MakeText(row, ItemDisplaySource(item), "GameFontHighlightSmall", nil, sourceColor)
     source:SetPoint("LEFT", row, "LEFT", TABLE_COLUMNS.source.x, 0)
     source:SetSize(TABLE_COLUMNS.source.width, 18)
     local sourceHover = CreateFrame("Frame", nil, row)
@@ -642,7 +705,7 @@ function GearTargets:MakeLootRow(parent, item, y)
     sourceHover:EnableMouse(true)
     sourceHover:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine(item.sourceName or "Unknown Source")
+        GameTooltip:AddLine(ItemDisplaySource(item))
         if item.sourceType == "Raid" then GameTooltip:AddLine("Raid source - weekly opportunity", 0.9, 0.68, 0.9, true)
         elseif item.sourceType == "Dungeon" then GameTooltip:AddLine("Dungeon source - repeatable", 0.5, 0.68, 0.94, true) end
         GameTooltip:Show()
@@ -1001,7 +1064,7 @@ local function MatcherResultItemDetails(item)
         end
         table.insert(details, levelText)
     end
-    if item.sourceName and item.sourceName ~= "" then table.insert(details, CleanText(item.sourceName)) end
+    if ItemDisplaySource(item) ~= "-" then table.insert(details, CleanText(ItemDisplaySource(item))) end
     return table.concat(details, "  |  ")
 end
 
@@ -1545,7 +1608,7 @@ end
 function GearTargets:RefreshFilterControls()
     SetDropdownText(self.itemTypeDropdown, ItemTypeLabel(self.selectedItemType))
     SetDropdownText(self.slotDropdown, self.selectedSlot or "All Slots")
-    SetDropdownText(self.sourceDropdown, SourceLabel(self.selectedSourceID))
+    SetDropdownText(self.sourceDropdown, LootLocationLabel())
     SetDropdownText(self.statusDropdown, StatusFilterLabel(self.selectedStatusFilter))
     self.specValue:SetText(SpecName(TargetSpecID()))
     for _, data in ipairs(self.primaryChecks or {}) do
@@ -1570,6 +1633,7 @@ function GearTargets:Create(parent)
     self.matcherItemSource = "master"
     self.matcherMatchStyle = KeyLab.StatGoalsDB and KeyLab.StatGoalsDB.GetMatchStyle and KeyLab.StatGoalsDB.GetMatchStyle(TargetSpecID()) or "balanced"
     self.selectedSourceID = nil
+    self.selectedEncounterID = nil
     self.selectedSlot = nil
     self.selectedPrimary = nil
     self.selectedStamina = false
@@ -1624,6 +1688,7 @@ function GearTargets:Create(parent)
             info.func = function()
                 GearTargets.selectedItemType = value
                 GearTargets.selectedSourceID = nil
+                GearTargets.selectedEncounterID = nil
                 GearTargets:Refresh()
             end
             UIDropDownMenu_AddButton(info, level)
@@ -1640,21 +1705,32 @@ function GearTargets:Create(parent)
         end
     end)
 
-    self.sourceDropdown = MakeDropdown(controls, 205, 370, -12, "Source", function(_, level)
+    self.sourceDropdown = MakeDropdown(controls, 285, 350, -12, "Loot Location", function(_, level)
         for _, option in ipairs(GetSourceOptions()) do
-            local value = option.value
+            local selected = option
             local info = UIDropDownMenu_CreateInfo()
-            info.text = option.text
-            info.func = function() GearTargets.selectedSourceID = value; GearTargets:Refresh() end
+            info.text = selected.text
+            if selected.title then
+                info.isTitle = true
+                info.disabled = true
+                info.notCheckable = true
+            else
+                info.func = function()
+                    GearTargets.selectedItemType = selected.sourceType
+                    GearTargets.selectedSourceID = selected.sourceID
+                    GearTargets.selectedEncounterID = selected.encounterID
+                    GearTargets:Refresh()
+                end
+            end
             UIDropDownMenu_AddButton(info, level)
         end
     end)
 
     local searchLabel = MakeText(controls, "Search Item", "GameFontDisableSmall", nil, CFG.colors.muted)
-    searchLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", 600, -12)
+    searchLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", 660, -12)
     searchLabel:SetSize(180, 16)
     self.searchBox = MakeSearchBox(controls, 180, 26, "Enter item name")
-    self.searchBox:SetPoint("TOPLEFT", controls, "TOPLEFT", 600, -34)
+    self.searchBox:SetPoint("TOPLEFT", controls, "TOPLEFT", 660, -34)
     self.searchBox:SetScript("OnTextChanged", function(box)
         if box.placeholder then box.placeholder:SetShown(tostring(box:GetText() or "") == "") end
     end)
@@ -1669,10 +1745,10 @@ function GearTargets:Create(parent)
     end)
 
     local specLabel = MakeText(controls, "Current Spec", "GameFontDisableSmall", nil, CFG.colors.muted)
-    specLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", 795, -12)
+    specLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", 855, -12)
     specLabel:SetSize(140, 16)
     self.specValue = MakeText(controls, "", "GameFontHighlightSmall", nil, CFG.colors.gold)
-    self.specValue:SetPoint("TOPLEFT", controls, "TOPLEFT", 795, -38)
+    self.specValue:SetPoint("TOPLEFT", controls, "TOPLEFT", 855, -38)
     self.specValue:SetSize(140, 20)
 
     local primaryLabel = MakeText(controls, "Primary Stats (Choose Stamina and one of Int / Str / Agi)", "GameFontDisableSmall", nil, CFG.colors.muted)
@@ -1834,6 +1910,7 @@ function GearTargets:Create(parent)
         if event == "PLAYER_SPECIALIZATION_CHANGED" and unitOrSlot and unitOrSlot ~= "player" then return end
         if event == "PLAYER_SPECIALIZATION_CHANGED" then
             GearTargets.selectedSourceID = nil
+            GearTargets.selectedEncounterID = nil
             GearTargets.selectedSlot = nil
             GearTargets.matcherProgressText = nil
             GearTargets.matcherCurrentPercentages = nil

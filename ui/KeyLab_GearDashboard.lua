@@ -339,7 +339,7 @@ function GearDashboard:BuildTierCard(parent)
     self.tierSlotRows = {}
     local slots = TierDB().GetSlots and TierDB().GetSlots() or { "Head", "Shoulders", "Chest", "Hands", "Legs" }
     for index, slotName in ipairs(slots) do
-        local row = MakeText(parent, "○ " .. slotName .. " — Not Equipped", "GameFontHighlightSmall", 10, COLORS.muted)
+        local row = MakeText(parent, slotName .. " — Not Equipped", "GameFontHighlightSmall", 10, COLORS.muted)
         row:SetPoint("TOPLEFT", parent, "TOPLEFT", 24, -68 - ((index - 1) * 22))
         row:SetSize(CENTER_WIDTH - 48, 18)
         row:SetWordWrap(false)
@@ -534,7 +534,7 @@ function GearDashboard:RefreshTier(state)
     self.tierComplete:SetTextColor(unpack(tier.complete and COLORS.green or (count >= 2 and COLORS.blue or COLORS.gold)))
     for slotName, row in pairs(self.tierSlotRows or {}) do
         local equipped = tier.slots and tier.slots[slotName] == true
-        row:SetText((equipped and "● " or "○ ") .. slotName .. (equipped and " — Tier Set Piece" or " — Not Equipped"))
+        row:SetText(slotName .. (equipped and " — Tier Set Piece" or " — Not Equipped"))
         row:SetTextColor(unpack(equipped and COLORS.green or COLORS.muted))
     end
     self.tierHelp:SetText("Detected automatically from equipped item IDs. Only the five core set slots count.")

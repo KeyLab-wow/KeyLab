@@ -309,7 +309,7 @@ local SECTIONS = {
             Heading("How It Works"),
             List({
                 "Equip your Tier, crafted, embellished, trinket, set, and other keeper items.",
-                "Unequip only the slots you want KeyLab to fill.",
+                "Leave empty only the slots you want KeyLab to fill.",
                 "Choose the Master Item Database or gear owned by this character.",
                 "If using the database, choose Dungeon, Raid, or Dungeon and Raid items.",
                 "Enter the Crit, Haste, Mastery, and Versatility percentages you want to see on your Character panel.",
@@ -319,8 +319,15 @@ local SECTIONS = {
                 "Mark any item you want as a Target or Alternative.",
             }),
             "KeyLab checks the full finished gear set and finds the combination that comes closest to your goals.",
+            Heading("Season 2 Tier Rules"),
+            List({
+                "Native Season 2 Tier pieces come from The Venomous Abyss raid and have their own fixed secondary stats.",
+                "Eligible seasonal armor can be converted into a Tier Set piece through the Catalyst.",
+                "A Catalyst-converted Tier piece keeps the original item's secondary stats after conversion.",
+                "Because those stats are retained, the original armor item can be chosen to support your stat-priority goals before you convert it.",
+            }),
             Tip(),
-            "At least one eligible slot must be empty.\n\nThe matcher compares secondary stats. It does not judge Tier bonuses, trinket effects, set effects, embellishments, or Best in Slot.\n\nResults may include projected upgrades and reduced-stat-efficiency warnings. A Goal Match means 'closest match found,' not 'best item in the game.'",
+            "To find Catalyst bases for your planned Tier Set, equip the native Season 2 Tier pieces you want to keep and leave your other core Tier slots empty. Choose Dungeon or Dungeon and Raid items, then run the matcher. KeyLab can fill those open slots with eligible armor whose retained secondary stats come closest to your goals. Save the pieces you want as Targets before converting them through the Catalyst.\n\nYou only need four of the five core Tier slots, so the open slot can also help you protect a better secondary-stat combination.\n\nAt least one eligible slot must be empty. The matcher compares secondary stats; it does not judge Tier bonuses, trinket effects, set effects, embellishments, or Best in Slot.\n\nResults may include projected upgrades and reduced-stat-efficiency warnings. A Goal Match means 'closest match found,' not 'best item in the game.'",
         }),
     },
     {
