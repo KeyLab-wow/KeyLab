@@ -1,17 +1,270 @@
 # KeyLab Changelog
 
-## Version 2.0.6 - Recommended Gear Paused
+## Version 2.0.50 - Myth-Track Target Completion
 
-- Removed the Recommended Gear tab and its recommendation database from the live addon while the feature is on the back burner.
-- Restored Gear Planning to its Guide, Crafted Gear, and Season 2 Info views.
+- Kept saved Targets active in the Gear Targets shopping popup when the owned copy is below Myth track, so Champion and Hero copies continue showing their dungeon or raid sources.
+- Marked a Target complete only when a confirmed Myth-track copy of that item is equipped or owned in the player's bags.
+- Added clear owned-track messaging to active Target rows and preserved the existing Nebulous Voidcore path for owned Hero targets.
 
-## Version 2.0.5 - Current-Spec Recommended Gear
+## Version 2.0.49 - Season 2 Stat Goal Matcher Guide
 
-- Added a Recommended Gear tab to Gear Planning that automatically follows the logged-in character's active class and specialization.
-- Added separate Dungeon, Raid, and Raid + Dungeon theorycraft views for all 40 specializations, including the proposed stat priority, pattern evidence, theory, and complete 16-slot gear profiles.
-- Added 1,920 reviewed slot recommendations with item names, item levels, stat patterns, stat lines, sources, item tooltips, and the reason each item won its slot.
-- Preserved class armor and weapon legality, distinct Ring and Trinket choices, dual-wield rules, and two-handed weapon/off-hand restrictions from the workbook analysis.
-- Clearly labeled trinkets as advisory and the recommendations as KeyLab loot-table theorycraft rather than simulation results or official Blizzard stat priorities.
+- Updated Gear Planning's Stat Goal Matcher guide with the Season 2 difference between native Tier from The Venomous Abyss and armor converted through the Catalyst.
+- Explained that Catalyst-converted Tier pieces retain the original item's secondary stats.
+- Added a practical workflow for leaving planned Tier slots open so the matcher can find Catalyst bases that better support the player's stat-priority goals.
+
+## Version 2.0.48 - August 24-28 News and Game Updates
+
+- Added six concise News & Events entries for the September 1 class tuning, raid Bonus Roll eligibility change, Venomous Abyss Story Mode and Raid Finder Wing 2, the Northrend Cup, Spark of Tides cleanup, and September's Trading Post.
+- Added Blizzard's complete supplied hotfix wording as three separate Game Updates dated August 27, August 26, and August 25, 2026, preserving the existing PvE/PvP and category navigation.
+- Updated Home → S2 Common Issues in place to the August 26 report, removed issues Blizzard no longer lists, and added Crafting Order Not Delivered with its Blizzard Support details.
+
+## Version 2.0.47 - Season 2 Tier Shopping Guidance
+
+- Updated the LFG Gear Targets popup so only equipped Midnight Season 2 set-bonus pieces satisfy its five Tier slots.
+- Treated older-season Tier pieces, regular gear, and empty Tier slots as still needing Season 2 gear: saved Targets remain the first recommendation, while slots without a Target list every eligible dungeon source for the current specialization.
+- Clarified the dungeon helper wording so its recommendations are identified as Season 2 Tier-slot armor.
+
+## Version 2.0.46 - Tier Set Status Readability
+
+- Removed unsupported circle characters from the Gear Dashboard Tier Set card that appeared as empty boxes in the World of Warcraft font.
+- Kept each core slot's status clear with plain `Tier Set Piece` or `Not Equipped` wording and the existing green or muted status color.
+
+## Version 2.0.45 - Native Tier Boss Sources
+
+- Added confirmed raid-boss sources to every native Season 2 set-bonus piece: Hands from Entombed Sentinels, Shoulders from The Lost Explorers, Chest from Vashnik the Malignant, Legs from Sszorak, and Head from The Twin Fangs.
+- Added Ula'tek as an alternate source for all five set-bonus slots so those tier pieces appear under either applicable boss in Gear Targets.
+- Kept the native Back, Wrist, Waist, and Feet off-pieces listed under The Venomous Abyss without assigning an unconfirmed boss-specific source.
+
+## Version 2.0.44 - Gear Target Loot Locations
+
+- Added a Loot Location filter to Gear Targets with All Dungeons & Raids, All Dungeons, All Raids, each available dungeon, and each available raid boss for the current specialization.
+- Displayed raid-boss choices as `Boss Name - Raid Name`, including `The Twin Fangs - The Venomous Abyss`, while keeping the existing broad Browse Items choices available.
+- Filtered raid gear through its saved encounter ID and displayed raid rows as `Boss Name - Raid Acronym`, such as `The Twin Fangs - TVA`; dungeon rows continue to show their dungeon name.
+
+## Version 2.0.43 - Evoker and Shaman Tier Ownership Correction
+
+- Corrected the native Season 2 tier ranges so Ophidian Oracle gear belongs to Shaman and Echo of Calamity gear belongs to Evoker.
+- Updated class eligibility, specialization filtering, per-spec primary stats, tier Set IDs, and Gear Targets source lists for all nine pieces in both sets.
+- Added the same correction to the master database builder so future gear-database rebuilds preserve the proper class assignments.
+
+## Version 2.0.42 - Macro Target Save Repair
+
+- Restored saving a newly selected party or raid member from Macro Targets.
+- Passed the selected member to the sequencer through the stable party or raid position used by the macro instead of carrying the roster GUID through repeated dashboard refreshes.
+- Preserved player identity tracking for later group-position change warnings and kept the new class and specialization display unchanged.
+
+## Version 2.0.41 - Macro Target Selection Repair
+
+- Restored party and raid member selection in Macro Targets after the class and specialization display update.
+- Matched display-only specialization details through the member's party or raid position without changing the identifier used by macro assignments.
+- Preserved the new `Class - Specialization` labels in both Group Readiness and Macro Targets.
+
+## Version 2.0.40 - Group Member Specializations
+
+- Displayed each available group member specialization beside their class in Group Readiness using the clear `Class - Specialization` format.
+- Added the same class and specialization identity to Macro Targets while preserving each member's role and party or raid selector.
+- Kept the existing inspection state as the fallback when World of Warcraft has not made a group member's specialization available yet.
+
+## Version 2.0.39 - Complete Raid Role Metrics
+
+- Made raid boss capture retry when the current role's primary performance values are missing, even if Blizzard has already returned secondary outcomes such as deaths, dispels, or interrupts.
+- Recorded a capture note when Blizzard still withholds the role metrics after the retry instead of silently treating a partial meter response as complete.
+- Replaced the misleading fallback value of `1` in Last Raid graphs with clear unavailable labels, per-pull hover text, and a missing-metric count while preserving real zero values.
+- Narrowed the vertical performance bars so one-pull bosses and short raid histories remain visually balanced.
+
+## Version 2.0.38 - Group Handle After Combat
+
+- Restored the minimized Group Snapshot handle automatically after combat when the player remains in the same party or raid.
+- Kept the full floating snapshot closed after combat so only the compact movable handle returns between pulls.
+- Continued hiding both floating forms during combat and clearing the session normally after leaving the group.
+
+## Version 2.0.37 - Raid Pull Performance Bars
+
+- Replaced connected raid pull performance lines with vertical bars so one-shot kills and bosses with only a few attempts have a clear, intentional visual.
+- Colored each performance bar green for a kill or red for a wipe while retaining metric-colored borders for role profiles that compare multiple measurements.
+- Preserved the existing role-based scaling, pull-number hover details, raid group ranks, pagination, and KeyLab theme.
+
+## Version 2.0.36 - Post-Transition Tab Recovery
+
+- Fixed the main content panel remaining hidden after KeyLab returned from menu-only mode while the addon window was hidden during combat or a loading transition.
+- Made reopening KeyLab and selecting any sidebar tab immediately restore its shared content surface instead of showing an empty tab area until another UI state change occurred.
+- Kept every tab layout, menu, and automatic minimize behavior unchanged.
+
+## Version 2.0.35 - Secret Damage Meter Source Safety
+
+- Protected Mythic+ and raid Damage Meter capture from Blizzard secret player names and GUIDs returned for other group members.
+- Used public class information first when identifying group-player rows, avoiding the forbidden GUID pattern match that interrupted run finalization.
+- Prevented inaccessible secret identity fields from entering saved metric and death snapshots while preserving every readable local-player and group value.
+
+## Version 2.0.34 - Spec-Correct Gear Target Stats
+
+- Preserved the captured maximum-item-level links, upgrade details, difficulty, and bonus data used by Gear Targets.
+- Changed only the specialization context inside those links when they are displayed, allowing adaptive item tooltips to resolve for the character's current specialization instead of the Paladin specialization used during capture.
+- Corrected Gear Targets and Stat Goal Matcher primary-stat records by specialization so Intellect, Agility, and Strength labels and matching follow the current spec while secondary stats remain unchanged.
+- Updated the master database generator to apply the same primary-stat correction to future reviewed season data builds.
+
+## Version 2.0.33 - Home Article Search
+
+- Added one shared KeyLab-themed search area for Home's News & Events and Game Updates sections, including their hotfix entries.
+- Made searches match article titles, dates, categories, and nested article content so class, item, encounter, and ability terms can locate the relevant entry.
+- Added live result counts, a themed Clear button, an empty-results message, and automatic list repositioning while preserving the selected article and existing reader layout.
+
+## Version 2.0.32 - Themed Information Scrolling
+
+- Replaced the Macro Sequencer Information tab's native scrollbar with the shared KeyLab theme scroll area so accordion positioning and scrollbar state use the same reusable UI behavior as other themed addon views.
+- Connected the shared accordion layout to the themed scroll area's content-height handling, preventing the first two Information cards from being restored above the visible area as clipped lines.
+- Kept all Information accordion text, ordering, expansion behavior, and unrelated views unchanged.
+
+## Version 2.0.31 - Information List Position
+
+- Reset the Macro Sequencer Information list to the top whenever the Information tab is opened so the first accordion cards no longer appear as clipped shadow lines.
+- Removed the final temporary-target and WoW-validity paragraph from the Group Target button hover tip while keeping its availability and supported-selector guidance.
+
+## Version 2.0.30 - Expanded Macro Target Selectors
+
+- Expanded Group Target source support to `@target`, `@focus`, `@player`, `@pet`, `@mouseover`, `@cursor`, `@party1-4`, and `@raid1-40` for marked friendly-support macro blocks.
+- Changed every supported explicit target selector in a marked block only in its temporary grouped copy while preserving the original saved macro and other bracket conditions, including `button:1-5`.
+- Added Macro Targets guidance explaining keybind use, how a temporary assignment changes mouseover or cursor behavior, and that World of Warcraft makes the final legal cast or item-use decision.
+- Replaced the unsupported arrow character in Macro Targets labels and instructions with the readable ASCII `->` arrow.
+
+## Version 2.0.29 - Macro Targets Guidance
+
+- Replaced the Group Dashboard → Macro Targets introduction with clearer friendly-support assignment guidance and renamed Apply Target to Save Target.
+- Added a dedicated Macro Targets accordion to Macro Sequencer → Information explaining how to mark a block, save a temporary group-member target, change or remove it outside combat, and restore the original target by leaving the group.
+- Restyled the Group Target block control with a distinct KeyLab blue-and-gold button treatment, added spacing from the block-number badge, and aligned its cycle-mode control beneath it.
+- Added a detailed Group Target hover tip covering block availability, naming, supported target selectors, out-of-combat restrictions, and automatic restoration.
+
+## Version 2.0.28 - Group Snapshot KeyLab Identity
+
+- Added the KeyLab key logo to the collapsed Group Snapshot handle so its addon identity is immediately recognizable.
+- Repositioned the existing two-line Group Snapshot label beneath the logo while preserving readability, movement, saved positioning, and click-to-open behavior.
+
+## Version 2.0.27 - Group Snapshot Handle Readability
+
+- Widened the collapsed Group Snapshot handle so its full two-line label remains readable.
+- Moved its default resting position farther left from the screen edge and corrected previously saved right-edge positions that could clip the label.
+- Preserved independent dragging, saved positioning, combat behavior, and all expanded snapshot functionality.
+
+## Version 2.0.26 - Movable Group Snapshot
+
+- Made the compact Group Snapshot draggable outside combat and saved its position across reloads and logins.
+- Made the collapsed Group Snapshot side handle independently draggable, with a tooltip explaining that it can be moved or clicked to reopen the snapshot.
+- Kept the full Group Dashboard, combat-closing behavior, snapshot contents, and all unrelated UI unchanged.
+
+## Version 2.0.25 - Pull Participation Clarification
+
+- Added a concise explanation to the second Last Run pull graph that its lines represent the player's activity while skull markers represent group deaths.
+- Clarified that a pull may show zero personal activity when the player died, released, or was returning while the rest of the group remained in combat.
+- Left captured pull metrics, group-death placement, graph calculations, and all other Last Run behavior unchanged.
+
+## Version 2.0.24 - Group Snapshot and Temporary Macro Targets
+
+- Added a themed Group Target marker to individual Macro Sequencer blocks, including a custom name used in Group Dashboard while preserving the macro's original saved target and every other macro condition.
+- Added Group Dashboard → Macro Targets for choosing a current party or raid member, applying a temporary `@player`, `@party1-4`, or `@raid1-40` runtime target, reviewing its status, and restoring the original saved target.
+- Added event-driven group-position monitoring with a compact post-combat update window when a targeted player moves positions or leaves, including Change Now, explicit Leave As Is, and Open Macro Targets actions.
+- Added a collapsible KeyLab-themed Group Snapshot at the right side of the screen with real group members, present aura icons, active-only group-capability counts, manual status checking, and a shortcut to the full dashboard.
+- Kept temporary target assignments through reloads, logins, and specialization changes while the player remains grouped, then restored every saved target when the group ends.
+- Changed combat behavior so the full KeyLab window, minimized menu, Group Snapshot, target-update window, target-name dialog, and KeyLab popups all close when combat begins; secure macro targets remain unchanged until combat ends.
+
+## Version 2.0.23 - Active Group Capability Cards
+
+- Changed nonzero capability rows in Group Composition into compact green-accented cards so the capability name remains visually connected to its count.
+- Added a soft green background, green border, and green capability label only when the current group provides that capability.
+- Preserved the quiet existing row treatment for zero-count capabilities and left Group Readiness unchanged.
+
+## Version 2.0.22 - Group Readiness Protected Range Handling
+
+- Removed Group Readiness comparisons against Blizzard's secret `UnitInRange` return values, preventing taint errors while checking party and raid members.
+- Changed the readiness availability gate to the non-secret unit visibility result before requesting another player's helpful auras.
+- Added a protected per-member scan boundary so inaccessible aura information marks only that player as unavailable while the remaining group check continues.
+
+## Version 2.0.21 - Group Composition Count Labels
+
+- Simplified Group Composition capability badges to display a plain numeric count without the previous plus sign or `C` suffix.
+- Standardized every nonzero Group Composition count badge, including Class/Spec choices, to the addon's green count treatment.
+
+## Version 2.0.20 - Temporary Weapon Enhancements
+
+- Added temporary weapon enhancements to the player's Group Readiness aura snapshot using the current PaperDoll weapon-slot API.
+- Included generic support for active sharpening stones, weightstones, weapon oils such as Thalassian Phoenix Oil, and future temporary main-hand or off-hand enhancements without hardcoded item-name lists.
+- Added equipped-weapon icons with full inventory tooltips so the active Sharpened, Weighted, or Oiled effect and remaining duration can be reviewed on hover.
+
+## Version 2.0.19 - Group Dashboard Sizing and Aura Display
+
+- Increased Group Composition typography and row spacing, widened wrapped capability labels, and renamed Dependency Columns to Capability Sources.
+- Changed zero values to plain text while retaining themed badges only for nonzero capability and choice counts.
+- Changed Group Readiness results to larger icon-only displays for the helpful auras actually present on each player, including food, flasks, class buffs, and other active effects, with the full spell tooltip available on hover.
+- Added follower and NPC detection so non-player group members are skipped during inspection and aura checks instead of delaying the scan.
+
+## Version 2.0.18 - Group Dashboard Readability
+
+- Reorganized Group Composition into four side-by-side cards for Group Enhancements, Removals, Cast Stops & Control, and Group Support so the full dashboard fits without vertical scrolling at the supported KeyLab size.
+- Moved all Build capability mappings into Talent, removed the Build column, and moved Battle Resurrection into Group Support.
+- Replaced composition counts with prominent KeyLab-themed number badges, including separate gold choice badges.
+- Added a Stop button for the manual group-status check and full aura badges with spell icons and green Present or red Missing states.
+
+## Version 2.0.17 - Nymrissa Wavecaller Hotfix
+
+- Added the August 22, 2026 Nymrissa Wavecaller Mythic tuning update to Home → Game Updates → Hotfixes using Blizzard's supplied wording.
+- Included the Abyssal Rain initial, periodic, and group-size scaling reductions and the Frost Burst damage reduction.
+
+## Version 2.0.16 - Group Dashboard
+
+- Added a new primary Group Dashboard between Gear Dashboard and Macro Sequencer with separate Group Readiness and Group Composition views.
+- Added stable party and raid arrival ordering, non-blocking specialization and item-level inspection states, Leader and Assistant labels, and a manual Check Group Status aura scan with progress and unavailable-state handling.
+- Added a static all-class group-utility database translated from the reviewed class/spec audit workbook, preserving specialization, talent, pet, Talent + Pet, Build, choice, target, description, and coverage conditions.
+- Added named-effect coverage, provider redundancy, friendly and enemy removal, cast-stop and control, and group-support cards without scores, recruitment advice, dungeon pressure, or MDT data.
+- Built the dashboard entirely with KeyLab's solid-color theme controls and internal scrolling, without Blizzard button or menu textures.
+
+## Version 2.0.15 - Common Issues Tracker Layout
+
+- Removed the left-side article list from the dedicated S2 Common Issues sub-tab.
+- Expanded the tracker to the full content width with In-Game Issues and Technical Issues as the two primary choices.
+- Preserved the clickable issue accordions within each choice while leaving the News & Events and Game Updates readers unchanged.
+
+## Version 2.0.14 - Season 2 Common Issues Tab
+
+- Added a dedicated Home → S2 Common Issues sub-tab for the Midnight 12.1 common-issues tracker.
+- Moved the existing tracker out of News & Events without duplicating or changing its issue content.
+- Preserved the In-Game Issues and Technical Issues views and all individually expandable support articles.
+
+## Version 2.0.13 - Curse of Ula'tek Known Issues
+
+- Added one News & Events entry for Blizzard Support's Midnight 12.1: Curse of Ula'tek common-issues tracker.
+- Added In-Game Issues and Technical Issues views with a main summary and individually expandable support articles.
+- Included the current quest, Lunarfall Excavation disconnect, and Skyriding camera issue details and support resources.
+
+## Version 2.0.12 - Published Game Updates
+
+- Rebuilt Home → Game Updates as seven separate official Hotfixes records for August 21, 20, 19, 18, 17, 14, and 13, 2026, with one displayed publication date per entry.
+- Added PvE and PvP views with collapsible category, class/specialization, dungeon/raid, and encounter sections while preserving Blizzard's supplied wording and order.
+- Moved the August 25 class-tuning and item-adjustment announcements from Game Updates to News & Events without duplicating or rewriting them.
+
+## Version 2.0.11 - Raid Profile Visual Restoration
+
+- Restored comparison graphs to the metric line items in Raid Talent Builds and Raid Stat Profiles.
+- Restored the complete selected details view with source-pull information, pre-pull stats, talent-string copying, and captured outcomes.
+- Routed both Raid result rows and details through the shared KeyLab analysis typography and visual theme.
+
+## Version 2.0.8 - Venomous Abyss Race to World First
+
+- Added a KeyLab-written News & Events article covering the Midnight Season 2 Race to World First in The Venomous Abyss.
+- Added guild broadcast links and additional race-progression coverage resources in the existing readable news format.
+
+## Version 2.0.7 - August 25 Item Adjustment
+
+- Added Blizzard's upcoming August 25, 2026 Aqirbane Reliquary adjustment to Game Updates.
+- Preserved Blizzard's wording and presented the announcement through the existing Game Updates article design.
+
+## Version 2.0.6 - August 25 Class Tuning
+
+- Added Blizzard's complete upcoming August 25, 2026 class-tuning post to Game Updates.
+- Preserved Blizzard's wording and organized the Class Changes and Player versus Player adjustments through the existing class and specialization navigation.
+
+## Version 2.0.5 - August 21 Hotfixes
+
+- Added Blizzard's complete August 21 and August 20, 2026 hotfix notes to Game Updates.
+- Preserved Blizzard's wording and organized the notes through the existing date, category, class, specialization, dungeon, encounter, and general-section navigation.
 
 ## Version 2.0.4 - August 19 Hotfixes
 

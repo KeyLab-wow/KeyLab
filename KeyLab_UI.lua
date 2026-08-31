@@ -100,6 +100,7 @@ local CFG = {
         "Gear Planning",
         "Gear Targets",
         "Gear Dashboard",
+        "Group Dashboard",
         "Sequencer",
         "Insights",
         "Settings",
@@ -299,6 +300,15 @@ function KeyLab.UI:Create()
     StylePanel(frame, CFG.colors.windowBg, CFG.colors.windowBorder)
 
     self.frame = frame
+    frame:SetScript("OnHide", function()
+        if KeyLab.GroupQuickUI and KeyLab.GroupQuickUI.HandleFloatingRefresh then
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.05, function() KeyLab.GroupQuickUI:HandleFloatingRefresh("main window closed") end)
+            else
+                KeyLab.GroupQuickUI:HandleFloatingRefresh("main window closed")
+            end
+        end
+    end)
     self.contentMode = GetSavedContentMode()
     self.navigationTabs = GetVisibleNavigationTabs()
 
@@ -407,13 +417,19 @@ function KeyLab.UI:Create()
         combatEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
         combatEvents:SetScript("OnEvent", function(_, event)
             if event == "PLAYER_REGEN_DISABLED" then
-                local wasEditing = GetNavigationKey(KeyLab.UI.selectedTab) == "Sequencer"
-                if wasEditing then
-                    local fallback = KeyLab.UI.lastNonSequencerTab or "Home"
-                    KeyLab.UI:SelectTab(fallback)
-                    if KeyLab.UI.frame and KeyLab.UI.frame:IsShown() then
-                        KeyLab.UI:ShowSequencerCombatMessage(true)
+                if KeyLab.UI.frame then KeyLab.UI.frame:Hide() end
+                if KeyLab.GroupQuickUI and KeyLab.GroupQuickUI.HideFloatingForCombat then
+                    KeyLab.GroupQuickUI:HideFloatingForCombat()
+                end
+                if type(StaticPopup_Hide) == "function" then
+                    for key in pairs(StaticPopupDialogs or {}) do
+                        if tostring(key):match("^KEYLAB_") then StaticPopup_Hide(key) end
                     end
+                end
+            else
+                if KeyLab.UI.isMenuOnly then KeyLab.UI:SetMenuOnly(false) end
+                if KeyLab.GroupQuickUI and KeyLab.GroupQuickUI.HandleFloatingRefresh then
+                    KeyLab.GroupQuickUI:HandleFloatingRefresh("combat ended")
                 end
             end
             KeyLab.UI:RefreshSequencerNavigationState()
@@ -428,6 +444,10 @@ function KeyLab.UI:Create()
 end
 
 function KeyLab.UI:SetMenuOnly(enabled)
+    if InCombatLockdown and InCombatLockdown() then
+        if self.frame then self.frame:Hide() end
+        return
+    end
     self:Create()
     enabled = enabled == true
     if self.isMenuOnly == enabled then return end
@@ -481,11 +501,9 @@ function KeyLab.UI:SetMenuOnly(enabled)
     if self.backgroundArtwork then
         self.backgroundArtwork:SetTexCoord(0, CFG.main.width / 2048, 0, CFG.main.height / 1024)
     end
-    if self.frame:IsShown() then
-        self.content:Show()
-        if self.selectedTab and self.tabFrames and self.tabFrames[self.selectedTab] then
-            self.tabFrames[self.selectedTab]:Show()
-        end
+    self.content:Show()
+    if self.selectedTab and self.tabFrames and self.tabFrames[self.selectedTab] then
+        self.tabFrames[self.selectedTab]:Show()
     end
 end
 
@@ -825,13 +843,11 @@ function KeyLab.UI:SetContentMode(mode)
 end
 
 function KeyLab.UI:SelectTab(tabName)
-    self:Create()
-
-    if GetNavigationKey(tabName) == "Sequencer" and InCombatLockdown and InCombatLockdown() then
-        self:ShowSequencerCombatMessage(false)
-        self:RefreshSequencerNavigationState()
+    if InCombatLockdown and InCombatLockdown() then
+        if self.frame then self.frame:Hide() end
         return
     end
+    self:Create()
 
     local category, explicitMode = GetAnalysisRoute(tabName)
     if explicitMode then
@@ -858,7 +874,8 @@ function KeyLab.UI:SelectTab(tabName)
         self.tabFrames[previousTab]:Hide()
     end
 
-    if self.frame and self.frame:IsShown() then
+    if self.frame and self.frame:IsShown() and not self.isMenuOnly then
+        if self.content then self.content:Show() end
         selectedFrame:Show()
     end
 
@@ -885,6 +902,7 @@ function KeyLab.UI:SelectTab(tabName)
 end
 
 function KeyLab.UI:Show()
+    if InCombatLockdown and InCombatLockdown() then return end
     self:Create()
     self.frame:Show()
     self:SelectTab(self.selectedTab or "Home")
@@ -902,6 +920,10 @@ function KeyLab.UI:Hide()
 end
 
 function KeyLab.UI:Toggle()
+    if InCombatLockdown and InCombatLockdown() then
+        if self.frame then self.frame:Hide() end
+        return
+    end
     self:Create()
 
     if self.frame:IsShown() then

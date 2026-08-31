@@ -2,7 +2,7 @@
 ## Title: KeyLab
 ## Notes: Mythic+ and Raid tracking, practice tests, gear planning, and macro sequences in one personal journal.
 ## Author: Brione
-## Version: 2.0.6
+## Version: 2.0.50
 ## SavedVariables: KeyLabDB, KeyLabCaptureDB, KeyLabGearStatsProbeDB
 
 utils/KeyLab_Utils.lua
@@ -35,6 +35,7 @@ database/KeyLab_GearLootDatabase.lua
 database/KeyLab_CraftedRecipeDatabase.lua
 database/KeyLab_ItemClassificationDB.lua
 database/KeyLab_CraftedPlansDB.lua
+database/KeyLab_GroupUtilityDB.lua
 capture/KeyLab_GearCapture.lua
 capture/KeyLab_GearStatsProbe.lua
 mapping/KeyLab_GearLootMapping.lua
@@ -49,6 +50,7 @@ analysis/KeyLab_RunHighlights.lua
 analysis/KeyLab_LastRunAnalysis.lua
 analysis/KeyLab_GearingAnalysis.lua
 analysis/KeyLab_PracticeAnalysis.lua
+analysis/KeyLab_GroupDashboard.lua
 
 capture/KeyLab_Sessions.lua
 capture/KeyLab_ChallengeTimer.lua
@@ -82,6 +84,7 @@ ui/KeyLab_Trends.lua
 ui/KeyLab_Practice.lua
 ui/KeyLab_GearPlanning.lua
 ui/KeyLab_GearDashboard.lua
+ui/KeyLab_GroupDashboard.lua
 ui/KeyLab_SequencerLibrary.lua
 ui/KeyLab_GearTargets.lua
 ui/KeyLab_GearTargetsWindow.lua
