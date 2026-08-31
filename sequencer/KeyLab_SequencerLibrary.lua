@@ -24,6 +24,7 @@ local MODIFIER_BUDGET_OVERHEAD = 16
 local MODE_EVEN_CYCLE = "even_cycle"
 local MODE_WEIGHTED_CYCLE = "weighted_cycle"
 local MODE_SCHEMA_VERSION = 2
+local GROUP_TARGET_NAME_CHARS = 40
 
 Library.MAX_SEQUENCES = MAX_SEQUENCES
 Library.MAX_VERSIONS = MAX_VERSIONS
@@ -88,6 +89,19 @@ Library.MODE_NAMES = MODE_NAMES
 local Trim
 local TARGET_SET = {}
 for _, value in ipairs(TARGET_OPTIONS) do TARGET_SET[value] = true end
+
+local GROUP_TARGET_SOURCE_SET = {
+    ["@target"] = true,
+    ["@focus"] = true,
+    ["@player"] = true,
+    ["@pet"] = true,
+    ["@mouseover"] = true,
+    ["@cursor"] = true,
+}
+for index = 1, 4 do GROUP_TARGET_SOURCE_SET["@party" .. tostring(index)] = true end
+for index = 1, 40 do GROUP_TARGET_SOURCE_SET["@raid" .. tostring(index)] = true end
+
+local groupTargetListeners = {}
 
 local CONDITION_EXACT = {
     exists=true, noexists=true, help=true, harm=true, dead=true, nodead=true,
@@ -252,9 +266,51 @@ local function EnsureRoot()
     KeyLabDB.sequencerLibrary = type(KeyLabDB.sequencerLibrary) == "table" and KeyLabDB.sequencerLibrary or {}
     local db = KeyLabDB.sequencerLibrary
     db.collections = type(db.collections) == "table" and db.collections or {}
+    db.groupTargetAssignments = type(db.groupTargetAssignments) == "table" and db.groupTargetAssignments or {}
     db.idCounter = tonumber(db.idCounter) or 0
     MigrateStoredModes(db)
     return db
+end
+
+local function IsGrouped()
+    return (IsInRaid and IsInRaid()) or (IsInGroup and IsInGroup()) or false
+end
+
+local function GroupTargetRoster()
+    local roster = {}
+    local function add(unit)
+        if not UnitExists or not UnitExists(unit) then return end
+        if UnitIsPlayer and not UnitIsPlayer(unit) then return end
+        local guid = UnitGUID and UnitGUID(unit) or nil
+        if not guid then return end
+        local name, realm = UnitName and UnitName(unit) or nil, nil
+        if UnitName then name, realm = UnitName(unit) end
+        if realm and realm ~= "" then name = tostring(name) .. "-" .. tostring(realm) end
+        local selector = unit == "player" and "@player" or ("@" .. tostring(unit))
+        table.insert(roster, {
+            guid = guid,
+            name = name or unit,
+            unit = unit,
+            selector = selector,
+            role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit) or "NONE",
+            isPlayer = UnitIsUnit and UnitIsUnit(unit, "player") or unit == "player",
+        })
+    end
+    if IsInRaid and IsInRaid() then
+        local count = GetNumGroupMembers and GetNumGroupMembers() or 0
+        for index = 1, count do add("raid" .. tostring(index)) end
+    elseif IsInGroup and IsInGroup() then
+        add("player")
+        local count = GetNumSubgroupMembers and GetNumSubgroupMembers() or 0
+        for index = 1, count do add("party" .. tostring(index)) end
+    end
+    return roster
+end
+
+local function NotifyGroupTargets(reason)
+    for listener in pairs(groupTargetListeners) do
+        pcall(listener, tostring(reason or "updated"))
+    end
 end
 
 local function EnsureCollection(create)
@@ -627,6 +683,57 @@ local function GenerateBlock(block)
     return text
 end
 
+local function ValidateGroupTargetText(text)
+    local matches = {}
+    local seen = {}
+    tostring(text or ""):gsub("%b[]", function(group)
+        local content = group:sub(2, -2)
+        for part in (content .. ","):gmatch("(.-),") do
+            local token = Trim(part):lower()
+            if GROUP_TARGET_SOURCE_SET[token] and not seen[token] then
+                seen[token] = true
+                table.insert(matches, token)
+            end
+        end
+        return group
+    end)
+    if #matches == 0 then
+        return nil, "This macro needs an explicit @target, @focus, @player, @pet, @mouseover, @cursor, @party1-4, or @raid1-40 selector inside brackets."
+    end
+    return table.concat(matches, ", ")
+end
+
+local function ValidateGroupTargetBlock(block)
+    if type(block) ~= "table" then return nil, "Choose a macro block first." end
+    local copy = DeepCopy(block)
+    copy.enabled = true
+    local text, message = GenerateBlock(copy)
+    if not text then return nil, message end
+    local sourceTarget, targetMessage = ValidateGroupTargetText(text)
+    if not sourceTarget then return nil, targetMessage end
+    return sourceTarget, nil, text
+end
+
+local function TransformGroupTargetText(text, sourceTarget, runtimeTarget)
+    runtimeTarget = Trim(runtimeTarget):lower()
+    if runtimeTarget ~= "@player" and not runtimeTarget:match("^@party[1-4]$") and not runtimeTarget:match("^@raid%d+$") then
+        return text
+    end
+    return tostring(text or ""):gsub("%b[]", function(group)
+        return group:gsub("@[%a%d]+", function(token)
+            return GROUP_TARGET_SOURCE_SET[token:lower()] and runtimeTarget or token
+        end)
+    end)
+end
+
+local function MarkerAssignment(block)
+    local marker = type(block) == "table" and block.groupTarget or nil
+    if type(marker) ~= "table" or Trim(marker.id) == "" or not IsGrouped() then return nil end
+    local assignment = EnsureRoot().groupTargetAssignments[marker.id]
+    if type(assignment) ~= "table" then return nil end
+    return assignment
+end
+
 local function GenerateModifier(version)
     local key = version and Trim(version.modifierKey):upper() or ""
     if key == "" then return nil, nil end
@@ -746,6 +853,17 @@ local function ValidateVersion(version)
         local text, message, disabled = GenerateBlock(block)
         if not text and not disabled then return nil, "Macro " .. tostring(sourceIndex) .. ": " .. tostring(message) end
         if not disabled then
+            if type(block.groupTarget) == "table" then
+                local sourceTarget, targetMessage = ValidateGroupTargetBlock(block)
+                if not sourceTarget then
+                    return nil, "Macro " .. tostring(sourceIndex) .. " Group Target: " .. tostring(targetMessage)
+                end
+                block.groupTarget.sourceTarget = sourceTarget
+                local assignment = MarkerAssignment(block)
+                if assignment and Trim(assignment.appliedUnit) ~= "" then
+                    text = TransformGroupTargetText(text, sourceTarget, assignment.appliedUnit)
+                end
+            end
             table.insert(blocks, text)
             table.insert(sourceIndexes, sourceIndex)
             table.insert(currentGroup.compactIndexes, #blocks)
@@ -825,6 +943,254 @@ Library.DefaultCommand = DefaultCommand
 Library.DefaultClause = DefaultClause
 Library.ResolveSpellName = ResolveSpellName
 Library.IsSafeCondition = IsSafeCondition
+Library.ValidateGroupTargetText = ValidateGroupTargetText
+Library.ValidateGroupTargetBlock = ValidateGroupTargetBlock
+Library.TransformGroupTargetText = TransformGroupTargetText
+
+function Library.AddGroupTargetListener(listener)
+    if type(listener) == "function" then groupTargetListeners[listener] = true end
+end
+
+function Library.RemoveGroupTargetListener(listener)
+    groupTargetListeners[listener] = nil
+end
+
+function Library.IsGrouped()
+    return IsGrouped()
+end
+
+function Library.GetGroupTargetRoster()
+    return DeepCopy(GroupTargetRoster())
+end
+
+function Library.MarkBlockForGroupTarget(block, name)
+    if InCombat() then return false, "Group Target macros cannot be changed during combat." end
+    name = Trim(name)
+    if name == "" then return false, "Enter the name that should appear in Macro Targets." end
+    if #name > GROUP_TARGET_NAME_CHARS then
+        return false, "Group Target names may contain at most " .. tostring(GROUP_TARGET_NAME_CHARS) .. " characters."
+    end
+    local sourceTarget, message = ValidateGroupTargetBlock(block)
+    if not sourceTarget then return false, message end
+    local marker = type(block.groupTarget) == "table" and block.groupTarget or {}
+    marker.id = Trim(marker.id) ~= "" and marker.id or NewID("group-target")
+    marker.name = name
+    marker.sourceTarget = sourceTarget
+    block.groupTarget = marker
+    NotifyGroupTargets("marker updated")
+    return true, name .. " will appear in Macro Targets."
+end
+
+function Library.UnmarkBlockForGroupTarget(block)
+    if InCombat() then return false, "Group Target macros cannot be changed during combat." end
+    if type(block) ~= "table" or type(block.groupTarget) ~= "table" then return true end
+    block.groupTarget = nil
+    NotifyGroupTargets("marker removed")
+    return true, "This macro will no longer appear in Macro Targets."
+end
+
+local function PruneMissingGroupTargetAssignments()
+    local root = EnsureRoot()
+    local found = {}
+    for _, collection in pairs(root.collections or {}) do
+        for _, sequence in pairs(type(collection) == "table" and collection.sequences or {}) do
+            for _, version in pairs(type(sequence) == "table" and sequence.versions or {}) do
+                for _, block in ipairs(type(version) == "table" and version.blocks or {}) do
+                    local marker = type(block) == "table" and block.groupTarget or nil
+                    if type(marker) == "table" and Trim(marker.id) ~= "" then found[marker.id] = true end
+                end
+            end
+        end
+    end
+    for markerID in pairs(root.groupTargetAssignments) do
+        if not found[markerID] then root.groupTargetAssignments[markerID] = nil end
+    end
+end
+
+function Library.ValidateMarkedBlock(block)
+    if type(block) ~= "table" or type(block.groupTarget) ~= "table" then return true end
+    local sourceTarget, message = ValidateGroupTargetBlock(block)
+    if not sourceTarget then return false, message end
+    block.groupTarget.sourceTarget = sourceTarget
+    return true
+end
+
+function Library.GetGroupTargetMarkers()
+    local collection, ownerKey = EnsureCollection(true)
+    local markers = {}
+    for _, sequenceID in ipairs(collection.order or {}) do
+        local sequence = collection.sequences[sequenceID]
+        local version = sequence and sequence.versions and sequence.versions[sequence.activeVersionId]
+        for blockIndex, block in ipairs(version and version.blocks or {}) do
+            local marker = type(block) == "table" and block.groupTarget or nil
+            if block.enabled ~= false and type(marker) == "table" and Trim(marker.id) ~= "" then
+                local sourceTarget = ValidateGroupTargetBlock(block)
+                if sourceTarget then
+                    local markerRecord = {
+                        id = marker.id,
+                        name = Trim(marker.name) ~= "" and marker.name or "Group Target",
+                        sourceTarget = sourceTarget,
+                        ownerKey = ownerKey,
+                        sequenceID = sequenceID,
+                        sequenceName = sequence.name,
+                        versionID = version.id,
+                        versionName = version.name,
+                        blockIndex = blockIndex,
+                    }
+                    table.insert(markers, markerRecord)
+                    local assignment = EnsureRoot().groupTargetAssignments[marker.id]
+                    if type(assignment) == "table" then
+                        assignment.markerName = markerRecord.name
+                        assignment.ownerKey = ownerKey
+                        assignment.sequenceID = sequenceID
+                        assignment.versionID = version.id
+                        assignment.blockIndex = blockIndex
+                    end
+                end
+            end
+        end
+    end
+    return markers
+end
+
+local function RosterByGUID()
+    local map = {}
+    for _, member in ipairs(GroupTargetRoster()) do map[member.guid] = member end
+    return map
+end
+
+function Library.GetGroupTargetAssignment(markerID)
+    local assignment = EnsureRoot().groupTargetAssignments[markerID]
+    return type(assignment) == "table" and DeepCopy(assignment) or nil
+end
+
+local function AssignGroupTargetMember(markerID, member)
+    if InCombat() then return false, "Group Targets are locked during combat." end
+    if not IsGrouped() then return false, "Join a group before choosing a temporary macro target." end
+    local marker
+    for _, candidate in ipairs(Library.GetGroupTargetMarkers()) do
+        if candidate.id == markerID then marker = candidate; break end
+    end
+    if not marker then return false, "That marked macro is not available in the active version." end
+    if not member then return false, "Choose a current group member." end
+    local root = EnsureRoot()
+    local previous = DeepCopy(root.groupTargetAssignments[markerID])
+    root.groupTargetAssignments[markerID] = {
+        markerID = markerID,
+        markerName = marker.name,
+        ownerKey = marker.ownerKey,
+        sequenceID = marker.sequenceID,
+        versionID = marker.versionID,
+        blockIndex = marker.blockIndex,
+        targetGUID = member.guid,
+        targetName = member.name,
+        appliedUnit = member.selector,
+        currentUnit = member.selector,
+        needsUpdate = false,
+        changedAt = Now(),
+    }
+    local applied, message = Library.ApplyAll("temporary group target changed")
+    if not applied then
+        root.groupTargetAssignments[markerID] = previous
+        Library.ApplyAll("temporary group target restored after failed change")
+    end
+    NotifyGroupTargets("assignment changed")
+    if not applied then return false, message end
+    return true, tostring(marker.name) .. " now temporarily targets " .. tostring(member.name) .. " (" .. tostring(member.selector) .. ")."
+end
+
+function Library.AssignGroupTarget(markerID, targetGUID)
+    return AssignGroupTargetMember(markerID, RosterByGUID()[targetGUID])
+end
+
+function Library.AssignGroupTargetUnit(markerID, targetUnit)
+    local member
+    for _, candidate in ipairs(GroupTargetRoster()) do
+        if candidate.unit == targetUnit then member = candidate; break end
+    end
+    return AssignGroupTargetMember(markerID, member)
+end
+
+function Library.ClearGroupTarget(markerID)
+    if InCombat() then return false, "Group Targets are locked during combat." end
+    local root = EnsureRoot()
+    if not root.groupTargetAssignments[markerID] then return true, "This macro is already using its saved target." end
+    local previous = DeepCopy(root.groupTargetAssignments[markerID])
+    root.groupTargetAssignments[markerID] = nil
+    local applied, message = Library.ApplyAll("temporary group target restored")
+    if not applied then
+        root.groupTargetAssignments[markerID] = previous
+        Library.ApplyAll("temporary group target restored after failed reset")
+    end
+    NotifyGroupTargets("assignment cleared")
+    if not applied then return false, message end
+    return true, "The macro is using its original saved target again."
+end
+
+function Library.AcknowledgeGroupTargetChange(markerID)
+    local assignment = EnsureRoot().groupTargetAssignments[markerID]
+    if type(assignment) ~= "table" then return end
+    assignment.acknowledgedChangeKey = assignment.changeKey
+    NotifyGroupTargets("position change acknowledged")
+end
+
+function Library.RefreshGroupTargetPositions(reason)
+    local root = EnsureRoot()
+    if not IsGrouped() then
+        if Library.groupTargetRosterGraceUntil and Now() < Library.groupTargetRosterGraceUntil then return end
+        local hadAssignments = next(root.groupTargetAssignments) ~= nil
+        root.groupTargetAssignments = {}
+        if hadAssignments then
+            if InCombat() then Library.pendingApply = true else Library.ApplyAll("group ended; saved targets restored") end
+            NotifyGroupTargets("group ended")
+        end
+        return
+    end
+    Library.groupTargetRosterGraceUntil = nil
+    local byGUID = RosterByGUID()
+    local changed = false
+    for markerID, assignment in pairs(root.groupTargetAssignments) do
+        if type(assignment) ~= "table" then
+            root.groupTargetAssignments[markerID] = nil
+        else
+            local member = byGUID[assignment.targetGUID]
+            local currentUnit = member and member.selector or nil
+            local changeKey = tostring(assignment.appliedUnit or "") .. ">" .. tostring(currentUnit or "missing")
+            assignment.currentUnit = currentUnit
+            assignment.currentName = member and member.name or assignment.targetName
+            assignment.needsUpdate = currentUnit ~= assignment.appliedUnit
+            if assignment.needsUpdate then
+                if assignment.changeKey ~= changeKey then
+                    assignment.changeKey = changeKey
+                    assignment.acknowledgedChangeKey = nil
+                    changed = true
+                end
+            else
+                assignment.changeKey = nil
+                assignment.acknowledgedChangeKey = nil
+            end
+        end
+    end
+    if Library.groupTargetsAwaitingRoster then
+        Library.groupTargetsAwaitingRoster = false
+        if InCombat() then Library.pendingApply = true else Library.ApplyAll("group restored after login or reload") end
+    end
+    if changed then NotifyGroupTargets(reason or "group positions changed") else NotifyGroupTargets(reason or "roster refreshed") end
+end
+
+function Library.GetPendingGroupTargetChanges()
+    local pending = {}
+    local ownerKey = CurrentOwner()
+    for markerID, assignment in pairs(EnsureRoot().groupTargetAssignments) do
+        if type(assignment) == "table" and assignment.ownerKey == ownerKey and assignment.needsUpdate and assignment.changeKey ~= assignment.acknowledgedChangeKey then
+            local copy = DeepCopy(assignment)
+            copy.markerID = markerID
+            table.insert(pending, copy)
+        end
+    end
+    table.sort(pending, function(a, b) return tostring(a.markerName or a.markerID) < tostring(b.markerName or b.markerID) end)
+    return pending
+end
 
 local function AddBindingModifier(binding, modifierKey)
     local modifiers = { CTRL = false, SHIFT = false, ALT = false }
@@ -1191,6 +1557,11 @@ function Library.DuplicateSequence(sequenceID)
         if version then
             local newID = NewID("version")
             version.id = newID
+            for _, block in ipairs(version.blocks or {}) do
+                if type(block.groupTarget) == "table" then
+                    block.groupTarget.id = NewID("group-target")
+                end
+            end
             versions[newID] = version
             table.insert(order, newID)
             if oldID == copy.activeVersionId then copy.activeVersionId = newID end
@@ -1201,6 +1572,7 @@ function Library.DuplicateSequence(sequenceID)
     collection.sequences[copy.id] = copy
     table.insert(collection.order, copy.id)
     Library.ApplySequence(copy.id, "sequence duplicated")
+    NotifyGroupTargets("sequence duplicated")
     return copy.id, "Sequence duplicated without a binding."
 end
 
@@ -1231,6 +1603,10 @@ function Library.SaveSequence(sequenceDraft)
                     return false, tostring(version.name) .. ": Macro " .. tostring(blockIndex) .. ": " .. tostring(validationMessage)
                 end
             end
+            local marked, markedMessage = Library.ValidateMarkedBlock(block)
+            if not marked then
+                return false, tostring(version.name) .. ": Macro " .. tostring(blockIndex) .. " Group Target: " .. tostring(markedMessage)
+            end
         end
         local _, message = ValidateVersion(version)
         if message then return false, tostring(version.name) .. ": " .. tostring(message) end
@@ -1246,6 +1622,9 @@ function Library.SaveSequence(sequenceDraft)
     if not applied then
         collection.sequences[sequenceDraft.id] = previousSequence
         Library.ApplySequence(sequenceDraft.id, "restored after failed save")
+    else
+        PruneMissingGroupTargetAssignments()
+        NotifyGroupTargets("sequence saved")
     end
     return applied, applied and "Sequence saved and secure bindings refreshed." or message
 end
@@ -1351,6 +1730,11 @@ function Library.NewVersion(sequenceDraft, name, duplicateVersionID)
     if duplicateVersionID and sequenceDraft.versions[duplicateVersionID] then
         version = DeepCopy(sequenceDraft.versions[duplicateVersionID])
         version.id = NewID("version")
+        for _, block in ipairs(version.blocks or {}) do
+            if type(block.groupTarget) == "table" then
+                block.groupTarget.id = NewID("group-target")
+            end
+        end
         version.name = UniqueName(sequenceDraft.versions, name or (tostring(version.name) .. " Copy"))
     else
         version = DefaultVersion(UniqueName(sequenceDraft.versions, name or "Version Default"))
@@ -1377,6 +1761,8 @@ function Library.DeleteSequence(sequenceID)
     sequenceSlots[sequenceID] = nil
     collection.sequences[sequenceID] = nil
     ArrayRemove(collection.order, sequenceID)
+    PruneMissingGroupTargetAssignments()
+    NotifyGroupTargets("sequence deleted")
     return true, "Sequence moved to the Recycle Bin for 30 days."
 end
 
@@ -1394,6 +1780,8 @@ function Library.DeleteVersion(sequenceID, versionID)
     })
     sequence.versions[versionID] = nil
     ArrayRemove(sequence.versionOrder, versionID)
+    PruneMissingGroupTargetAssignments()
+    NotifyGroupTargets("version deleted")
     if sequence.activeVersionId == versionID then sequence.activeVersionId = sequence.versionOrder[1] end
     sequence.updatedAt = Now()
     Library.ApplySequence(sequenceID, "version deleted")
@@ -1491,6 +1879,8 @@ function Library.ActivateVersion(sequenceID, versionID)
     if not applied then
         sequence.activeVersionId = previousVersionID
         Library.ApplySequence(sequenceID, "restored after failed version activation")
+    else
+        NotifyGroupTargets("version activated")
     end
     return applied, applied and "Version activated and reset to its first loop position." or message
 end
@@ -1755,6 +2145,8 @@ events:RegisterEvent("PLAYER_REGEN_ENABLED")
 events:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 events:RegisterEvent("SPELLS_CHANGED")
 events:RegisterEvent("PLAYER_TALENT_UPDATE")
+events:RegisterEvent("GROUP_ROSTER_UPDATE")
+events:RegisterEvent("PLAYER_ENTERING_WORLD")
 
 events:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
@@ -1764,10 +2156,14 @@ events:SetScript("OnEvent", function(_, event, arg1)
     if event == "PLAYER_LOGIN" then
         MigratePrototype()
         Library.RefreshSpellbook()
+        local assignments = EnsureRoot().groupTargetAssignments
+        Library.groupTargetsAwaitingRoster = next(assignments) ~= nil and not IsGrouped()
+        Library.groupTargetRosterGraceUntil = Library.groupTargetsAwaitingRoster and (Now() + 5) or nil
         Library.ApplyAll("login or reload")
         return
     end
     if event == "PLAYER_REGEN_ENABLED" then
+        Library.RefreshGroupTargetPositions("combat ended")
         if Library.pendingClearBindings then
             ClearAllBindings()
             Library.pendingClearBindings = false
@@ -1782,6 +2178,16 @@ events:SetScript("OnEvent", function(_, event, arg1)
     if event == "PLAYER_SPECIALIZATION_CHANGED" and (arg1 == nil or arg1 == "player") then
         Library.RefreshSpellbook()
         Library.ApplyAll("specialization change")
+        NotifyGroupTargets("specialization changed")
+        return
+    end
+    if event == "PLAYER_ENTERING_WORLD" then
+        local function settleRoster() Library.RefreshGroupTargetPositions("world entered") end
+        if C_Timer and C_Timer.After then C_Timer.After(5, settleRoster) else settleRoster() end
+        return
+    end
+    if event == "GROUP_ROSTER_UPDATE" then
+        Library.RefreshGroupTargetPositions("group roster changed")
         return
     end
     if event == "SPELLS_CHANGED" or event == "PLAYER_TALENT_UPDATE" then
