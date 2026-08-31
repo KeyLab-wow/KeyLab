@@ -15,6 +15,18 @@ KeyLab.GearLootMapping = Mapping
 
 local SECONDARY_STATS = { Crit = true, Haste = true, Mastery = true, Vers = true }
 local PRIMARY_STATS = { Agi = true, Int = true, Str = true, Stam = true }
+local EQUIPMENT_PRIMARY_STATS = { Agi = true, Int = true, Str = true }
+local INTELLECT_SPECS = {
+    [62] = true, [63] = true, [64] = true, [65] = true, [102] = true, [105] = true,
+    [256] = true, [257] = true, [258] = true, [262] = true, [264] = true,
+    [265] = true, [266] = true, [267] = true, [270] = true,
+    [1467] = true, [1468] = true, [1473] = true,
+}
+local AGILITY_SPECS = {
+    [103] = true, [104] = true, [253] = true, [254] = true, [255] = true,
+    [259] = true, [260] = true, [261] = true, [263] = true, [268] = true,
+    [269] = true, [577] = true, [581] = true, [1480] = true,
+}
 local CATALYST_SLOT_BASES = {
     Head = true, Shoulders = true, Back = true, Chest = true, Wrist = true,
     Hands = true, Waist = true, Legs = true, Feet = true,
@@ -32,6 +44,44 @@ end
 
 local function SearchText(value)
     return string.lower(CleanText(value))
+end
+
+local function RaidAcronym(raidName)
+    local letters = {}
+    for word in tostring(raidName or ""):gmatch("%S+") do
+        local letter = word:match("[%w]")
+        if letter then table.insert(letters, string.upper(letter)) end
+    end
+    return table.concat(letters)
+end
+
+local function RaidDropDisplayName(item, sourceID, source)
+    if not item or not source or source.sourceType ~= "Raid" then return nil end
+    sourceID = tonumber(sourceID)
+    local itemSource = sourceID and item.sources and item.sources[sourceID]
+    local encounterIDs = itemSource and itemSource.encounterIDs or {}
+    if #encounterIDs == 0 then return nil end
+
+    local raidMapping = KeyLab.Mapping and KeyLab.Mapping.Raids
+    local instanceID = tonumber(source.instanceID) or tonumber(source.sourceID) or sourceID
+    local raid = raidMapping and raidMapping.GetInstance and raidMapping.GetInstance(instanceID)
+    if not raid then return nil end
+
+    local raidName = raid.name or source.sourceName or source.name or tostring(sourceID or "")
+    local acronym = RaidAcronym(raidName)
+    local labels, seen = {}, {}
+    for _, encounterID in ipairs(encounterIDs) do
+        local bossName = raid.encounterNames and raid.encounterNames[tonumber(encounterID)]
+        if bossName then
+            local label = tostring(bossName) .. (acronym ~= "" and (" - " .. acronym) or "")
+            if not seen[label] then
+                seen[label] = true
+                table.insert(labels, label)
+            end
+        end
+    end
+    table.sort(labels)
+    return #labels > 0 and table.concat(labels, ", ") or nil
 end
 
 local function AddUnique(list, seen, value)
@@ -313,6 +363,79 @@ function Mapping.GetSourceListForSpec(specID, sourceType)
     return out
 end
 
+local function ItemHasEncounter(item, sourceID, encounterID)
+    sourceID = tonumber(sourceID)
+    encounterID = tonumber(encounterID)
+    if not item or not encounterID then return false end
+
+    for candidateSourceID, itemSource in pairs(item.sources or {}) do
+        candidateSourceID = tonumber(candidateSourceID)
+        if not sourceID or candidateSourceID == sourceID then
+            for _, candidateEncounterID in ipairs(itemSource and itemSource.encounterIDs or {}) do
+                if tonumber(candidateEncounterID) == encounterID then return true end
+            end
+        end
+    end
+    return false
+end
+
+function Mapping.ItemHasEncounter(itemOrItemID, sourceID, encounterID)
+    local db = DB()
+    local item = type(itemOrItemID) == "table" and itemOrItemID or (db and db.items and db.items[tonumber(itemOrItemID)])
+    return ItemHasEncounter(item, sourceID, encounterID)
+end
+
+function Mapping.GetRaidBossListForSpec(specID)
+    local db = DB()
+    local indexes = Mapping.BuildIndexes()
+    specID = tonumber(specID)
+    if not db or not indexes or not specID then return {} end
+
+    local out = {}
+    local raidMapping = KeyLab.Mapping and KeyLab.Mapping.Raids
+    for _, sourceID in ipairs(indexes.raidsBySpec[specID] or {}) do
+        local source = db.sources and db.sources[sourceID]
+        local instanceID = source and (tonumber(source.instanceID) or tonumber(source.sourceID)) or tonumber(sourceID)
+        local raid = raidMapping and raidMapping.GetInstance and raidMapping.GetInstance(instanceID)
+        if raid then
+            local encounterHasLoot = {}
+            for _, itemID in ipairs((db.bySpec and db.bySpec[specID] and db.bySpec[specID][sourceID]) or {}) do
+                local item = db.items and db.items[tonumber(itemID)]
+                local itemSource = item and item.sources and item.sources[sourceID]
+                for _, encounterID in ipairs(itemSource and itemSource.encounterIDs or {}) do
+                    encounterHasLoot[tonumber(encounterID)] = true
+                end
+            end
+
+            for encounterID, bossName in pairs(raid.encounterNames or {}) do
+                encounterID = tonumber(encounterID)
+                if encounterHasLoot[encounterID] then
+                    local raidName = raid.name or source.sourceName or source.name or tostring(sourceID)
+                    table.insert(out, {
+                        sourceID = tonumber(sourceID),
+                        instanceID = instanceID,
+                        encounterID = encounterID,
+                        bossName = bossName,
+                        raidName = raidName,
+                        text = tostring(bossName) .. " - " .. tostring(raidName),
+                    })
+                end
+            end
+        end
+    end
+
+    table.sort(out, function(a, b)
+        if tostring(a.raidName or "") ~= tostring(b.raidName or "") then
+            return tostring(a.raidName or "") < tostring(b.raidName or "")
+        end
+        if tostring(a.bossName or "") ~= tostring(b.bossName or "") then
+            return tostring(a.bossName or "") < tostring(b.bossName or "")
+        end
+        return tonumber(a.encounterID or 0) < tonumber(b.encounterID or 0)
+    end)
+    return out
+end
+
 function Mapping.GetDungeonList()
     return Mapping.GetSourceList("Dungeon")
 end
@@ -382,27 +505,84 @@ function Mapping.IsCurrentSeasonItem(itemOrItemID, season)
     return tonumber(item.mnSeason or db.mnSeason or db.season) == season
 end
 
+function Mapping.GetPrimaryStatForSpec(specID)
+    specID = tonumber(specID)
+    if not specID then return nil end
+    if INTELLECT_SPECS[specID] then return "Int" end
+    if AGILITY_SPECS[specID] then return "Agi" end
+    return "Str"
+end
+
+local function NormalizePrimaryStats(stats, specID)
+    if type(stats) ~= "table" then return {} end
+    local expected = Mapping.GetPrimaryStatForSpec(specID)
+    if not expected then return stats end
+
+    local primaryValue = 0
+    for stat in pairs(EQUIPMENT_PRIMARY_STATS) do
+        primaryValue = math.max(primaryValue, tonumber(stats[stat]) or 0)
+    end
+    if primaryValue <= 0 then return stats end
+    if (tonumber(stats[expected]) or 0) == primaryValue then
+        local alreadyCorrect = true
+        for stat in pairs(EQUIPMENT_PRIMARY_STATS) do
+            if stat ~= expected and (tonumber(stats[stat]) or 0) > 0 then alreadyCorrect = false end
+        end
+        if alreadyCorrect then return stats end
+    end
+
+    local normalized = CopyTable(stats)
+    for stat in pairs(EQUIPMENT_PRIMARY_STATS) do normalized[stat] = nil end
+    normalized[expected] = primaryValue
+    return normalized
+end
+
 function Mapping.GetItemStats(itemOrItemID, specID)
     local db = DB()
     local itemID = type(itemOrItemID) == "table" and tonumber(itemOrItemID.itemID) or tonumber(itemOrItemID)
     specID = tonumber(specID)
     if db and db.statsBySpec and itemID and specID and db.statsBySpec[itemID] then
-        return db.statsBySpec[itemID][specID] or {}
+        return NormalizePrimaryStats(db.statsBySpec[itemID][specID] or {}, specID)
     end
     local item = type(itemOrItemID) == "table" and itemOrItemID or (db and db.items and db.items[itemID])
-    return item and item.stats or {}
+    return NormalizePrimaryStats(item and item.stats or {}, specID)
 end
 
 function Mapping.GetDisplayStatText(itemOrItemID, specID)
     local db = DB()
     local itemID = type(itemOrItemID) == "table" and tonumber(itemOrItemID.itemID) or tonumber(itemOrItemID)
     specID = tonumber(specID)
+    local text
     if db and db.statTextBySpec and itemID and specID and db.statTextBySpec[itemID] then
-        local text = db.statTextBySpec[itemID][specID]
-        if text and text ~= "" then return text end
+        text = db.statTextBySpec[itemID][specID]
     end
     local item = type(itemOrItemID) == "table" and itemOrItemID or (db and db.items and db.items[itemID])
-    return item and item.statText and item.statText ~= "" and item.statText or "-"
+    if not text or text == "" then text = item and item.statText or "" end
+
+    local stats = Mapping.GetItemStats(itemOrItemID, specID)
+    local expected = Mapping.GetPrimaryStatForSpec(specID)
+    if expected and (tonumber(stats and stats[expected]) or 0) > 0 then
+        local parts, sawPrimary = {}, false
+        for token in tostring(text or ""):gmatch("[^,]+") do
+            token = token:gsub("^%s+", ""):gsub("%s+$", "")
+            local shortToken = token == "Agility" and "Agi"
+                or token == "Intellect" and "Int"
+                or token == "Strength" and "Str"
+                or token
+            if EQUIPMENT_PRIMARY_STATS[shortToken] then
+                if not sawPrimary then
+                    table.insert(parts, expected)
+                    sawPrimary = true
+                end
+            elseif token ~= "" then
+                table.insert(parts, token)
+            end
+        end
+        if not sawPrimary then table.insert(parts, 1, expected) end
+        text = table.concat(parts, ", ")
+    end
+
+    return text and text ~= "" and text or "-"
 end
 
 function Mapping.ResolvePrimaryStat(itemOrItemID, specID)
@@ -495,22 +675,26 @@ local function WithDisplaySource(item, sourceID, specID, classID, sourceType)
         sources = Mapping.GetItemSources(item.itemID, specID, sourceType)
     end
 
-    local sourceNames, sourceIDs, sourceTypes = {}, {}, {}
-    local nameSeen, idSeen, typeSeen = {}, {}, {}
+    local sourceNames, displaySourceNames, sourceIDs, sourceTypes = {}, {}, {}, {}
+    local nameSeen, displayNameSeen, idSeen, typeSeen = {}, {}, {}, {}
     for _, source in ipairs(sources) do
         local id = tonumber(source.sourceID or source.mapID or source.instanceID)
         local name = source.sourceName or source.name or tostring(id or "")
         AddUnique(sourceNames, nameSeen, name)
+        AddUnique(displaySourceNames, displayNameSeen, RaidDropDisplayName(item, id, source) or name)
         AddUniqueNumber(sourceIDs, idSeen, id)
         AddUnique(sourceTypes, typeSeen, source.sourceType)
     end
     table.sort(sourceNames)
+    table.sort(displaySourceNames)
     SortNumbers(sourceIDs)
     table.sort(sourceTypes)
     out.sourceNames = sourceNames
+    out.displaySourceNames = displaySourceNames
     out.sourceIDs = sourceIDs
     out.sourceTypes = sourceTypes
     out.sourceName = table.concat(sourceNames, ", ")
+    out.displaySourceName = table.concat(displaySourceNames, ", ")
     out.sourceID = #sourceIDs == 1 and sourceIDs[1] or sourceID
     out.sourceType = #sourceTypes == 1 and sourceTypes[1] or nil
     out.sourceNameNormalized = out.sourceName
@@ -589,6 +773,7 @@ function Mapping.GetFilteredItems(filters)
     local specID = tonumber(filters.specID)
     local classID = tonumber(filters.classID)
     local sourceID = tonumber(filters.sourceID or filters.mapID)
+    local encounterID = tonumber(filters.encounterID)
     local sourceType = NormalizeSourceType(filters.sourceType or filters.itemType)
     local season = tonumber(filters.mnSeason or filters.season or db.mnSeason or db.season)
     local slot = Mapping.NormalizeSlotName(filters.slot)
@@ -610,6 +795,7 @@ function Mapping.GetFilteredItems(filters)
         if classID and not specID and not Mapping.IsItemEligibleForClass(item, classID) then return end
         if season and not Mapping.IsCurrentSeasonItem(item, season) then return end
         if sourceID and not (item.sources and item.sources[sourceID]) then return end
+        if encounterID and not ItemHasEncounter(item, sourceID, encounterID) then return end
         if sourceType and not ItemHasSourceType(itemID, specID, sourceType) then return end
         local normalizedSlot = Mapping.NormalizeSlotName(item.slot)
         if slot and slot ~= "" and slot ~= "All" and normalizedSlot ~= slot then return end
