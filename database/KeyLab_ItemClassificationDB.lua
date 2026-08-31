@@ -39,7 +39,7 @@ local TIER_GROUPS = {
     { firstItemID = 271469, classID = 6, classFile = "DEATHKNIGHT", className = "Death Knight", setID = 2055 },
     { firstItemID = 271559, classID = 8, classFile = "MAGE", className = "Mage", setID = 2060 },
     { firstItemID = 271460, classID = 2, classFile = "PALADIN", className = "Paladin", setID = 2062 },
-    { firstItemID = 271478, classID = 13, classFile = "EVOKER", className = "Evoker", setID = 2065 },
+    { firstItemID = 271478, classID = 7, classFile = "SHAMAN", className = "Shaman", setID = 2058 },
     { firstItemID = 271523, classID = 11, classFile = "DRUID", className = "Druid", setID = 2057 },
     { firstItemID = 271487, classID = 3, classFile = "HUNTER", className = "Hunter", setID = 2059 },
     { firstItemID = 271550, classID = 5, classFile = "PRIEST", className = "Priest", setID = 2063 },
@@ -48,7 +48,7 @@ local TIER_GROUPS = {
     { firstItemID = 271514, classID = 10, classFile = "MONK", className = "Monk", setID = 2061 },
     { firstItemID = 271541, classID = 9, classFile = "WARLOCK", className = "Warlock", setID = 2066 },
     { firstItemID = 271532, classID = 12, classFile = "DEMONHUNTER", className = "Demon Hunter", setID = 2056 },
-    { firstItemID = 271496, classID = 7, classFile = "SHAMAN", className = "Shaman", setID = 2058 },
+    { firstItemID = 271496, classID = 13, classFile = "EVOKER", className = "Evoker", setID = 2065 },
 }
 
 local nativeTierItems = {}
