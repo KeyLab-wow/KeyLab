@@ -788,8 +788,11 @@ local function BuildGearShoppingPlan(filters)
         end
     end
     for _, item in ipairs(allAlternatives) do
-        if not ShoppingItemIsOwned(item, dashboardState, bagItems) then
-            table.insert(alternatives, item)
+        local ownedTrack, owned = GetBestOwnedTargetTrack(item.itemID, dashboardState, bagItems)
+        -- Alternatives remain useful upgrade choices at lower tracks, just
+        -- like Targets. Only a confirmed Myth copy completes an Alternative.
+        if ownedTrack ~= "Myth" then
+            table.insert(alternatives, ShoppingTargetWithOwnedTrack(item, ownedTrack, owned))
         end
     end
 
@@ -818,7 +821,10 @@ local function BuildProgress(specID, slotsByName)
         if target then
             total = total + 1
             local slot = slotsByName[slotName]
-            if slot and tonumber(slot.itemID) == tonumber(target.itemID) then equipped = equipped + 1 end
+            local trackName = tostring(slot and (slot.upgradeTrack or slot.trackName) or "")
+            if slot and tonumber(slot.itemID) == tonumber(target.itemID) and trackName == "Myth" then
+                equipped = equipped + 1
+            end
         end
     end
     return { total = total, equipped = equipped }

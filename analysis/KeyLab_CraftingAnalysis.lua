@@ -119,6 +119,66 @@ function Analysis.GetRecipe(recipeID)
     return PrepareRecipe(Database().recipes and Database().recipes[tonumber(recipeID)] or nil)
 end
 
+-- Display placement only: never changes crafted plans or saved loot targets.
+function Analysis.GetDashboardPlans(specID, slots)
+    local bySlot, pending = {}, {}
+    local saved = KeyLab.CraftedPlansDB and KeyLab.CraftedPlansDB.GetPlans
+        and KeyLab.CraftedPlansDB.GetPlans(specID) or {}
+    slots = slots or {}
+    for _, plan in ipairs(saved) do
+        local recipe = Analysis.GetRecipe(plan.recipeID)
+        if recipe then
+            local candidates
+            if plan.slotInstance then candidates = {plan.slotInstance}
+            elseif recipe.slot == "Finger" then candidates = {"Finger 1", "Finger 2"}
+            elseif recipe.slot == "Trinket" then candidates = {"Trinket 1", "Trinket 2"}
+            elseif recipe.slot == "One-Hand" or recipe.slot == "Two-Hand" or recipe.slot == "Ranged" then
+                candidates = {"Main Hand"}
+                -- Recognize a planned weapon already equipped off-hand without
+                -- treating every weapon recipe as a dual-wield recommendation.
+                if slots["Off Hand"] and tonumber(slots["Off Hand"].itemID) == tonumber(recipe.itemID) then
+                    candidates = {"Off Hand", "Main Hand"}
+                end
+            else candidates = {recipe.slot} end
+            pending[#pending + 1] = {recipe = recipe, candidates = candidates}
+        end
+    end
+    local function Place(entry, slotName)
+        bySlot[slotName] = bySlot[slotName] or {}
+        table.insert(bySlot[slotName], entry.recipe)
+        entry.placed = true
+    end
+    -- Keep matching equipped rings/trinkets in their actual slot first.
+    for _, entry in ipairs(pending) do
+        for _, slotName in ipairs(entry.candidates) do
+            if slots[slotName] and tonumber(slots[slotName].itemID) == tonumber(entry.recipe.itemID) then
+                Place(entry, slotName)
+                break
+            end
+        end
+    end
+    for _, entry in ipairs(pending) do
+        if not entry.placed then
+            local chosen
+            for _, slotName in ipairs(entry.candidates) do
+                if slots[slotName] and not bySlot[slotName] and not slots[slotName].target then chosen = slotName; break end
+            end
+            if not chosen then
+                for _, slotName in ipairs(entry.candidates) do
+                    if slots[slotName] and not bySlot[slotName] then chosen = slotName; break end
+                end
+            end
+            if not chosen then
+                for _, slotName in ipairs(entry.candidates) do
+                    if slots[slotName] then chosen = slotName; break end
+                end
+            end
+            if chosen then Place(entry, chosen) end
+        end
+    end
+    return bySlot
+end
+
 function Analysis.GetRecipes(filters)
     filters = filters or {}
     local search = Lower(Trim(filters.search))
