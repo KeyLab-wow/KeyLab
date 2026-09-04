@@ -4,7 +4,7 @@
 
 Follow your favorite guide. Find gear that fits your goals. See what works for you.
 
-KeyLab brings gear planning, guide recommendations, talent switching, practice, and run history together—right inside the game.
+KeyLab brings gear planning, guide recommendations, talent switching, practice, and run history together right inside the game.
 
 Less time keeping notes. More time playing.
 
@@ -18,7 +18,7 @@ Browse **Wowhead and Icy Veins gear and talent recommendations** for your class 
 - **Configure crafted items** separately and add them to your crafting plan.
 - See the original gear recommended for **Catalyst conversion**, not just the finished tier piece.
 
-## <span style="color:#2DC26B;">Follow a gear list—or find your own path</span>
+## <span style="color:#2DC26B;">Follow a gear list or find your own path</span>
 
 You don’t have to chase one exact list of items.
 
@@ -46,7 +46,7 @@ The **Group Dashboard** keeps useful group information together.
 - Check player roles, specs, item levels, and visible buffs.
 - Review group capabilities, with inherent abilities separated from talent- and pet-dependent options.
 - Use the movable **Group Snapshot** for a compact view and quick talent switching.
-- Temporarily point a saved support macro at a group member—such as Misdirection on the tank. It returns to its original target when you leave the group.
+- Temporarily point a saved support macro at a group member such as Misdirection on the tank. It returns to its original target when you leave the group.
 
 ## <span style="color:#2DC26B;">See what works for you</span>
 
