@@ -498,6 +498,14 @@ FinalizePull = function(finalAttempt, token)
         -- checkpointed after every completed boss pull.
         CloseNight("raid in progress", false, true)
     end
+    -- Use the completed capture, after its existing Damage Meter read/retry,
+    -- rather than a second raw ENCOUNTER_END listener in the popup. Reminder
+    -- failures must never prevent a boss pull from being saved.
+    local reminders = KeyLab.GearTargetsWindow
+    if pull.killed == true and reminders and reminders.NotifyRaidEncounterSaved then
+        local reminderOK, reminderResult = pcall(reminders.NotifyRaidEncounterSaved, encounter)
+        Probe("RAID REMINDER " .. (reminderOK and tostring(reminderResult) or "failed safely"))
+    end
     return true, result
 end
 
