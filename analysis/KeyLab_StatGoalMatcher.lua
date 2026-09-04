@@ -380,8 +380,7 @@ local function NormalizeMasterCandidates(candidates, specID)
     for _, item in ipairs(candidates or {}) do
         local slot = tostring(item.slot or "Unknown")
         local itemLevel = tonumber(item.itemLevel) or 0
-        local stats = KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetItemStats
-            and CopyStats(KeyLab.GearLootMapping.GetItemStats(item, specID)) or CopyStats(item.stats)
+        local stats = ItemStats(item, specID)
         local total = StatsTotal(stats)
         if total > 0 then
             cohorts[slot] = cohorts[slot] or {}
@@ -509,6 +508,7 @@ local function GetLiveItemStats(itemLink, tooltipLines)
     local priority = ZeroPriority()
     local enhancements = ZeroStats()
     local hasItemStats = false
+    local primaryStats = { known = false }
     local function ReadStatTable(values, target, addValues)
         if type(values) ~= "table" then return end
         for rawKey, rawValue in pairs(values) do
@@ -523,6 +523,9 @@ local function GetLiveItemStats(itemLink, tooltipLines)
             if target == out and key:find("STAMINA", 1, true) then priority.stamina = math.max(priority.stamina, value) end
             if target == out and (key:find("STRENGTH", 1, true) or key:find("AGILITY", 1, true) or key:find("INTELLECT", 1, true)) then
                 priority.primary = math.max(priority.primary, value)
+                for label, stat in pairs({AGILITY="Agi", INTELLECT="Int", STRENGTH="Str"}) do
+                    if key:find(label, 1, true) then primaryStats[stat] = math.max(primaryStats[stat] or 0, value) end
+                end
             end
         end
     end
@@ -530,6 +533,7 @@ local function GetLiveItemStats(itemLink, tooltipLines)
         local ok, values = pcall(C_Item.GetItemStats, itemLink)
         if ok and type(values) == "table" then
             hasItemStats = true
+            primaryStats.known = true
             ReadStatTable(values, out, false)
         end
     end
@@ -571,7 +575,7 @@ local function GetLiveItemStats(itemLink, tooltipLines)
             end
         end
     end
-    return out, priority, enhancements
+    return out, priority, enhancements, primaryStats
 end
 
 local function GetBagTooltipLines(bagID, bagSlot, itemLink)
@@ -647,7 +651,7 @@ end
 local function OwnedSlotInstances(slot, itemID, specID)
     local mapping = KeyLab.GearLootMapping
     local known = mapping and mapping.GetItem and mapping.GetItem(itemID, specID) or nil
-    if known and mapping.IsItemEligibleForSpec and not mapping.IsItemEligibleForSpec(known, specID) then return {} end
+    if known and mapping.GetTargetSlotInstances then return mapping.GetTargetSlotInstances(known,specID) end
     if known and mapping.GetEligibleSlotInstances then
         local knownSlots = mapping.GetEligibleSlotInstances(known, specID)
         if #knownSlots > 0 then return knownSlots end
@@ -698,8 +702,8 @@ local function GetOwnedBagCandidates(specID)
                 local _, _, _, equipLoc, icon = GetItemInfoInstant(itemLink)
                 local slot = OWNED_SLOT_BY_EQUIP_LOC[tostring(equipLoc or "")]
                 local tooltipLines = slot and GetBagTooltipLines(bagID, bagSlot, itemLink) or {}
-                local stats, priority, enhancements
-                if slot then stats, priority, enhancements = GetLiveItemStats(itemLink, tooltipLines) end
+                local stats, priority, enhancements, primaryStats
+                if slot then stats, priority, enhancements, primaryStats = GetLiveItemStats(itemLink, tooltipLines) end
                 priority = CopyPriority(priority)
                 local upgrade = ParseUpgradeTrack(tooltipLines)
                 local currentItemLevel = GetLiveItemLevel(itemLink)
@@ -714,8 +718,8 @@ local function GetOwnedBagCandidates(specID)
                     if GetItemInfo then name, resolvedLink = GetItemInfo(itemLink) end
                     local known = KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetItem
                         and KeyLab.GearLootMapping.GetItem(itemID, specID) or nil
-                    local dualWield = known and KeyLab.GearLootMapping.IsDualWieldEligible
-                        and KeyLab.GearLootMapping.IsDualWieldEligible(itemID, specID) or false
+                    local dualWield = known and KeyLab.GearLootMapping.IsTargetDualWieldEligible
+                        and KeyLab.GearLootMapping.IsTargetDualWieldEligible(itemID, specID) or false
                     if not dualWield and equipLoc == "INVTYPE_WEAPON" and DUAL_WIELD_SPECS[tonumber(specID)] then dualWield = true end
                     if not dualWield and equipLoc == "INVTYPE_2HWEAPON" and tonumber(specID) == 72 then dualWield = true end
                     local record = {
@@ -730,6 +734,7 @@ local function GetOwnedBagCandidates(specID)
                         sourceType = "Owned",
                         ownedLocation = "Bags",
                         currentOwnedStats = currentStats,
+                        ownedPrimaryStats = primaryStats,
                         ownedStats = projectedStats,
                         stats = projectedStats,
                         matcherStats = projectedStats,
@@ -819,7 +824,7 @@ local function ScanEquipment(specID)
                 })
             end
             local item = mapping and mapping.GetItem and mapping.GetItem(slot.itemID, specID) or nil
-            if item and mapping.IsItemEligibleForSpec(item, specID) and mapping.IsCurrentSeasonItem(item) then
+            if item and mapping.GetTargetSlotInstances and #mapping.GetTargetSlotInstances(item,specID)>0 and mapping.IsCurrentSeasonItem(item) then
                 table.insert(snapshot.recognized, {
                     itemID = tonumber(slot.itemID),
                     slotInstance = slotInstance,
@@ -856,7 +861,7 @@ local function PartitionCandidates(specID, itemType, suppliedCandidates)
             bySlot[slotInstance] = bySlot[slotInstance] or {}
             table.insert(bySlot[slotInstance], item)
         end
-        if item.slot == "One-Hand" or item.slot == "Two-Hand" or item.slot == "Ranged" then
+        if item.slot == "One-Hand" or item.slot == "Main Hand" or item.slot == "Two-Hand" or item.slot == "Ranged" then
             table.insert(mainWeapons, item)
             if item.dualWieldEligible then table.insert(dualWeapons, item) end
         elseif item.slot == "Off Hand" then
@@ -897,6 +902,8 @@ end
 local function WeaponAssignment(slotInstance, group)
     return {
         slotInstance = slotInstance,
+        weaponSlot = group.item.slot,
+        equipLoc = group.item.equipLoc,
         itemID = tonumber(group.item.itemID),
         sourceID = group.item.sourceID,
         equivalentItemIDs = group.itemIDs,
@@ -914,7 +921,51 @@ local function WeaponAssignment(slotInstance, group)
     }
 end
 
-local function BuildWeaponOptions(specID, snapshot, mainWeapons, offHandItems, dualWeapons)
+local function WeaponKind(itemOrSlot, specID, slotInstance)
+    if not itemOrSlot or not itemOrSlot.itemID then return nil end
+    local mapping = KeyLab.GearLootMapping
+    local known = mapping and mapping.GetItem and mapping.GetItem(itemOrSlot.itemID, specID)
+    local slot = mapping and mapping.NormalizeSlotName
+        and mapping.NormalizeSlotName(itemOrSlot.weaponSlot or (known and known.slot) or itemOrSlot.slot)
+    if slot == "Two-Hand" then return "two_hand" end
+    if slot == "Ranged" then return "ranged" end
+    if slot == "One-Hand" then return "one_hand" end
+    local link = itemOrSlot.itemLink or itemOrSlot.link
+    local equipLoc = itemOrSlot.equipLoc or (known and known.equipLoc)
+        or (link and GetItemInfoInstant and select(4, GetItemInfoInstant(link)))
+    if equipLoc == "INVTYPE_2HWEAPON" then return "two_hand" end
+    if equipLoc == "INVTYPE_WEAPON" or equipLoc == "INVTYPE_WEAPONMAINHAND" or equipLoc == "INVTYPE_WEAPONOFFHAND" then return "one_hand" end
+    if slotInstance == "Off Hand" then return "off_hand_item" end
+    return slot
+end
+
+local function WeaponOptionMatchesSetup(option, snapshot, specID, weaponSetup)
+    if not weaponSetup then return true end
+    local mainKind = WeaponKind(snapshot.slots["Main Hand"], specID, "Main Hand")
+    local offKind = WeaponKind(snapshot.slots["Off Hand"], specID, "Off Hand")
+    for _, assignment in ipairs(option.assignments or {}) do
+        local kind = WeaponKind(assignment, specID, assignment.slotInstance)
+        if assignment.slotInstance == "Main Hand" then mainKind = kind
+        elseif assignment.slotInstance == "Off Hand" then offKind = kind end
+    end
+    if weaponSetup == "two_hand" then return mainKind == "two_hand" and offKind == nil end
+    return weaponSetup == "dual_wield" and mainKind == "one_hand" and offKind == "one_hand"
+end
+
+local function ValidateEquippedWeaponSetup(snapshot, specID, weaponSetup)
+    if not weaponSetup then return true end
+    local mainKind = WeaponKind(snapshot.slots["Main Hand"], specID, "Main Hand")
+    local offKind = WeaponKind(snapshot.slots["Off Hand"], specID, "Off Hand")
+    if weaponSetup == "two_hand" and ((mainKind and mainKind ~= "two_hand") or offKind) then
+        return false, "Your equipped weapon slots conflict with Two-Handed. Unequip the conflicting weapon or off-hand before running the matcher."
+    end
+    if weaponSetup == "dual_wield" and ((mainKind and mainKind ~= "one_hand") or (offKind and offKind ~= "one_hand")) then
+        return false, "Your equipped weapon slots conflict with Dual Wield. Unequip the conflicting weapon, shield, or caster off-hand before running the matcher."
+    end
+    return true
+end
+
+local function BuildWeaponOptions(specID, snapshot, mainWeapons, offHandItems, dualWeapons, weaponSetup)
     local mainEquipped = snapshot.slots["Main Hand"] and snapshot.slots["Main Hand"].itemID
     local offEquipped = snapshot.slots["Off Hand"] and snapshot.slots["Off Hand"].itemID
     if mainEquipped and offEquipped then return nil end
@@ -927,7 +978,7 @@ local function BuildWeaponOptions(specID, snapshot, mainWeapons, offHandItems, d
 
     if mainEquipped and not offEquipped then
         local mainSlot = snapshot.slots["Main Hand"]
-        local knownDual = mapping and mapping.IsDualWieldEligible and mapping.IsDualWieldEligible(mainEquipped, specID)
+        local knownDual = mapping and mapping.IsTargetDualWieldEligible and mapping.IsTargetDualWieldEligible(mainEquipped, specID)
         local closesOffHand = mainSlot and KeyLab.GearCapture and KeyLab.GearCapture.IsTwoHandOrRangedWeapon
             and KeyLab.GearCapture.IsTwoHandOrRangedWeapon(mainSlot) and not knownDual
         if closesOffHand then return nil end
@@ -939,7 +990,7 @@ local function BuildWeaponOptions(specID, snapshot, mainWeapons, offHandItems, d
                 assignments = { WeaponAssignment("Off Hand", group) },
             })
         end
-        if knownDual then
+        if knownDual or (weaponSetup == "dual_wield" and WeaponKind(mainSlot, specID, "Main Hand") == "one_hand") then
             for _, group in ipairs(compactDual) do
                 table.insert(options, {
                     stats = group.stats,
@@ -953,9 +1004,10 @@ local function BuildWeaponOptions(specID, snapshot, mainWeapons, offHandItems, d
         -- itself remains a valid complete weapon configuration.
         table.insert(options, { stats = ZeroStats(), priority = ZeroPriority(), key = "keep-main-only", assignments = {} })
     elseif not mainEquipped and offEquipped then
-        local offKnownDual = mapping and mapping.IsDualWieldEligible and mapping.IsDualWieldEligible(offEquipped, specID)
+        local offKnownDual = mapping and mapping.IsTargetDualWieldEligible and mapping.IsTargetDualWieldEligible(offEquipped, specID)
         for _, group in ipairs(compactMain) do
-            if group.item.slot == "One-Hand" or (offKnownDual and group.item.dualWieldEligible) then
+            if group.item.slot == "One-Hand" or group.item.slot == "Main Hand"
+                or group.item.equipLoc == "INVTYPE_WEAPONMAINHAND" or (offKnownDual and group.item.dualWieldEligible) then
                 table.insert(options, {
                     stats = group.stats,
                     priority = group.priority,
@@ -974,7 +1026,9 @@ local function BuildWeaponOptions(specID, snapshot, mainWeapons, offHandItems, d
             })
         end
         local oneHandMain = {}
-        for _, group in ipairs(compactMain) do if group.item.slot == "One-Hand" then table.insert(oneHandMain, group) end end
+        for _, group in ipairs(compactMain) do
+            if group.item.slot == "One-Hand" or group.item.equipLoc == "INVTYPE_WEAPONMAINHAND" then table.insert(oneHandMain, group) end
+        end
         for _, mainGroup in ipairs(oneHandMain) do
             for _, offGroup in ipairs(compactOff) do
                 table.insert(options, {
@@ -1002,8 +1056,30 @@ local function BuildWeaponOptions(specID, snapshot, mainWeapons, offHandItems, d
                 })
             end
         end
+        for _, mainGroup in ipairs(oneHandMain) do
+            if not mainGroup.item.dualWieldEligible then
+                for _, offGroup in ipairs(compactDual) do
+                    table.insert(options, {
+                        stats = AddStats(mainGroup.stats, offGroup.stats),
+                        priority = AddPriority(mainGroup.priority, offGroup.priority),
+                        key = "mainhanddual:" .. mainGroup.signature .. ":" .. offGroup.signature,
+                        assignments = {
+                            WeaponAssignment("Main Hand", mainGroup),
+                            WeaponAssignment("Off Hand", offGroup),
+                        },
+                    })
+                end
+            end
+        end
     end
 
+    if weaponSetup then
+        local legal = {}
+        for _, option in ipairs(options) do
+            if WeaponOptionMatchesSetup(option, snapshot, specID, weaponSetup) then table.insert(legal, option) end
+        end
+        options = legal
+    end
     table.sort(options, function(a, b) return tostring(a.key) < tostring(b.key) end)
     if #options == 0 then return nil end
     return { name = "Weapon Configuration", options = options, visibleOrder = 15 }
@@ -1023,7 +1099,7 @@ local function CountDistinctItems(firstList, secondList)
     return count
 end
 
-local function BuildPositions(specID, itemType, snapshot, suppliedCandidates)
+local function BuildPositions(specID, itemType, snapshot, suppliedCandidates, weaponSetup)
     local bySlot, mainWeapons, offHandItems, dualWeapons = PartitionCandidates(specID, itemType, suppliedCandidates)
     local positions, unmatchedSlots, skipSlot = {}, {}, {}
 
@@ -1057,7 +1133,7 @@ local function BuildPositions(specID, itemType, snapshot, suppliedCandidates)
             end
         end
     end
-    local weaponPosition = BuildWeaponOptions(specID, snapshot, mainWeapons, offHandItems, dualWeapons)
+    local weaponPosition = BuildWeaponOptions(specID, snapshot, mainWeapons, offHandItems, dualWeapons, weaponSetup)
     if weaponPosition then table.insert(positions, weaponPosition) end
     local mainOpen = not (snapshot.slots["Main Hand"] and snapshot.slots["Main Hand"].itemID)
     if mainOpen and not weaponPosition then table.insert(unmatchedSlots, "Main Hand") end
@@ -1651,24 +1727,43 @@ local function BuildResult(specID, itemType, itemSource, ownedRecords, best, goa
     }
 end
 
+local function FilterPrimaryCandidates(candidates, specID, primaryStat)
+    if not primaryStat then return candidates, 0, 0 end
+    local out, excluded, unknown = {}, 0, 0
+    local mapping = KeyLab.GearLootMapping
+    for _, item in ipairs(candidates or {}) do
+        local allowed, reason = mapping.MatchesMatcherPrimaryStat(item, specID, primaryStat)
+        if allowed then table.insert(out, item)
+        else
+            excluded = excluded + 1
+            if reason == "unverified_primary" then unknown = unknown + 1 end
+        end
+    end
+    return out, excluded, unknown
+end
+
 local function RunJob(job)
     local specID = job.specID
     local valid, message = KeyLab.StatGoalsDB and KeyLab.StatGoalsDB.Validate and KeyLab.StatGoalsDB.Validate(specID)
     if not valid then return { ok = false, message = message or "Each stat goal must be from 0% to 100%." } end
 
     local snapshot = ScanEquipment(specID)
+    local equippedValid, equippedMessage = ValidateEquippedWeaponSetup(snapshot, specID, job.weaponSetup)
+    if not equippedValid then return { ok = false, message = equippedMessage } end
     local suppliedCandidates, ownedRecords
     if job.itemSource == "owned" then
         suppliedCandidates, ownedRecords = GetOwnedBagCandidates(specID)
     else
         local mapping = KeyLab.GearLootMapping
         suppliedCandidates = mapping and mapping.GetMatcherCandidates and mapping.GetMatcherCandidates(specID, job.itemType) or {}
-        suppliedCandidates = NormalizeMasterCandidates(suppliedCandidates, specID)
     end
+    local excluded, unknown
+    suppliedCandidates, excluded, unknown = FilterPrimaryCandidates(suppliedCandidates, specID, job.primaryStat)
+    if job.itemSource ~= "owned" then suppliedCandidates = NormalizeMasterCandidates(suppliedCandidates, specID) end
     local goals = GetGoals(specID)
     local matchStyle = job.matchStyle == "priority" and "priority" or "balanced"
     local projection = BuildProjectionContext(snapshot.allEquippedStats, specID, matchStyle)
-    local positions, unmatchedSlots = BuildPositions(specID, job.itemType, snapshot, suppliedCandidates)
+    local positions, unmatchedSlots = BuildPositions(specID, job.itemType, snapshot, suppliedCandidates, job.weaponSetup)
     AnalyzeAndSortPositions(positions, snapshot.projectedLockedStats, goals, projection)
     local openTrinketSlotCount = 0
     for _, slotInstance in ipairs({ "Trinket 1", "Trinket 2" }) do
@@ -1708,6 +1803,17 @@ local function RunJob(job)
     local result = BuildResult(specID, job.itemType, job.itemSource, ownedRecords, best, goals, projection, estimate, mode, positions, unmatchedSlots, snapshot,
         statSupportItems, statSupportItemRecords, statSupportItemsByID, openTrinketSlotCount)
     if not result then return { ok = false, message = "KeyLab could not find a valid item combination for the unequipped slots." } end
+    result.primaryStat = job.primaryStat
+    result.weaponSetup = job.weaponSetup
+    result.weaponSetupLabel = KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetMatcherWeaponSetupLabel
+        and KeyLab.GearLootMapping.GetMatcherWeaponSetupLabel(job.weaponSetup)
+    result.primaryStatExcludedCount = excluded
+    result.primaryStatUnverifiedCount = unknown
+    if job.primaryStat then
+        local label = ({Agi="Agility", Int="Intellect", Str="Strength"})[job.primaryStat]
+        table.insert(result.resultMessages, "Primary first: " .. label .. ". New armor and weapon choices must provide this stat for your spec; this is a requirement, not a total-primary-stat optimization. Equipped items remain locked. Rings, necklaces, and trinket handling are unchanged.")
+        if unknown > 0 then table.insert(result.resultMessages, tostring(unknown) .. " candidate(s) were excluded because their primary stat could not be confirmed.") end
+    end
     return { ok = true, result = result }
 end
 
@@ -1715,8 +1821,30 @@ function Matcher.Start(options, onProgress, onComplete)
     options = options or {}
     if activeJob then return false, "The Stat Goal Matcher is already calculating." end
     local specID = tonumber(options.specID or CurrentSpecID()) or 0
+    local selectedWeaponSetup = options.weaponSetup
+    if selectedWeaponSetup == nil and KeyLab.StatGoalsDB and KeyLab.StatGoalsDB.GetWeaponSetup then
+        selectedWeaponSetup = KeyLab.StatGoalsDB.GetWeaponSetup(specID)
+    end
+    local mapping = KeyLab.GearLootMapping
+    local weaponSetup, weaponValid, weaponMessage
+    if mapping and mapping.ResolveMatcherWeaponSetup then
+        weaponSetup, weaponValid, weaponMessage = mapping.ResolveMatcherWeaponSetup(specID, selectedWeaponSetup)
+    end
+    if weaponValid == false then return false, weaponMessage end
+    local primaryStat = options.primaryStat
+    if primaryStat == nil and KeyLab.StatGoalsDB and KeyLab.StatGoalsDB.GetPrimaryStat then primaryStat = KeyLab.StatGoalsDB.GetPrimaryStat(specID) end
+    if primaryStat == "none" then primaryStat = nil end
+    if primaryStat then
+        local mapping = KeyLab.GearLootMapping
+        if not mapping or not mapping.MatchesMatcherPrimaryStat or not mapping.GetPrimaryStatForSpec
+            or primaryStat ~= mapping.GetPrimaryStatForSpec(specID) then
+            return false, "Choose the primary stat for this specialization, or None."
+        end
+    end
     local job = {
         specID = specID,
+        primaryStat = primaryStat,
+        weaponSetup = weaponSetup,
         itemType = options.itemType,
         itemSource = options.itemSource == "owned" and "owned" or "master",
         matchStyle = options.matchStyle == "priority" and "priority" or "balanced",
