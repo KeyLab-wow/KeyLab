@@ -20,12 +20,12 @@ local INTELLECT_SPECS = {
     [62] = true, [63] = true, [64] = true, [65] = true, [102] = true, [105] = true,
     [256] = true, [257] = true, [258] = true, [262] = true, [264] = true,
     [265] = true, [266] = true, [267] = true, [270] = true,
-    [1467] = true, [1468] = true, [1473] = true,
+    [1467] = true, [1468] = true, [1473] = true, [1480] = true,
 }
 local AGILITY_SPECS = {
     [103] = true, [104] = true, [253] = true, [254] = true, [255] = true,
     [259] = true, [260] = true, [261] = true, [263] = true, [268] = true,
-    [269] = true, [577] = true, [581] = true, [1480] = true,
+    [269] = true, [577] = true, [581] = true,
 }
 local CATALYST_SLOT_BASES = {
     Head = true, Shoulders = true, Back = true, Chest = true, Wrist = true,
@@ -518,7 +518,7 @@ function Mapping.IsItemEligibleForClass(itemOrItemID, classID)
 end
 
 -- Loot eligibility and a player's saved plan are different questions. Keep
--- IsItemEligibleForSpec unchanged for the matcher and captured loot filters.
+-- IsItemEligibleForSpec remains unchanged for captured loot filters.
 function Mapping.GetLootSpecsForClass(itemOrItemID, specID)
     local db = DB()
     local item = type(itemOrItemID) == "table" and itemOrItemID or (db and db.items and db.items[tonumber(itemOrItemID)])
@@ -715,7 +715,7 @@ function Mapping.IsTargetDualWieldEligible(itemOrItemID, specID)
         end
     end
     -- Fury's Titan's Grip also supports polearms, absent from the captured
-    -- off-hand map. This is planning-only; matcher candidates remain unchanged.
+    -- off-hand map. Class-wide planning and matching share this slot rule.
     return tonumber(specID) == 72 and slot == "Two-Hand" and item.armorType == "Polearm"
 end
 
@@ -958,23 +958,125 @@ function Mapping.GetFilteredItems(filters)
     return out
 end
 
-function Mapping.GetMatcherCandidates(specID, itemType, season)
+-- The matcher scores secondary stats, not another spec's primary stat. Use a
+-- recorded same-class stat capture when this spec has no capture for the item.
+-- Keep ordinary item/tooltip stat resolution untouched.
+function Mapping.GetMatcherItemStats(item, specID)
+    local db=DB()
+    local classID=GetClassIDForSpec(specID)
+    if not item or not classID or not Mapping.IsItemEligibleForClass(item,classID) then return {} end
+    local captures=db.statsBySpec and db.statsBySpec[tonumber(item.itemID)]
+    local stats=captures and captures[tonumber(specID)]
+    if not stats and captures then
+        for _,spec in ipairs(Mapping.GetLootSpecsForClass(item,specID)) do
+            if captures[spec.specID] then stats=captures[spec.specID]; break end
+        end
+    end
+    stats=stats or (db.items[tonumber(item.itemID)] or item).stats or {}
+    local out={}
+    for key in pairs(SECONDARY_STATS) do out[key]=tonumber(stats[key]) or 0 end
+    return out
+end
+
+local MATCHER_ADAPTIVE_ARMOR = {
+    Head=true, Shoulders=true, Back=true, Chest=true, Wrist=true,
+    Hands=true, Waist=true, Legs=true, Feet=true,
+}
+
+local MATCHER_WEAPON_SETUPS = {
+    [70] = { fixed = "two_hand", label = "Two-Handed Required" }, -- Retribution
+    [71] = { fixed = "two_hand", label = "Two-Handed Required" }, -- Arms
+    [252] = { fixed = "two_hand", label = "Two-Handed Required" }, -- Unholy
+    [255] = { fixed = "two_hand", label = "Two-Handed Required" }, -- Survival
+    [263] = { fixed = "dual_wield", label = "Dual Wield Required" }, -- Enhancement
+    [251] = { choices = { "two_hand", "dual_wield" } }, -- Frost
+    [268] = { choices = { "two_hand", "dual_wield" } }, -- Brewmaster
+    [269] = { choices = { "two_hand", "dual_wield" } }, -- Windwalker
+}
+
+function Mapping.GetMatcherWeaponSetupConfig(specID)
+    return MATCHER_WEAPON_SETUPS[tonumber(specID)]
+end
+
+function Mapping.GetMatcherWeaponSetupLabel(setup)
+    return setup == "two_hand" and "Two-Handed"
+        or setup == "dual_wield" and "Dual Wield" or nil
+end
+
+function Mapping.ResolveMatcherWeaponSetup(specID, selected)
+    local config = Mapping.GetMatcherWeaponSetupConfig(specID)
+    if not config then return nil, true end
+    if config.fixed then return config.fixed, true end
+    for _, value in ipairs(config.choices or {}) do
+        if selected == value then return value, true end
+    end
+    return nil, false, "Choose Two-Handed or Dual Wield before starting the matcher."
+end
+
+-- Do not use GetItemStats here: its display normalization can relabel a
+-- captured primary stat. Fixed-stat weapons must retain their real stat type.
+-- Confirmed in game: this weapon adapts between Agility and Strength even
+-- though its saved captures were all taken in the Strength state.
+local MATCHER_ADAPTIVE_WEAPON_PRIMARIES = {
+    [268209] = { Agi = true, Str = true }, -- Aman'muso, Warlord's Vengeance
+}
+
+function Mapping.MatchesMatcherPrimaryStat(item, specID, primaryStat)
+    if not primaryStat or primaryStat == "none" then return true end
+    if primaryStat ~= Mapping.GetPrimaryStatForSpec(specID) then return false, "different_spec_primary" end
+    local db = DB()
+    item = type(item) == "table" and item or db and db.items and db.items[tonumber(item)]
+    if not item then return false, "unverified_primary" end
+    local slot = Mapping.NormalizeSlotName(item.slot)
+    -- These slots and the existing advisory trinket path are unchanged.
+    if slot == "Finger" or slot == "Neck" or slot == "Trinket" then return true end
+    local adaptivePrimaries = MATCHER_ADAPTIVE_WEAPON_PRIMARIES[tonumber(item.itemID)]
+    if adaptivePrimaries then return adaptivePrimaries[primaryStat] == true, "different_primary" end
+    local known = db and db.items and db.items[tonumber(item.itemID)]
+    local available = {}
+    local function Read(stats)
+        for _, key in ipairs({"Agi", "Int", "Str"}) do
+            if (tonumber(stats and stats[key]) or 0) > 0 then available[key] = true end
+        end
+    end
+    if item.ownedPrimaryStats and item.ownedPrimaryStats.known then
+        Read(item.ownedPrimaryStats)
+    else
+        Read(known and known.stats or item.stats)
+        local captures = db and db.statsBySpec and db.statsBySpec[tonumber(item.itemID)]
+        for _, spec in ipairs(Mapping.GetLootSpecsForClass(known or item, specID)) do
+            Read(captures and captures[spec.specID])
+        end
+    end
+    if available[primaryStat] then return true end
+    -- Shared seasonal armor was often captured on another spec. Only adapt
+    -- known armor recorded for this spec, never an arbitrary weapon or bag item.
+    if next(available) and MATCHER_ADAPTIVE_ARMOR[slot] and known
+        and Mapping.IsItemEligibleForSpec(known, specID) then return true end
+    return false, next(available) and "different_primary" or "unverified_primary"
+end
+
+function Mapping.GetMatcherCandidates(specID, itemType, season, primaryStat)
     specID = tonumber(specID)
-    if not specID then return {} end
+    local classID=GetClassIDForSpec(specID)
+    if not classID then return {} end
     local out = {}
     for _, item in ipairs(Mapping.GetFilteredItems({
         specID = specID,
+        classID = classID,
+        browseClass = true,
         itemType = itemType,
         season = season,
         includeNonGear = false,
     })) do
-        local stats = Mapping.GetItemStats(item, specID)
+        local stats = Mapping.GetMatcherItemStats(item, specID)
         local secondaryTotal = 0
         for stat in pairs(SECONDARY_STATS) do secondaryTotal = secondaryTotal + (tonumber(stats and stats[stat]) or 0) end
         if secondaryTotal > 0 then
             item.matcherStats = stats
-            item.eligibleSlotInstances = Mapping.GetEligibleSlotInstances(item, specID)
-            table.insert(out, item)
+            item.eligibleSlotInstances = Mapping.GetTargetSlotInstances(item, specID)
+            item.dualWieldEligible = Mapping.IsTargetDualWieldEligible(item, specID)
+            if #item.eligibleSlotInstances>0 and Mapping.MatchesMatcherPrimaryStat(item, specID, primaryStat) then table.insert(out, item) end
         end
     end
     return out
