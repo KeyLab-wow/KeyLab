@@ -165,6 +165,7 @@ end
 
 local function GetEligibleSlots(itemID, specID)
     local mapping = Mapping()
+    if mapping and mapping.GetTargetSlotInstances then return mapping.GetTargetSlotInstances(itemID, specID) or {} end
     if mapping and mapping.GetEligibleSlotInstances then
         return mapping.GetEligibleSlotInstances(itemID, specID) or {}
     end
@@ -257,7 +258,8 @@ local function ItemClosesOffHand(itemOrItemID, specID)
     local item = type(itemOrItemID) == "table" and itemOrItemID
         or mapping and mapping.GetItem and mapping.GetItem(itemOrItemID, specID) or nil
     local occupiesBoth = item and (item.slot == "Two-Hand" or item.slot == "Ranged")
-    return occupiesBoth and not (mapping.IsDualWieldEligible and mapping.IsDualWieldEligible(itemOrItemID, specID)) or false
+    local dualWield = mapping and (mapping.IsTargetDualWieldEligible or mapping.IsDualWieldEligible)
+    return occupiesBoth and not (dualWield and dualWield(itemOrItemID, specID)) or false
 end
 
 local function AssignmentMetadata(itemOrItemID)
@@ -363,6 +365,12 @@ function LootTargetsDB.GetTargetForSlot(specID, slotInstance, seasonKey)
     return slotStore and slotStore.target or nil
 end
 
+-- A crafted plan replaces only the Target, never its saved Alternatives.
+function LootTargetsDB.ClearTargetForCraft(specID, slotInstance)
+    local slotStore = GetSlotStore(LootTargetsDB.GetSpecStore(specID, "MN_S2"), slotInstance, false)
+    if slotStore then slotStore.target = nil end
+end
+
 function LootTargetsDB.GetAlternativesForSlot(specID, slotInstance, seasonKey)
     local slotStore = GetSlotStore(LootTargetsDB.GetSpecStore(specID, seasonKey), slotInstance, false)
     return slotStore and slotStore.alternatives or {}
@@ -394,14 +402,20 @@ function LootTargetsDB.CanAssign(specID, itemOrItemID, status, slotInstance, rep
         local mapping = Mapping()
         local item = mapping and mapping.GetItem and mapping.GetItem(itemID, specID) or nil
         if item and item.slot == "Off Hand" then
-            if not (mainHand and mainHand.target) then return false, "main_hand_required" end
-            local mainItem = mapping.GetItem(mainHand.target.itemID, specID)
-            if not mainItem or mainItem.slot ~= "One-Hand" then return false, "incompatible_main_hand" end
+            local mainItem = mainHand and mainHand.target and mapping.GetItem(mainHand.target.itemID, specID)
+            local crafts = KeyLab.CraftedPlansDB
+            if not mainItem and crafts then
+                local planned = crafts.GetPlansForSlot(specID, "Main Hand")[1]
+                mainItem = planned and KeyLab.CraftedRecipeDatabase.recipes[planned.recipeID]
+            end
+            if not mainItem then return false, "main_hand_required" end
+            if not mainItem or (mainItem.slot ~= "One-Hand" and mainItem.slot ~= "Main Hand") then return false, "incompatible_main_hand" end
         end
     end
     if status == "alternative" then
-        if not slotStore.target then return false, "target_required" end
-        if tonumber(slotStore.target.itemID) == itemID then return false, "already_target" end
+        local crafts = KeyLab.CraftedPlansDB
+        if not slotStore.target and not (seasonKey == "MN_S2" and crafts and #crafts.GetPlansForSlot(specID, slotInstance) > 0) then return false, "target_required" end
+        if slotStore.target and tonumber(slotStore.target.itemID) == itemID then return false, "already_target" end
         for _, record in ipairs(FindAssignments(store, itemID)) do
             if record.status == "target" then return false, "already_targeted" end
         end
@@ -421,7 +435,7 @@ function LootTargetsDB.CanAssign(specID, itemOrItemID, status, slotInstance, rep
     return true
 end
 
-function LootTargetsDB.SetAssignment(specID, itemOrItemID, status, slotInstance, sourceID, replaceExisting)
+function LootTargetsDB.SetAssignment(specID, itemOrItemID, status, slotInstance, sourceID, replaceExisting, approval)
     specID = tonumber(specID or LootTargetsDB.GetCurrentSpecID()) or 0
     local seasonKey = AssignmentSeasonKey(itemOrItemID)
     local itemID = GetItemID(itemOrItemID)
@@ -435,6 +449,12 @@ function LootTargetsDB.SetAssignment(specID, itemOrItemID, status, slotInstance,
 
     local allowed, reason = LootTargetsDB.CanAssign(specID, itemOrItemID, status, slotInstance, replaceExisting, seasonKey)
     if not allowed then return false, reason end
+    local crafts, conflicts = KeyLab.CraftedPlansDB, nil
+    if status == "target" and seasonKey == "MN_S2" and crafts then
+        conflicts = crafts.ConflictDetails(crafts.GetConflicts(specID, slotInstance, nil,
+            slotInstance == "Main Hand" and ItemClosesOffHand(itemOrItemID, specID), false))
+        if #conflicts.conflicts > 0 and approval ~= conflicts.token then return false, "plan_conflict", conflicts end
+    end
     sourceID = tonumber(sourceID or type(itemOrItemID) == "table" and itemOrItemID.sourceID)
     store.pending[itemID] = nil
     local slotStore = GetSlotStore(store, slotInstance, true)
@@ -445,11 +465,20 @@ function LootTargetsDB.SetAssignment(specID, itemOrItemID, status, slotInstance,
     metadata.closesOffHand = closesOffHand == true
     local record = NewRecord(itemID, sourceID, slotInstance, status, metadata)
     if status == "target" then
-        if closesOffHand then store.slots["Off Hand"] = nil end
-        RemoveItemAlternatives(store, itemID)
-        slotStore.alternatives[itemID] = nil
+        local replacingCraft = conflicts and #conflicts.conflicts > 0
+        if closesOffHand then
+            if replacingCraft then
+                local off = GetSlotStore(store, "Off Hand", false)
+                if off then off.target = nil end
+            else store.slots["Off Hand"] = nil end
+        end
+        if not replacingCraft then
+            RemoveItemAlternatives(store, itemID)
+            slotStore.alternatives[itemID] = nil
+        end
         slotStore.target = record
-        if replaceExisting then PruneInvalidAlternatives(slotStore, specID, slotInstance) end
+        if replaceExisting and not replacingCraft then PruneInvalidAlternatives(slotStore, specID, slotInstance) end
+        if conflicts then crafts.ApplyConflicts(conflicts, specID) end
     else
         RemoveItemAlternatives(store, itemID)
         slotStore.alternatives[itemID] = record
@@ -458,8 +487,8 @@ function LootTargetsDB.SetAssignment(specID, itemOrItemID, status, slotInstance,
 end
 
 
-function LootTargetsDB.SetTargetForSlot(specID, itemOrItemID, slotInstance, sourceID, replaceExisting)
-    return LootTargetsDB.SetAssignment(specID, itemOrItemID, "target", slotInstance, sourceID, replaceExisting == true)
+function LootTargetsDB.SetTargetForSlot(specID, itemOrItemID, slotInstance, sourceID, replaceExisting, approval)
+    return LootTargetsDB.SetAssignment(specID, itemOrItemID, "target", slotInstance, sourceID, replaceExisting == true, approval)
 end
 
 function LootTargetsDB.SetAlternativeForSlot(specID, itemOrItemID, slotInstance, sourceID)
@@ -617,6 +646,57 @@ function LootTargetsDB.ClearSpec(specID, seasonKey)
     local store = LootTargetsDB.GetSpecStore(specID, seasonKey)
     store.slots = {}
     store.pending = {}
+end
+
+-- Explicit whole-profile replacement. Validate the complete set first and
+-- keep Alternatives exactly as saved, including slots now assigned to crafts.
+function LootTargetsDB.ReplaceGuideTargets(specID, entries, approval)
+    if specID ~= LootTargetsDB.GetCurrentSpecID() then return false, "Specialization changed." end
+    if InCombatLockdown and InCombatLockdown() then return false, "Wait until combat ends." end
+    if type(entries) ~= "table" or #entries == 0 then return false, "No regular items to set as Targets." end
+    local chosen, seen, mapping = {}, {}, Mapping()
+    for _, entry in ipairs(entries) do
+        local item, slot = entry.item, entry.slotInstance
+        if not item or not VALID_SLOTS[slot] or not Contains(GetEligibleSlots(item, specID), slot)
+            or chosen[slot] then return false, "An item is not eligible for its listed slot. No Targets changed." end
+        if seen[item.itemID] and not CanTargetMultipleSlots(item, specID) then
+            return false, "This list repeats an item that cannot fill two slots. No Targets changed."
+        end
+        seen[item.itemID] = true
+        chosen[slot] = item
+    end
+    local main, off = chosen["Main Hand"], chosen["Off Hand"]
+    if off and main and ItemClosesOffHand(main, specID) then return false, "This weapon does not allow an Off Hand." end
+    if off and mapping.NormalizeSlotName(off.slot) == "Off Hand" and main
+        and mapping.NormalizeSlotName(main.slot) ~= "One-Hand" and mapping.NormalizeSlotName(main.slot) ~= "Main Hand" then
+        return false, "The off-hand item requires a one-handed main weapon."
+    end
+    local crafts, conflicts = KeyLab.CraftedPlansDB, nil
+    if crafts then
+        local all, seenRecipes = {}, {}
+        for slot, item in pairs(chosen) do
+            for _, conflict in ipairs(crafts.GetConflicts(specID, slot, nil, slot == "Main Hand" and ItemClosesOffHand(item, specID), false)) do
+                if not seenRecipes[conflict.id] then all[#all+1]=conflict; seenRecipes[conflict.id]=true end
+            end
+        end
+        table.sort(all, function(a,b) return a.id < b.id end)
+        conflicts = crafts.ConflictDetails(all)
+        if #all > 0 and approval ~= conflicts.token then return false, "plan_conflict", conflicts end
+    end
+    local store = LootTargetsDB.GetSpecStore(specID, "MN_S2")
+    local slots, pending = {}, {}
+    for slot, old in pairs(store.slots or {}) do slots[slot] = {alternatives=old.alternatives or {}} end
+    for itemID, old in pairs(store.pending or {}) do if old.status ~= "target" then pending[itemID]=old end end
+    for slot, item in pairs(chosen) do
+        slots[slot] = slots[slot] or {alternatives={}}
+        local meta = AssignmentMetadata(item)
+        meta.seasonKey, meta.mnSeason = "MN_S2", 2
+        meta.closesOffHand = slot == "Main Hand" and ItemClosesOffHand(item,specID) or false
+        slots[slot].target = NewRecord(item.itemID,item.sourceID,slot,"target",meta)
+    end
+    store.slots, store.pending = slots, pending
+    if conflicts then crafts.ApplyConflicts(conflicts, specID) end
+    return true, tostring(#entries) .. " Targets set. Alternatives were kept. Crafted items are configured separately."
 end
 
 function LootTargetsDB.MigrateLegacy()
