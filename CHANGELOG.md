@@ -1,5 +1,184 @@
 # KeyLab Changelog
 
+## Version 2.0.77 - Close Group Snapshot When Leaving a Group
+
+- Checks live party/raid membership for floating Snapshot visibility and responds directly to roster and world-entry events instead of relying only on cached readiness updates.
+- Hides the Snapshot, minimized handle, and related open menus when leaving a group; clears combat-return state even when leaving during combat.
+- Prevents a stale minimized handle or queued refresh from reopening Snapshot while solo, while retaining the minimized return after combat when still grouped.
+
+## Version 2.0.76 - Great Vault Event Registration Fix
+
+- Removes the invalid WEEKLY_REWARDS_SHOW event registration that caused a Lua error during addon loading and interrupted reminder event setup.
+- Preserves the Great Vault Target Reminder by hooking the Vault window's OnShow without replacing Blizzard's handler, supporting both already-loaded and load-on-demand Vault UI.
+- Attaches the hook once and stops listening for addon loads after attachment; preserves dungeon and raid reminder behavior and all saved plans.
+
+## Version 2.0.75 - Popup Branding and Clearer Group and Gear Snapshots
+
+- Adds the KeyLab logo to Group Snapshot and other unbranded KeyLab popups using a shared theme helper and the existing shopping popup's top-left placement.
+- Limits Group Snapshot capability counts to the Class/Spec column; talent, pet, and conditional choices remain available in the full Group Dashboard.
+- Shows saved dungeon Targets for Head, Shoulders, Chest, Hands, and Legs in the shopping popup's Tier Slot Targets & Catalyst column, retaining item names and higher-track reminders.
+- Keeps other dungeon Targets and Alternatives on the left, with general Catalyst dungeon suggestions on the right only for slots without a saved Target.
+- Preserves saved plans, item data, matcher rules, raid reminders, and talent behavior.
+
+## Version 2.0.74 - Coordinated Crafted Plans and Gear Targets
+
+- Shows saved crafted items in their Gear Dashboard slots as Planned: Item Name, with a hover for the crafted item while preserving equipped gear details.
+- Coordinates crafted plans and loot Targets per character, spec, and slot. Conflicting saves name the existing entries and require Replace confirmation; Cancel leaves them unchanged and Alternatives are retained.
+- Adds exact slot choices for paired crafted items and eligible dual-wield weapons, and applies the same replacement confirmation to guide gear lists.
+- Safeguards confirmation against changed conflicts, specialization changes, and combat. Existing ambiguous or conflicting crafted plans are preserved and can be resolved through Resolve Plan in Crafted Gear.
+- Keeps the master item database, matcher selection rules, talent behavior, and unrelated layouts unchanged.
+
+## Version 2.0.73 - Visible Loot Specs Under Gear Target Items
+
+- Adds a smaller gold Loot Spec line beneath each Gear Targets item name, listing the captured eligible loot specs for the player's class without requiring a hover.
+- Gives rows more height and allows long spec lists to wrap within the item column; shows Not recorded when eligibility is unavailable.
+- Preserves other columns, item tooltips, loot eligibility, saved targets, and Stat Goal Matcher rules.
+
+## Version 2.0.72 - Matching Loot Spec Tooltips in Gear Targets
+
+- Uses the same concise Loot Spec and Loot Spec Set lines in Gear Targets item and source tooltips as Gear Dashboard, with a blank line and distinct theme colors.
+- Preserves captured item links, source details, missing-stat notices, loot eligibility, matcher rules, and the existing dashboard presentation.
+
+## Version 2.0.71 - Gear Dashboard Labels and Loot Spec Tooltips
+
+- Uses the full available target-name line in Gear Dashboard instead of shortening item names to 24 characters first.
+- Shortens dashboard loot-spec guidance to Loot Spec and Loot Spec Set, with a blank line between them and distinct theme colors; preserves native item tooltips.
+- Keeps Saving For Spec inside the Gear Targets filter card and fits the neighboring search field into the remaining space.
+- Preserves item data, loot eligibility, Stat Goal Matcher rules, card sizes, and all talent behavior.
+
+## Version 2.0.70 - Matching Talent Build Badge Clarification
+
+- Renames the neutral Saved in game badge to Matching Build Found for recommendations that match an existing loadout but have not been linked through Add.
+- Adds a hover tooltip naming that existing loadout and explaining that no separate recommendation was automatically added; Add links the match without duplication and Switch uses it.
+- Preserves green Added, Not Added, Update Available, existing loadouts, and all talent and gear behavior.
+
+## Version 2.0.69 - Minimize After Talent Switch
+
+- Automatically uses KeyLab's existing Minimize action when a talent Switch request is accepted, clearing the main window so the player can see Blizzard's talent-change presentation.
+- Leaves the window open for blocked or immediately failed switches, preserves an already-minimized window, and never opens the main addon when switching from the mini panel.
+- Keeps existing talent switching, confirmation, native window refresh, and all other UI behavior unchanged.
+
+## Version 2.0.68 - Blizzard Talent Window Refresh After Switching
+
+- Synchronizes Blizzard's cached talent dropdown selection after KeyLab verifies that a requested switch is applied.
+- Refreshes the native talent tree from the actual active config, including switches completed while the window was hidden, so reopening Talents does not require a UI reload to catch up.
+- Uses Blizzard's display-only skip-load selection and tree refresh paths, without another load or apply. Skips inspected/different-spec views and unconfirmed or failed switches.
+- Keeps the working one-click switch, KeyLab layouts, imports, gear data, and matcher rules unchanged.
+
+## Version 2.0.67 - Current Talent Build Refresh
+
+- Resolves the Current Build name against all saved loadouts before falling back to a stale last-selected build, including equivalent talent strings.
+- Handles active-config changes within the same specialization without incorrectly cancelling switch confirmation, and listens for the active-config change event.
+- Adds three bounded completion-status rechecks for delayed talent data, refreshing the existing UI listeners once the switch is confirmed. Does not repeat Load or Apply actions.
+- Preserves the working one-click switch, layouts, talent imports, gear data, and Stat Goal Matcher rules.
+
+## Version 2.0.66 - Complete Talent Switching and Active Build Confirmation
+
+- Completes a user-requested Switch with an apply/commit when Blizzard returns a staged Ready result, instead of leaving the build at Apply Changes.
+- Waits for the active talents to match with no staged changes before recording the selected saved loadout and showing its name as Current Build.
+- Shows switching status while pending and prevents duplicate load/commit clicks. Already-running automatic loads are not committed a second time.
+- Handles failed applies, specialization changes, combat, and unconfirmed switches without automatic load/commit retries; preserves active Mythic+ restrictions.
+- Keeps Add/Update behavior, all layouts, guide data, and Stat Goal Matcher rules unchanged.
+
+## Version 2.0.65 - Consistent Guide Talent Build Names
+
+- Uses the talent-manager save name as the main title on Wowhead and Icy Veins talent cards so it is easy to match to the Current Build display.
+- Keeps the guide's descriptive build name underneath. Does not rename existing loadouts or change talent actions, layouts, or gear data.
+
+## Version 2.0.64 - Closed Talent Window Detection
+
+- Fixes guide talent Add/Update incorrectly reporting that Blizzard's Talents window is open after it has been closed.
+- Checks actual Talents frame visibility, including its parent window, instead of the selected child tab's shown state. Preserves the guard while Talents is genuinely visible.
+- Leaves loadout behavior, layouts, badges, gear data, and matcher rules otherwise unchanged.
+
+## Version 2.0.63 - Guide Talent Badge Borders
+
+- Draws the Wowhead/Icy Veins talent recommendation, date, and status badge outlines with shared-theme solid rules to prevent missing edges on lower card rows.
+- Keeps those outlines at least one physical pixel thick at reduced UI scales and preserves status colors when badges refresh.
+- Leaves card layout, fonts, buttons, talent behavior, gear profiles, and all other tabs unchanged.
+
+## Version 2.0.62 - Compact Guide Dashboards and Talent Save Status
+
+- Replaces long Wowhead and Icy Veins recommendation pages with separate Talent Builds and Gear Profiles views using KeyLab's shared theme controls.
+- Displays talent builds in compact, responsive columns while retaining recommendation/date badges and Add, Update, and Switch actions.
+- Fixes talent comparisons using Blizzard's actual selected, granted, rank, and choice fields so unrelated builds no longer appear Added or disable Add.
+- Shows green Added only after a confirmed import/update or an explicit Add that links an identical existing loadout without duplicating it. Existing unlinked matches show Saved in game.
+- Adds a gear-profile dropdown with one profile visible at a time and a two-column equipment-slot layout, retaining separate original/catalyst item tooltips, per-slot choices, and individual crafted-item configuration.
+- Preserves the selected gear profile when returning from crafting, existing Alternatives, combat/Mythic+ talent restrictions, the master item database, and the Stat Goal Matcher's current-spec loot rules.
+
+## Version 2.0.61 - Class-Wide Targets and Loot Spec Guidance
+
+- Gear Targets now browses loot from every specialization of the current class, with class-wide slot, dungeon, and raid-boss filters.
+- Allows Targets and Alternatives across loot specs of the same class while preserving separate saved plans for each active specialization.
+- Adds captured loot-spec guidance to item and source tooltips, plus gold Loot Spec badges in Gear Dashboard for Targets and Alternatives that do not match the selected loot specialization.
+- Updates dashboard warnings when the player's loot specialization changes. Guidance is informational; KeyLab never changes loot specialization automatically.
+- Labels missing current-spec stat samples as Check tooltip rather than implying an item has no stats or inventing a primary stat.
+- Extends planning for class-available generic one-hand weapons to established dual-wield specs and includes Fury polearms; preserves explicit Main-Hand-only restrictions, ordinary two-hand/off-hand restrictions, class-specific tier restrictions, and duplicate ring/trinket protections.
+- Keeps the Stat Goal Matcher's candidate items, stat samples, and weapon-slot rules unchanged. The separate Wowhead/Icy Veins feature remains in development.
+
+## Version 2.0.60 - Raid Capture Completion Reminder
+
+- Removed the separate raw raid-boss completion popup trigger and duplicate raid popup renderer.
+- Connected confirmed raid kills to the working dungeon-completion popup after the existing raid capture finishes its Damage Meter read/retry and saves the encounter.
+- Matched the defeated boss name within its raid to the local Encounter Journal loot ID, showing only still-needed Targets and Alternatives for that boss and the current specialization.
+- Deferred raid reminders during combat, discarded pending reminders after leaving the raid or difficulty, and prevented duplicate notifications without adding combat polling or Encounter Journal scans.
+- Preserved dungeon-completion and Great Vault reminders, and kept missing personal metrics or popup errors from disrupting raid capture.
+
+## Version 2.0.59 - Raid Reminder Rollback
+
+- Restored the raid completion reminder code and raid mapping to their exact Version 2.0.57 behavior after Version 2.0.58 caused severe input delay during raid combat.
+
+## Version 2.0.58 - Raid Boss Target Reminder Repair
+
+- Matched successful raid-boss completion events to the Encounter Journal boss IDs used by saved loot records.
+- Restored the automatic post-kill reminder for both Targets and Alternatives saved from the defeated boss.
+- Kept the reminder restricted to the exact defeated boss and current specialization.
+
+## Version 2.0.57 - Group Composition Source Colors
+
+- Changed Group Composition Class/Spec count boxes to green-filled badges so inherent capabilities are clearly confirmed.
+- Changed Talent, Pet, and Talent + Pet count boxes to yellow-filled badges so conditional capabilities are not mistaken for confirmed selections.
+- Limited the green capability highlight to the capability-name area instead of coloring the entire row.
+- Updated the capability-source legend and summary to explain the green inherent and yellow conditional meanings.
+
+## Version 2.0.56 - Alternative Roll Reminders
+
+- Added clearly separated Alternative lists beneath primary Targets in dungeon-completion, raid-boss, and Great Vault reminders.
+- Limited dungeon and raid Alternatives to the exact completed dungeon or defeated boss, while the Great Vault reminder groups all current-specialization Dungeon and Raid Alternatives by source.
+- Kept lower-track Alternatives active until a confirmed Myth-track copy is owned, allowing an owned Hero alternative to remain visible as a possible Voidcore upgrade.
+- Added separate Target and Alternative counts so backup choices cannot be mistaken for primary Targets.
+
+## Version 2.0.55 - Activity Target and Voidcore Reminders
+
+- Added an automatic dungeon-completion reminder for still-needed Targets from that exact dungeon, with a note to use any available Nebulous Voidcore roll before leaving.
+- Added the current Nebulous Voidcore balance and saved-target totals to dungeon and raid roll reminders.
+- Added a Great Vault reminder that shows the current Voidcore balance and all still-needed Dungeon and Raid Targets for the current specialization, while clearly identifying the roll as broader and not guaranteeing any specific item.
+- Kept all reminders informational only and excluded Alternatives and completed Myth-track Targets.
+
+## Version 2.0.54 - Raid Boss Target Roll Reminder
+
+- Added an automatic reminder after a successful raid boss defeat when the current specialization has saved Targets from that exact boss.
+- Limited the reminder to still-needed Targets only, excluding Alternatives, completed Myth-track Targets, and items from other bosses.
+- Kept the reminder informational only; KeyLab does not interact with Blizzard's loot or roll controls.
+
+## Version 2.0.53 - Clear Targets Layout
+
+- Moved `Clear Targets` to the summary line above the gear list so it no longer overlaps the `Show` filter.
+
+## Version 2.0.52 - Expanded Guided Tour and Target Tools
+
+- Expanded the player-started tour into short, movable, lower-center walkthroughs for Home search, Mythic+ and Raid result views, Practice, Gear Planning, the complete Stat Goal Matcher flow, Gear Dashboard, Group Dashboard, Macro Targets, and Macro Sequencer.
+- Added a dark background and border behind `LOOK HERE`, highlighted the control discussed by each step, and kept the tour styled with KeyLab's shared UI theme.
+- Added `Clear Targets` to remove all saved Targets for the current specialization at once, and corrected overlapping Stat Goal Guidance text.
+- Required the exact saved item on the Myth track for Gear Dashboard target completion, and simplified moved Macro Target choices to `Keep` or `Change`.
+- Made Home article search available in News & Events, S2 Common Issues, and Game Updates.
+
+## Version 2.0.51 - Optional Guided Tour
+
+- Added a player-started `Take the Tour` button to Home; the tour never opens automatically and the same button can reopen it at any time.
+- Added short Back, Next, and section-jump guidance that opens each covered tab or subtab while explaining where to click in simple language.
+- Added a lightweight pulsing highlight around the exact navigation control being explained, using built-in solid colors with no new image assets.
+
 ## Version 2.0.50 - Myth-Track Target Completion
 
 - Kept saved Targets active in the Gear Targets shopping popup when the owned copy is below Myth track, so Champion and Hero copies continue showing their dungeon or raid sources.
