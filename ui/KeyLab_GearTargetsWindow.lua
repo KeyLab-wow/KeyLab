@@ -40,6 +40,7 @@ local CFG = {
 
 local frame
 local completionFrame
+local lootSpecRefreshPending
 local SLOT_SORT = {
     ["Head"] = 1, ["Neck"] = 2, ["Shoulders"] = 3, ["Back"] = 4,
     ["Chest"] = 5, ["Wrist"] = 6, ["Hands"] = 7, ["Waist"] = 8,
@@ -118,6 +119,40 @@ local function CurrentSpecID()
         return KeyLab.LootTargetsDB.GetCurrentSpecID()
     end
     return nil
+end
+
+local function ItemLootSpecLine(item)
+    local mapping = KeyLab.GearLootMapping
+    -- Saved-plan and roll records are abbreviated; resolve eligibility by item ID.
+    local guidance = mapping and mapping.GetLootSpecGuidance
+        and mapping.GetLootSpecGuidance(item and item.itemID, CurrentSpecID())
+    if not guidance then return "|cffadbad1Loot Spec: Not recorded|r" end
+    local color = guidance.warning and "|cffffa34d" or "|cffd1c294"
+    return color .. "Loot Spec: " .. guidance.names
+        .. (guidance.warning and " (change needed)" or "") .. "|r"
+end
+
+local function CurrentLootSpecLine()
+    local lootID
+    if GetLootSpecialization then
+        local ok, value = pcall(GetLootSpecialization)
+        if ok and not (issecretvalue and issecretvalue(value)) and type(value) == "number" then
+            lootID = value == 0 and CurrentSpecID() or value
+        end
+    end
+    local db = KeyLab.GearLootDatabase
+    local spec = db and db.specs and db.specs[lootID]
+    local name = spec and (spec.specName or spec.name)
+    if not name and lootID and GetSpecializationInfoByID then
+        local ok, _, value = pcall(GetSpecializationInfoByID, lootID)
+        if ok and not (issecretvalue and issecretvalue(value)) and type(value) == "string" then name = value end
+    end
+    return "Loot Spec Set: " .. (name or "Unavailable")
+end
+
+local function WrappedRowHeight(line, minimum)
+    line:SetHeight(0)
+    return math.max(minimum, (line.GetStringHeight and line:GetStringHeight() or minimum) + 6)
 end
 
 local function SortItems(items)
@@ -367,8 +402,7 @@ local function AddRollGroupPanel(card, column, group, fullWidth)
     local x = fullWidth and 14 or (14 + ((column - 1) * (columnWidth + gap)))
     local y = fullWidth and card.cursorY or card.columnY[column]
     local itemCount = #(group.items or {})
-    local rowCount = fullWidth and math.ceil(itemCount / 2) or itemCount
-    local panelHeight = 42 + (math.max(1, rowCount) * CFG.lineHeight)
+    local panelHeight = 42
     local kindColor = group.sourceType == "Raid" and CFG.colors.violet or CFG.colors.blue
 
     panel:ClearAllPoints()
@@ -389,6 +423,7 @@ local function AddRollGroupPanel(card, column, group, fullWidth)
     panel.kind:SetText(group.sourceType == "Raid" and "RAID" or "DUNGEON")
 
     local itemColumnWidth = fullWidth and math.floor((panelWidth - 34) / 2) or (panelWidth - 22)
+    local rowOffset, previousRowHeight = 0, 0
     for index, item in ipairs(group.items or {}) do
         local row = panel.itemRows[index]
         if not row then
@@ -406,12 +441,16 @@ local function AddRollGroupPanel(card, column, group, fullWidth)
         local itemColumn = fullWidth and (((index - 1) % 2) + 1) or 1
         local itemRow = fullWidth and math.floor((index - 1) / 2) or (index - 1)
         local itemX = 11 + ((itemColumn - 1) * (itemColumnWidth + 12))
-        local rowY = -31 - (itemRow * CFG.lineHeight)
+        if itemColumn == 1 then
+            rowOffset = rowOffset + previousRowHeight
+            previousRowHeight = 0
+        end
+        local rowY = -31 - rowOffset
         local label = tostring(item.displaySlot or item.slotName or "Gear")
-            .. " - " .. tostring(item.itemName or "Myth Item")
+            .. " - " .. tostring(item.itemName or "Myth Item") .. "\n" .. ItemLootSpecLine(item)
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", panel, "TOPLEFT", itemX - 3, rowY)
-        row:SetSize(itemColumnWidth + 6, CFG.lineHeight - 1)
+        row:SetWidth(itemColumnWidth + 6)
         if itemRow % 2 == 0 then
             row:SetVertexColor(0.060, 0.100, 0.165, 0.72)
         else
@@ -419,16 +458,24 @@ local function AddRollGroupPanel(card, column, group, fullWidth)
         end
         row:Show()
         line:ClearAllPoints()
-        line:SetPoint("TOPLEFT", panel, "TOPLEFT", itemX, -32 - (itemRow * CFG.lineHeight))
-        line:SetSize(itemColumnWidth, CFG.lineHeight)
+        line:SetPoint("TOPLEFT", panel, "TOPLEFT", itemX, rowY - 1)
+        line:SetWidth(itemColumnWidth)
+        line:SetWordWrap(true)
+        line:SetJustifyV("TOP")
         line:SetTextColor(unpack(item.isTier and CFG.colors.gold or CFG.colors.text))
         line:SetText(label)
+        local height = WrappedRowHeight(line, 38)
+        line:SetHeight(height)
+        row:SetHeight(height - 1)
+        previousRowHeight = math.max(previousRowHeight, height)
         line:Show()
     end
     for index = itemCount + 1, #(panel.itemLines or {}) do
         panel.itemLines[index]:Hide()
         if panel.itemRows[index] then panel.itemRows[index]:Hide() end
     end
+    panelHeight = 42 + rowOffset + previousRowHeight
+    panel:SetHeight(panelHeight)
     panel:Show()
 
     if fullWidth then
@@ -458,8 +505,8 @@ local function AddDungeonRunPanel(card, column, dungeonName, badgeText, rows, ac
     local columnWidth = math.floor((cardWidth - 28 - gap) / 2)
     local x = 14 + ((column - 1) * (columnWidth + gap))
     local y = card.columnY[column]
-    local rowHeight = 30
-    local panelHeight = 43 + (math.max(1, #rows) * rowHeight)
+    local panelHeight = 43
+    local rowOffset = 0
 
     panel:ClearAllPoints()
     panel:SetPoint("TOPLEFT", card, "TOPLEFT", x, y)
@@ -494,11 +541,10 @@ local function AddDungeonRunPanel(card, column, dungeonName, badgeText, rows, ac
             panel.itemLines[index] = line
         end
 
-        local rowY = -32 - ((index - 1) * rowHeight)
+        local rowY = -32 - rowOffset
         row:ClearAllPoints()
         row:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, rowY)
         row:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, rowY)
-        row:SetHeight(rowHeight - 2)
         if backgroundColor and index % 2 == 1 then
             row:SetVertexColor(0.130, 0.055, 0.180, 0.78)
         elseif backgroundColor then
@@ -513,11 +559,15 @@ local function AddDungeonRunPanel(card, column, dungeonName, badgeText, rows, ac
         line:ClearAllPoints()
         line:SetPoint("TOPLEFT", panel, "TOPLEFT", 13, rowY - 2)
         line:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -13, rowY - 2)
-        line:SetHeight(rowHeight - 2)
-        line:SetJustifyV("MIDDLE")
+        line:SetWidth(columnWidth - 26)
+        line:SetJustifyV(rowData.item and "TOP" or "MIDDLE")
         line:SetWordWrap(true)
         line:SetTextColor(unpack(rowData.color or CFG.colors.text))
-        line:SetText(tostring(rowData.text or ""))
+        line:SetText(tostring(rowData.text or "") .. (rowData.item and ("\n" .. ItemLootSpecLine(rowData.item)) or ""))
+        local rowHeight = WrappedRowHeight(line, rowData.item and 42 or 30)
+        line:SetHeight(rowHeight - 2)
+        row:SetHeight(rowHeight - 2)
+        rowOffset = rowOffset + rowHeight
         line:Show()
     end
     for index = #rows + 1, #(panel.itemLines or {}) do
@@ -525,6 +575,8 @@ local function AddDungeonRunPanel(card, column, dungeonName, badgeText, rows, ac
         if panel.itemRows[index] then panel.itemRows[index]:Hide() end
     end
 
+    panelHeight = 43 + rowOffset
+    panel:SetHeight(panelHeight)
     panel:Show()
     card.columnY[column] = y - panelHeight - 9
 end
@@ -583,6 +635,7 @@ local function AddSavedGearCard(f, title, groups, bagItems, alternativeBudget)
                 local suffix = TargetTrackSuffix(item, bagItems)
                 AddCardLine(card, "•  " .. tostring(slotName) .. " - " .. itemName .. suffix,
                     CFG.colors.text, 16)
+                AddCardLine(card, ItemLootSpecLine(item), CFG.colors.gold, 30, "GameFontDisableSmall", true)
             end
             for _, item in ipairs(group.alternatives or {}) do
                 if alternativeBudget.value > 0 then
@@ -596,6 +649,7 @@ local function AddSavedGearCard(f, title, groups, bagItems, alternativeBudget)
                     end
                     AddCardLine(card, "◇  " .. tostring(slotName) .. " - " .. itemName .. suffix,
                         CFG.colors.blue, 16)
+                    AddCardLine(card, ItemLootSpecLine(item), CFG.colors.gold, 30, "GameFontDisableSmall", true)
                     alternativeBudget.value = alternativeBudget.value - 1
                     alternativeBudget.shown = alternativeBudget.shown + 1
                 end
@@ -612,14 +666,14 @@ local function AddDungeonRunCard(f, targetGroups, catalystGroups, bagItems, alte
     if #targetGroups == 0 and #catalystGroups == 0 then return end
     local tierSlots = {Head=true, Shoulders=true, Chest=true, Hands=true, Legs=true}
     local tierGroups, tierBySource, targetSlots = {}, {}, {}
-    local function AddTierRow(group, slot, text)
+    local function AddTierRow(group, slot, text, item)
         local key = group.sourceID and ("id:" .. group.sourceID) or ("name:" .. tostring(group.sourceName))
         local tier = tierBySource[key]
         if not tier then
             tier = {sourceName=group.sourceName, rows={}}
             tierBySource[key] = tier; tierGroups[#tierGroups+1] = tier
         end
-        tier.rows[#tier.rows+1] = {slot=slot, text=text, color=CFG.colors.text}
+        tier.rows[#tier.rows+1] = {slot=slot, text=text, item=item, color=CFG.colors.text}
     end
 
     local card = NewCard(f, "Dungeon Runs", CFG.colors.blue)
@@ -645,9 +699,9 @@ local function AddDungeonRunCard(f, targetGroups, catalystGroups, bagItems, alte
                 local text = "•  " .. tostring(slotName) .. " - " .. itemName .. suffix
                 if tierSlots[slotName] then
                     targetSlots[slotName] = true
-                    AddTierRow(group, slotName, text)
+                    AddTierRow(group, slotName, text, item)
                 else
-                    table.insert(rows, {text=text, color=CFG.colors.text})
+                    table.insert(rows, {text=text, item=item, color=CFG.colors.text})
                 end
             end
             for _, item in ipairs(group.alternatives or {}) do
@@ -656,6 +710,7 @@ local function AddDungeonRunCard(f, targetGroups, catalystGroups, bagItems, alte
                     local itemName = StripColorCodes(item.name or ("Item " .. tostring(item.itemID)))
                     table.insert(rows, {
                         text = "◇  " .. tostring(slotName) .. " - " .. itemName .. " (Alternative)",
+                        item = item,
                         color = CFG.colors.blue,
                     })
                     alternativeBudget.value = alternativeBudget.value - 1
@@ -1209,6 +1264,15 @@ local function ShowCompletionPlan(plan, title, subtitle, cardTitle, description,
     f.raidReminder = isRaid == true
     f.title:SetText(title or "Nebulous Voidcore Roll Reminder")
     f.subtitle:SetText(subtitle or "This activity is complete. Check your saved Myth-item roll list.")
+    f.refreshLootSpecs = function()
+        local scroll = f.scroll:GetVerticalScroll() or 0
+        ShowCompletionPlan(plan, title, subtitle, cardTitle, description, isRaid)
+        f.scroll:SetVerticalScroll(scroll)
+    end
+    local lootCard = NewCard(f, CurrentLootSpecLine(), CFG.colors.blue)
+    AddCardLine(lootCard, "Orange item labels mean a different loot spec is needed. Raid loot rules may differ.",
+        CFG.colors.muted, 0, "GameFontDisableSmall", true)
+    FinishCard(f, lootCard)
     AddTargetRollCard(f, plan, cardTitle, description, isRaid and CFG.colors.gold or CFG.colors.violet)
     AddAlternativeRollCard(f, plan,
         isRaid and "Your Alternatives from This Boss" or "Your Alternatives from This Dungeon",
@@ -1250,6 +1314,13 @@ local function ShowGreatVaultTargets(plan)
     f.raidReminder = false
     f.title:SetText("Great Vault Target Reminder")
     f.subtitle:SetText("Review your Voidcore balance and saved Dungeon and Raid Targets and Alternatives before making a broader roll.")
+    f.refreshLootSpecs = function()
+        local scroll = f.scroll:GetVerticalScroll() or 0
+        ShowGreatVaultTargets(plan)
+        f.scroll:SetVerticalScroll(scroll)
+    end
+    local lootCard = NewCard(f, CurrentLootSpecLine(), CFG.colors.blue)
+    FinishCard(f, lootCard)
 
     if (tonumber(plan.itemCount) or 0) > 0 then
         AddTargetRollCard(f, plan, "Your Saved Dungeon and Raid Targets",
@@ -1298,9 +1369,12 @@ function GearWindow.Refresh()
     local alternativeBudget = { value = CFG.maxAlternativesShown, shown = 0 }
 
     local intro = NewCard(f, "Saved Gear Shopping List", CFG.colors.gold)
+    AddCardLine(intro, CurrentLootSpecLine(), CFG.colors.blue, 0, "GameFontNormal")
     AddCardLine(intro,
         "Still-needed Targets and saved Alternatives, grouped by where they drop.",
         CFG.colors.muted, 0, "GameFontDisableSmall")
+    AddCardLine(intro, "Orange item labels mean a different loot spec is needed. Raid loot rules may differ.",
+        CFG.colors.muted, 0, "GameFontDisableSmall", true)
     FinishCard(f, intro)
 
     if #targets == 0 and #alternatives == 0 then
@@ -1504,9 +1578,22 @@ completionEvents:RegisterEvent("CHALLENGE_MODE_RESET")
 completionEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
 completionEvents:RegisterEvent("PLAYER_REGEN_DISABLED")
 completionEvents:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+completionEvents:RegisterEvent("PLAYER_LOOT_SPEC_UPDATED")
+completionEvents:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 -- The Great Vault is load-on-demand and has no WEEKLY_REWARDS_SHOW event.
 completionEvents:RegisterEvent("ADDON_LOADED")
 completionEvents:SetScript("OnEvent", function(_, event, ...)
+    if event == "PLAYER_LOOT_SPEC_UPDATED" or event == "PLAYER_SPECIALIZATION_CHANGED"
+        or (event == "PLAYER_REGEN_ENABLED" and lootSpecRefreshPending) then
+        if event == "PLAYER_SPECIALIZATION_CHANGED" and (...) ~= "player" then return end
+        if InCombatLockdown and InCombatLockdown() then lootSpecRefreshPending = true; return end
+        lootSpecRefreshPending = nil
+        if frame and frame:IsShown() then GearWindow.Refresh() end
+        if completionFrame and completionFrame:IsShown() and completionFrame.refreshLootSpecs then
+            completionFrame.refreshLootSpecs()
+        end
+        if event ~= "PLAYER_REGEN_ENABLED" then return end
+    end
     if event == "ADDON_LOADED" then
         HookGreatVault()
         return

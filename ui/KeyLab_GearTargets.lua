@@ -34,7 +34,8 @@ local CFG = {
 -- These dimensions deliberately match the previous Gear Targets tab.
 local TABLE_WIDTH = 880
 local FILTER_CARD_HEIGHT = 136
-local MATCHER_CARD_HEIGHT = 144
+local MATCHER_CARD_HEIGHT = 62
+local MATCHER_PRIMARY_NAMES = {Agi="Agility", Int="Intellect", Str="Strength"}
 local TABLE_COLUMNS = {
     item = { x = 38, width = 236, label = "Item" },
     slot = { x = 280, width = 76, label = "Slot" },
@@ -835,6 +836,8 @@ end
 
 function GearTargets:SetGoalTargetFromBox(statKey, box)
     if self.committingGoalBoxes then return end
+    if self.preparationPopup and self.preparationPopup.goalSpecID ~= TargetSpecID() then return end
+    if self.preparationPopup then self.preparationPopup.validationMessage=nil end
     local text = tostring(box:GetText() or ""):gsub("%%", ""):gsub(",", "."):gsub("^%s+", ""):gsub("%s+$", "")
     local value = tonumber(text)
     if value == nil or value < 0 then value = 0 end
@@ -845,6 +848,9 @@ function GearTargets:SetGoalTargetFromBox(statKey, box)
 end
 
 function GearTargets:CommitVisibleGoals()
+    if self.preparationPopup and self.preparationPopup.goalSpecID ~= TargetSpecID() then
+        return false, "Your specialization changed. Reopen the matcher to edit its goals."
+    end
     local targets = {}
     for _, definition in ipairs(GOAL_FIELDS) do
         local box = self.goalBoxes and self.goalBoxes[definition.key]
@@ -935,13 +941,15 @@ function GearTargets:RefreshMatcherCard()
         if not box:HasFocus() then box:SetText(tostring(tonumber(goals.targets and goals.targets[key]) or 0)) end
     end
     local valid, validationMessage = KeyLab.StatGoalsDB.Validate(TargetSpecID())
-    self.goalTotal:SetText("Character % goals  |  *Trinkets excluded")
-    self.goalTotal:SetTextColor(unpack(valid and CFG.colors.green or CFG.colors.warning))
+    if self.goalTotal then
+        self.goalTotal:SetText("Character % goals  |  *Trinkets excluded")
+        self.goalTotal:SetTextColor(unpack(valid and CFG.colors.green or CFG.colors.warning))
+    end
 
     local matcher = KeyLab.StatGoalMatcher
     local function ShowResultsButton(show)
         if self.matcherResultsButton then self.matcherResultsButton:SetShown(show == true) end
-        if self.matcherState then self.matcherState:SetWidth(show and 282 or 372) end
+        if self.matcherState then self.matcherState:SetWidth(math.max(200,self.matcherStatusCard:GetWidth()-(show and 110 or 20))) end
     end
     ShowResultsButton(false)
     self.visibleMatcherResult = nil
@@ -955,12 +963,17 @@ function GearTargets:RefreshMatcherCard()
         characterPercentages = type(percentages) == "table" and percentages or {}
     end
     local displayOrder = KeyLab.StatGoalsDB.GetDisplayOrder and KeyLab.StatGoalsDB.GetDisplayOrder(TargetSpecID()) or { "crit", "mastery", "haste", "versatility" }
+    local primaryStat = KeyLab.StatGoalsDB.GetPrimaryStat and KeyLab.StatGoalsDB.GetPrimaryStat(TargetSpecID())
+    if self.primaryDropdown then
+        SetDropdownText(self.primaryDropdown, MATCHER_PRIMARY_NAMES[primaryStat] or "None (secondary only)")
+        self.primaryLabel:SetText(primaryStat and "#1 Primary requirement" or "Primary first (optional)")
+    end
     for index, statKey in ipairs(displayOrder) do
         local row = self.goalRows and self.goalRows[statKey]
         if row then
             row.frame:ClearAllPoints()
-            row.frame:SetPoint("TOPLEFT", self.matcherPanel, "TOPLEFT", 420, -8 - ((index - 1) * 31))
-            row.rank:SetText("#" .. tostring(index))
+            row.frame:SetPoint("TOPLEFT", self.goalPanel, "TOPLEFT", 14, -106 - ((index - 1) * 31))
+            row.rank:SetText("#" .. tostring(index + (primaryStat and 1 or 0)))
             local current = tonumber(characterPercentages[statKey])
             local goal = tonumber(goals.targets and goals.targets[statKey]) or 0
             row.current:SetText(current and string.format("Now* %.1f%%", current) or "Now* —")
@@ -1066,7 +1079,7 @@ function GearTargets:ScheduleCurrentStatsRefresh()
             KeyLab.GearCapture.MarkAllSlotsChanged()
         end
         GearTargets.matcherCurrentPercentages = nil
-        if GearTargets.frame and GearTargets.frame:IsShown() then
+        if (GearTargets.frame and GearTargets.frame:IsShown()) or (GearTargets.preparationPopup and GearTargets.preparationPopup:IsShown()) then
             GearTargets:RefreshMatcherCard()
         end
     end
@@ -1168,7 +1181,7 @@ end
 local function RenderMatcherResults(popup, result)
     ClearMatcherResultCards(popup)
 
-    local summary = ResultCard(popup, 78, tostring(result.resultStatus or "Match Complete"), CFG.colors.gold)
+    local summary = ResultCard(popup, 122, tostring(result.resultStatus or "Match Complete"), CFG.colors.gold)
     local style = MakeText(summary, MatcherStyleLabel(result.matchStyle) .. "  |  " .. tostring(result.mode or "") .. " search", "GameFontHighlightSmall", nil, CFG.colors.blue)
     style:SetPoint("TOPLEFT", summary, "TOPLEFT", 14, -35)
     style:SetSize(300, 18)
@@ -1178,6 +1191,12 @@ local function RenderMatcherResults(popup, result)
     local source = MakeText(summary, MatcherPoolLabel(result), "GameFontHighlightSmall", nil, CFG.colors.text, "RIGHT")
     source:SetPoint("TOPRIGHT", summary, "TOPRIGHT", -14, -34)
     source:SetSize(390, 30)
+    local primary = MakeText(summary, "Primary first: " .. (MATCHER_PRIMARY_NAMES[result.primaryStat] or "None (secondary only)"), "GameFontHighlightSmall", nil, CFG.colors.gold)
+    primary:SetPoint("TOPLEFT", summary, "TOPLEFT", 14, -72)
+    primary:SetSize(popup.contentWidth - 28, 18)
+    local weapon = MakeText(summary, "Weapon setup: " .. tostring(result.weaponSetupLabel or "Standard spec rules"), "GameFontHighlightSmall", nil, CFG.colors.blue)
+    weapon:SetPoint("TOPLEFT", summary, "TOPLEFT", 14, -94)
+    weapon:SetSize(popup.contentWidth - 28, 18)
 
     local trinketNotice = ResultCard(popup, 78, "About Trinkets", CFG.colors.blue)
     local trinketNoticeText = MakeText(trinketNotice,
@@ -1413,10 +1432,103 @@ function GearTargets:OpenMatcherResults(result)
     return openedOrError == true
 end
 
+function GearTargets:CreateMatcherGoalControls(parent)
+    local matcherPanel = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    matcherPanel:SetPoint("TOPLEFT", parent, "TOPLEFT", 24, -390)
+    matcherPanel:SetSize(522, 264)
+    SetBackdrop(matcherPanel, CFG.colors.panel, CFG.colors.border)
+    self.goalPanel = matcherPanel
+    local title = MakeText(matcherPanel, "Stat Goals & Priority", "GameFontNormal", nil, CFG.colors.gold)
+    title:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 14, -12)
+    title:SetSize(250, 20)
+    self.refreshStatsButton = MakeSmallButton(matcherPanel, "Refresh Current Stats", 134, 22)
+    self.refreshStatsButton:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 368, -10)
+    StyleGearTargetControlButton(self.refreshStatsButton)
+    self.refreshStatsButton:SetScript("OnClick", function()
+        GearTargets:RefreshCurrentStats(true)
+    end)
+    self.primaryDropdown, self.primaryLabel = MakeDropdown(matcherPanel, 210, 14, -44, "Primary first (optional)", function()
+        local specID = TargetSpecID()
+        local mapping = KeyLab.GearLootMapping
+        local expected = mapping and mapping.GetPrimaryStatForSpec and mapping.GetPrimaryStatForSpec(specID)
+        local selected = KeyLab.StatGoalsDB.GetPrimaryStat and KeyLab.StatGoalsDB.GetPrimaryStat(specID)
+        local options = {{value="none", text="None (secondary only)"}}
+        if MATCHER_PRIMARY_NAMES[expected] then options[#options+1] = {value=expected, text=MATCHER_PRIMARY_NAMES[expected]} end
+        for _, option in ipairs(options) do
+            local value = option.value
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = option.text
+            info.checked = (selected or "none") == value
+            info.func = function()
+                if InCombatLockdown and InCombatLockdown() then return end
+                if TargetSpecID() ~= specID or not GearTargets.preparationPopup or GearTargets.preparationPopup.goalSpecID ~= specID then return end
+                if KeyLab.StatGoalsDB.SetPrimaryStat(specID, value) then
+                    GearTargets.preparationPopup.validationMessage = nil
+                    GearTargets:RefreshMatcherCard()
+                end
+            end
+            UIDropDownMenu_AddButton(info)
+        end
+    end)
+    local primaryHelp = MakeText(matcherPanel, "Require your spec's primary stat before matching secondary goals. Rings/necks are exempt; trinkets are unchanged.", "GameFontDisableSmall", nil, CFG.colors.muted)
+    primaryHelp:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 244, -44)
+    primaryHelp:SetSize(260, 52); primaryHelp:SetWordWrap(true)
+    self.goalBoxes = {}
+    self.goalRows = {}
+    for _, definition in ipairs(GOAL_FIELDS) do
+        local def = definition
+        local row = CreateFrame("Frame", nil, matcherPanel)
+        row:SetSize(478, 28)
+        local rank = MakeText(row, "", "GameFontDisableSmall", nil, CFG.colors.gold)
+        rank:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -5)
+        rank:SetSize(28, 18)
+        local label = MakeText(row, def.label, "GameFontHighlightSmall", nil, CFG.colors.text)
+        label:SetPoint("TOPLEFT", row, "TOPLEFT", 34, -5)
+        label:SetSize(84, 18)
+        local goalLabel = MakeText(row, "Goal", "GameFontDisableSmall", nil, CFG.colors.muted)
+        goalLabel:SetPoint("TOPLEFT", row, "TOPLEFT", 120, -5)
+        goalLabel:SetSize(38, 18)
+        local box = MakeEditBox(row, 52, 22)
+        box:SetPoint("TOPLEFT", row, "TOPLEFT", 158, 0)
+        box:SetScript("OnEnterPressed", function(edit) GearTargets:SetGoalTargetFromBox(def.key, edit) end)
+        box:SetScript("OnEditFocusLost", function(edit) GearTargets:SetGoalTargetFromBox(def.key, edit) end)
+        local percent = MakeText(row, "%", "GameFontDisableSmall", nil, CFG.colors.muted)
+        percent:SetPoint("LEFT", box, "RIGHT", 3, 0)
+        percent:SetSize(16, 18)
+        local current = MakeText(row, "Now* —", "GameFontHighlightSmall", nil, CFG.colors.muted)
+        current:SetPoint("TOPLEFT", row, "TOPLEFT", 232, -5)
+        current:SetSize(94, 18)
+        current:SetTextColor(unpack(CFG.colors.text))
+        local status = MakeText(row, "", "GameFontHighlightSmall", nil, CFG.colors.muted)
+        status:SetPoint("TOPLEFT", row, "TOPLEFT", 330, -5)
+        status:SetSize(70, 18)
+        local up = MakeSmallButton(row, "^", 28, 20)
+        up:SetPoint("TOPLEFT", row, "TOPLEFT", 408, -1)
+        up:SetScript("OnClick", function()
+            if KeyLab.StatGoalsDB.MoveDisplayStat(TargetSpecID(), def.key, "up") then GearTargets:RefreshMatcherCard() end
+        end)
+        local down = MakeSmallButton(row, "v", 28, 20)
+        down:SetPoint("TOPLEFT", row, "TOPLEFT", 442, -1)
+        down:SetScript("OnClick", function()
+            if KeyLab.StatGoalsDB.MoveDisplayStat(TargetSpecID(), def.key, "down") then GearTargets:RefreshMatcherCard() end
+        end)
+        self.goalBoxes[def.key] = box
+        self.goalRows[def.key] = { frame = row, rank = rank, current = current, status = status, up = up, down = down }
+    end
+    self.goalTotal = MakeText(matcherPanel, "Character % goals  |  *Trinkets excluded", "GameFontHighlightSmall", nil, CFG.colors.green)
+    self.goalTotal:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 14, -236)
+    self.goalTotal:SetSize(280, 18)
+    local goalHint = MakeText(matcherPanel, "Each goal: 0%-100%", "GameFontDisableSmall", nil, CFG.colors.muted)
+    goalHint:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 298, -236)
+    goalHint:SetSize(180, 18)
+    self.goalHint = goalHint
+
+end
+
 function GearTargets:CreatePreparationPopup()
     if self.preparationPopup then return self.preparationPopup end
     local popup = CreateFrame("Frame", "KeyLabStatGoalMatcherPreparation", UIParent, "BackdropTemplate")
-    popup:SetSize(570, 480)
+    popup:SetSize(570, 792)
     popup:SetPoint("CENTER")
     popup:SetFrameStrata("FULLSCREEN_DIALOG")
     popup:SetFrameLevel(1000)
@@ -1436,14 +1548,14 @@ function GearTargets:CreatePreparationPopup()
     dragHandle:SetScript("OnDragStart", function() popup:StartMoving() end)
     dragHandle:SetScript("OnDragStop", function() popup:StopMovingOrSizing() end)
 
-    local title = MakeText(popup, "Prepare Your Gear", "GameFontNormalLarge", nil, CFG.colors.gold, "CENTER")
+    local title = MakeText(popup, "Stat Goal Matcher", "GameFontNormalLarge", nil, CFG.colors.gold, "CENTER")
     Theme.AddPopupLogo(popup)
     title:SetPoint("TOP", popup, "TOP", 0, -18)
     title:SetSize(530, 28)
     local body = MakeText(popup,
         "Equip every item you want to keep, including Tier, crafted, embellished, set, and other keeper items. Trinket secondary stats are always excluded from the goal projection.\n\n" ..
         "Unequip only the slots you want KeyLab to fill.\n\n" ..
-        "Choose where KeyLab should search and how it should match your goals. An open trinket slot may receive advisory Stat Support suggestions. The matcher does not judge roles, bonuses, special effects, or Best in Slot.",
+        "Search includes loot from all specs of your class. Check each item's Loot Spec before seeking it; change loot spec in Preparation Panel. An open trinket slot may receive advisory Stat Support suggestions. The matcher does not judge roles, bonuses, special effects, or Best in Slot.",
         "GameFontHighlightSmall", nil, CFG.colors.text)
     body:SetPoint("TOPLEFT", popup, "TOPLEFT", 24, -58)
     body:SetSize(522, 145)
@@ -1475,7 +1587,7 @@ function GearTargets:CreatePreparationPopup()
             UIDropDownMenu_AddButton(info, level)
         end
     end)
-    local scopeHelp = MakeText(popup, "This choice is only for this matcher run. It does not change the gear list above.", "GameFontDisableSmall", nil, CFG.colors.muted)
+    local scopeHelp = MakeText(popup, "This choice is only for this matcher run. It does not change the Gear Targets browsing filters.", "GameFontDisableSmall", nil, CFG.colors.muted)
     scopeHelp:SetPoint("TOPLEFT", popup, "TOPLEFT", 24, -274)
     scopeHelp:SetSize(522, 46)
     scopeHelp:SetWordWrap(true)
@@ -1499,6 +1611,44 @@ function GearTargets:CreatePreparationPopup()
     styleHelp:SetPoint("TOPLEFT", popup, "TOPLEFT", 298, -326)
     styleHelp:SetSize(248, 48)
     styleHelp:SetWordWrap(true)
+    popup.weaponDropdown, popup.weaponLabel = MakeDropdown(popup, 232, 298, -326, "Weapon Setup", function(_, level)
+        local specID = TargetSpecID()
+        local mapping = KeyLab.GearLootMapping
+        local config = mapping and mapping.GetMatcherWeaponSetupConfig and mapping.GetMatcherWeaponSetupConfig(specID)
+        local selected = KeyLab.StatGoalsDB.GetWeaponSetup and KeyLab.StatGoalsDB.GetWeaponSetup(specID)
+        for _, value in ipairs(config and config.choices or {}) do
+            local setup = value
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = mapping.GetMatcherWeaponSetupLabel(setup)
+            info.checked = selected == setup
+            info.func = function()
+                if InCombatLockdown and InCombatLockdown() then return end
+                if TargetSpecID() ~= specID or popup.goalSpecID ~= specID then return end
+                if KeyLab.StatGoalsDB.SetWeaponSetup(specID, setup) then
+                    popup.validationMessage = nil
+                    popup:RefreshWeaponSetupChoice()
+                end
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+    function popup:RefreshWeaponSetupChoice()
+        local mapping = KeyLab.GearLootMapping
+        local config = mapping and mapping.GetMatcherWeaponSetupConfig and mapping.GetMatcherWeaponSetupConfig(TargetSpecID())
+        if not config then
+            self.weaponDropdown:Hide(); self.weaponLabel:Hide(); styleHelp:Show()
+            return
+        end
+        self.weaponDropdown:Show(); self.weaponLabel:Show(); styleHelp:Hide()
+        if config.fixed then
+            SetDropdownText(self.weaponDropdown, config.label)
+            if UIDropDownMenu_DisableDropDown then UIDropDownMenu_DisableDropDown(self.weaponDropdown) end
+        else
+            local selected = KeyLab.StatGoalsDB.GetWeaponSetup and KeyLab.StatGoalsDB.GetWeaponSetup(TargetSpecID())
+            SetDropdownText(self.weaponDropdown, mapping.GetMatcherWeaponSetupLabel(selected) or "Choose setup")
+            if UIDropDownMenu_EnableDropDown then UIDropDownMenu_EnableDropDown(self.weaponDropdown) end
+        end
+    end
     function popup:RefreshSourceChoice()
         local owned = GearTargets.matcherItemSource == "owned"
         SetDropdownText(self.sourceDropdown, MatcherItemSourceLabel(GearTargets.matcherItemSource))
@@ -1507,13 +1657,17 @@ function GearTargets:CreatePreparationPopup()
         elseif not owned and UIDropDownMenu_EnableDropDown then UIDropDownMenu_EnableDropDown(self.scopeDropdown) end
         self.scopeLabel:SetTextColor(unpack(owned and CFG.colors.muted or CFG.colors.text))
         SetDropdownText(self.styleDropdown, MatcherStyleLabel(GearTargets.matcherMatchStyle))
+        self:RefreshWeaponSetupChoice()
         scopeHelp:SetText(owned
             and "Equipped gear stays locked. Known upgrade tracks for worn and bag items are projected to their highest rank. Your stat goals come first; other item details break close ties."
             or "Choose Dungeon, Raid, or Dungeon and Raid items. KeyLab evens out recorded item levels so it can compare each item's stat pattern fairly.")
     end
 
+    self:CreateMatcherGoalControls(popup)
+    local goalHelp=MakeText(popup,"Use ^ / v to order your secondary-stat priorities. Goals do not need to total 100%.","GameFontDisableSmall",nil,CFG.colors.muted)
+    goalHelp:SetPoint("TOPLEFT",popup,"TOPLEFT",24,-664); goalHelp:SetSize(522,30); goalHelp:SetWordWrap(true)
     popup.countdown = MakeText(popup, "", "GameFontHighlightSmall", nil, CFG.colors.blue, "CENTER")
-    popup.countdown:SetPoint("TOP", popup, "TOP", 0, -398)
+    popup.countdown:SetPoint("TOP", popup, "TOP", 0, -698)
     popup.countdown:SetSize(520, 36)
     popup.countdown:SetWordWrap(true)
 
@@ -1524,8 +1678,7 @@ function GearTargets:CreatePreparationPopup()
     popup.run:SetPoint("BOTTOMLEFT", popup, "BOTTOM", 8, 20)
     popup.run:SetScript("OnClick", function()
         if popup.readyAt and GetTime and GetTime() < popup.readyAt then return end
-        popup:Hide()
-        GearTargets:StartMatcher()
+        if GearTargets:StartMatcher() then popup:Hide() end
     end)
     popup:SetScript("OnUpdate", function(self)
         if not self:IsShown() then return end
@@ -1535,32 +1688,22 @@ function GearTargets:CreatePreparationPopup()
         self.run:SetEnabled(ready)
         self.run.label:SetText(ready and "Start Matcher" or ("Start in " .. tostring(remaining)))
         self.run.label:SetTextColor(unpack(ready and CFG.colors.text or CFG.colors.muted))
-        self.countdown:SetText(ready
+        self.countdown:SetText(self.validationMessage or (ready
             and "Ready when you are. Nothing runs until you press Start Matcher."
-            or "Unequip the slots you want filled. The matcher will be available in " .. tostring(remaining) .. " second(s).")
-        self.countdown:SetTextColor(unpack(ready and CFG.colors.green or CFG.colors.blue))
+            or "Unequip the slots you want filled. The matcher will be available in " .. tostring(remaining) .. " second(s)."))
+        self.countdown:SetTextColor(unpack(self.validationMessage and CFG.colors.warning or ready and CFG.colors.green or CFG.colors.blue))
     end)
     self.preparationPopup = popup
     return popup
 end
 
 function GearTargets:OpenPreparationPopup()
-    local committed, commitMessage = self:CommitVisibleGoals()
-    if not committed then
-        self.matcherProgressText = commitMessage
-        self:RefreshMatcherCard()
-        if KeyLab.Print then KeyLab.Print(commitMessage) end
-        return
-    end
-    local valid, message = KeyLab.StatGoalsDB.Validate(TargetSpecID())
-    if not valid then
-        self.matcherProgressText = message
-        self:RefreshMatcherCard()
-        if KeyLab.Print then KeyLab.Print(message) end
-        return
-    end
+    if InCombatLockdown and InCombatLockdown() then return end
     self.matcherMatchStyle = KeyLab.StatGoalsDB and KeyLab.StatGoalsDB.GetMatchStyle and KeyLab.StatGoalsDB.GetMatchStyle(TargetSpecID()) or "balanced"
     local popup = self:CreatePreparationPopup()
+    popup.goalSpecID=TargetSpecID(); popup.validationMessage=nil
+    popup:SetScale(math.min(1,(UIParent:GetHeight()-40)/792))
+    self:RefreshCurrentStats()
     popup:RefreshSourceChoice()
     popup.readyAt = (GetTime and GetTime() or 0) + 5
     popup.run:SetEnabled(false)
@@ -1571,14 +1714,16 @@ function GearTargets:OpenPreparationPopup()
 end
 
 function GearTargets:StartMatcher()
+    if InCombatLockdown and InCombatLockdown() then return false end
     local matcher = KeyLab.StatGoalMatcher
-    if not matcher then return end
+    if not matcher then return false end
     local committed, commitMessage = self:CommitVisibleGoals()
     if not committed then
         self.matcherProgressText = commitMessage
+        if self.preparationPopup then self.preparationPopup.validationMessage=commitMessage end
         self:RefreshMatcherCard()
         if KeyLab.Print then KeyLab.Print(commitMessage) end
-        return
+        return false
     end
     self.matcherFinishing = false
     self.matcherCancelling = false
@@ -1590,6 +1735,8 @@ function GearTargets:StartMatcher()
         itemType = self.matcherItemType,
         itemSource = self.matcherItemSource,
         matchStyle = self.matcherMatchStyle,
+        primaryStat = KeyLab.StatGoalsDB.GetPrimaryStat and KeyLab.StatGoalsDB.GetPrimaryStat(TargetSpecID()) or "none",
+        weaponSetup = KeyLab.StatGoalsDB.GetWeaponSetup and KeyLab.StatGoalsDB.GetWeaponSetup(TargetSpecID()),
     }, function(progress)
         local mode = progress.mode or ""
         local completed = tonumber(progress.completed) or 0
@@ -1637,12 +1784,14 @@ function GearTargets:StartMatcher()
     if not started then
         self:StopMatcherAnimation()
         self.matcherProgressText = message
+        if self.preparationPopup then self.preparationPopup.validationMessage=message end
         if KeyLab.Print then KeyLab.Print(message) end
         self:RefreshMatcherCard()
     elseif matcher.IsRunning and matcher.IsRunning() then
         self:StartMatcherAnimation()
         self:RefreshMatcherCard()
     end
+    return started==true
 end
 
 function GearTargets:RefreshFilterControls()
@@ -1884,22 +2033,10 @@ function GearTargets:Create(parent)
     matcherPanel:SetHeight(MATCHER_CARD_HEIGHT)
     SetBackdrop(matcherPanel, CFG.colors.panel, CFG.colors.border)
     self.matcherPanel = matcherPanel
-    local matcherTitle = MakeText(matcherPanel, "Stat Goal Guidance", "GameFontNormal", nil, CFG.colors.gold)
-    matcherTitle:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 14, -10)
-    matcherTitle:SetSize(230, 18)
-    self.refreshStatsButton = MakeSmallButton(matcherPanel, "Refresh Current Stats", 134, 22)
-    self.refreshStatsButton:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 260, -7)
-    StyleGearTargetControlButton(self.refreshStatsButton)
-    self.refreshStatsButton:SetScript("OnClick", function()
-        GearTargets:RefreshCurrentStats(true)
-    end)
-    local matcherNote = MakeText(matcherPanel, "Enter your stat goal percentages. KeyLab excludes trinket stats, fills the other unequipped slots, and projects the finished set.", "GameFontDisableSmall", nil, CFG.colors.muted)
-    matcherNote:SetPoint("TOPLEFT", matcherTitle, "BOTTOMLEFT", 0, -4)
-    matcherNote:SetSize(380, 28)
-    matcherNote:SetWordWrap(true)
     local matcherStatusCard = CreateFrame("Frame", nil, matcherPanel, "BackdropTemplate")
-    matcherStatusCard:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 8, -66)
-    matcherStatusCard:SetSize(392, 46)
+    matcherStatusCard:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 8, -8)
+    matcherStatusCard:SetPoint("TOPRIGHT", matcherPanel, "TOPRIGHT", -8, -8)
+    matcherStatusCard:SetHeight(46)
     SetBackdrop(matcherStatusCard, CFG.colors.box, CFG.colors.border)
     matcherStatusCard:EnableMouse(true)
     matcherStatusCard:SetScript("OnMouseUp", function()
@@ -1921,55 +2058,6 @@ function GearTargets:Create(parent)
     end)
     self.matcherResultsButton:Hide()
 
-    self.goalBoxes = {}
-    self.goalRows = {}
-    for _, definition in ipairs(GOAL_FIELDS) do
-        local def = definition
-        local row = CreateFrame("Frame", nil, matcherPanel)
-        row:SetSize(478, 28)
-        local rank = MakeText(row, "", "GameFontDisableSmall", nil, CFG.colors.gold)
-        rank:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -5)
-        rank:SetSize(28, 18)
-        local label = MakeText(row, def.label, "GameFontHighlightSmall", nil, CFG.colors.text)
-        label:SetPoint("TOPLEFT", row, "TOPLEFT", 34, -5)
-        label:SetSize(84, 18)
-        local goalLabel = MakeText(row, "Goal", "GameFontDisableSmall", nil, CFG.colors.muted)
-        goalLabel:SetPoint("TOPLEFT", row, "TOPLEFT", 120, -5)
-        goalLabel:SetSize(38, 18)
-        local box = MakeEditBox(row, 52, 22)
-        box:SetPoint("TOPLEFT", row, "TOPLEFT", 158, 0)
-        box:SetScript("OnEnterPressed", function(edit) GearTargets:SetGoalTargetFromBox(def.key, edit) end)
-        box:SetScript("OnEditFocusLost", function(edit) GearTargets:SetGoalTargetFromBox(def.key, edit) end)
-        local percent = MakeText(row, "%", "GameFontDisableSmall", nil, CFG.colors.muted)
-        percent:SetPoint("LEFT", box, "RIGHT", 3, 0)
-        percent:SetSize(16, 18)
-        local current = MakeText(row, "Now* —", "GameFontHighlightSmall", nil, CFG.colors.muted)
-        current:SetPoint("TOPLEFT", row, "TOPLEFT", 232, -5)
-        current:SetSize(94, 18)
-        current:SetTextColor(unpack(CFG.colors.text))
-        local status = MakeText(row, "", "GameFontHighlightSmall", nil, CFG.colors.muted)
-        status:SetPoint("TOPLEFT", row, "TOPLEFT", 330, -5)
-        status:SetSize(70, 18)
-        local up = MakeSmallButton(row, "^", 28, 20)
-        up:SetPoint("TOPLEFT", row, "TOPLEFT", 408, -1)
-        up:SetScript("OnClick", function()
-            if KeyLab.StatGoalsDB.MoveDisplayStat(TargetSpecID(), def.key, "up") then GearTargets:RefreshMatcherCard() end
-        end)
-        local down = MakeSmallButton(row, "v", 28, 20)
-        down:SetPoint("TOPLEFT", row, "TOPLEFT", 442, -1)
-        down:SetScript("OnClick", function()
-            if KeyLab.StatGoalsDB.MoveDisplayStat(TargetSpecID(), def.key, "down") then GearTargets:RefreshMatcherCard() end
-        end)
-        self.goalBoxes[def.key] = box
-        self.goalRows[def.key] = { frame = row, rank = rank, current = current, status = status, up = up, down = down }
-    end
-    self.goalTotal = MakeText(matcherPanel, "Character % goals  |  *Trinkets excluded", "GameFontHighlightSmall", nil, CFG.colors.green)
-    self.goalTotal:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 14, -116)
-    self.goalTotal:SetSize(260, 18)
-    local goalHint = MakeText(matcherPanel, "Each may be 0%–100%", "GameFontDisableSmall", nil, CFG.colors.muted)
-    goalHint:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 278, -116)
-    goalHint:SetSize(180, 18)
-    self.goalHint = goalHint
 
     self.summary = MakeText(frame, "Loading loot...", "GameFontDisableSmall", nil, CFG.colors.blue)
     self.summary:SetPoint("TOPLEFT", matcherPanel, "BOTTOMLEFT", 4, -8)
@@ -1977,7 +2065,7 @@ function GearTargets:Create(parent)
     self.clearTargetsButton:SetSize(108, 22)
     self.clearTargetsButton:SetPoint("TOPRIGHT", matcherPanel, "BOTTOMRIGHT", -4, -4)
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -410)
+    scroll:SetPoint("TOPLEFT", matcherPanel, "BOTTOMLEFT", 0, -36)
     scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
     local content = CreateFrame("Frame", nil, scroll)
     content:SetSize(TABLE_WIDTH, 620)
@@ -1988,7 +2076,17 @@ function GearTargets:Create(parent)
     local events = CreateFrame("Frame", nil, frame)
     events:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
     events:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+    events:RegisterEvent("PLAYER_REGEN_DISABLED")
     events:SetScript("OnEvent", function(_, event, unitOrSlot)
+        if event=="PLAYER_REGEN_DISABLED" or event=="PLAYER_SPECIALIZATION_CHANGED" and (not unitOrSlot or unitOrSlot=="player") then
+            if GearTargets.preparationPopup then
+                GearTargets.committingGoalBoxes=true
+                for _,box in pairs(GearTargets.goalBoxes or {}) do box:ClearFocus() end
+                GearTargets.preparationPopup:Hide()
+                GearTargets.committingGoalBoxes=false
+            end
+            if event=="PLAYER_REGEN_DISABLED" then return end
+        end
         if event == "PLAYER_SPECIALIZATION_CHANGED" and unitOrSlot and unitOrSlot ~= "player" then return end
         if event == "PLAYER_SPECIALIZATION_CHANGED" then
             GearTargets.selectedSourceID = nil

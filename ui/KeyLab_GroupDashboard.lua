@@ -728,7 +728,12 @@ local function CreateCompactDropdown(parent, width)
     dropdown:SetScript("OnClick", function()
         if dropdown.menu:IsShown() then dropdown.menu:Hide(); return end
         dropdown.menu.offset = 1
-        dropdown.menu:ClearAllPoints(); dropdown.menu:SetPoint("TOPRIGHT", dropdown, "BOTTOMRIGHT", 0, -2)
+        dropdown.menu:ClearAllPoints()
+        if dropdown.openUp then
+            dropdown.menu:SetPoint("BOTTOMRIGHT", dropdown, "TOPRIGHT", 0, 2)
+        else
+            dropdown.menu:SetPoint("TOPRIGHT", dropdown, "BOTTOMRIGHT", 0, -2)
+        end
         populate(); dropdown.menu:Show()
     end)
     function dropdown:SetChoices(options, selected, onSelect)
@@ -789,7 +794,7 @@ end
 function Dashboard:EnsureGroupSnapshot()
     if self.snapshot then return self.snapshot end
     local frame = CreateFrame("Frame", "KeyLabGroupSnapshot", UIParent, "BackdropTemplate")
-    frame:SetSize(374, math.min(780, math.max(650, UIParent:GetHeight()-60))); RestoreFloatingPosition(frame, "snapshot", "RIGHT", "RIGHT", -24, 0)
+    frame:SetSize(420, 800); RestoreFloatingPosition(frame, "snapshot", "RIGHT", "RIGHT", -24, 0)
     frame:SetFrameStrata("DIALOG"); frame:SetFrameLevel(8200); frame:Hide(); frame:EnableMouse(true)
     frame:SetMovable(true); frame:SetClampedToScreen(true); frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", function(self)
@@ -801,55 +806,91 @@ function Dashboard:EnsureGroupSnapshot()
     end)
     Theme.StylePanel(frame, Colors.bg, Colors.gold, 1)
     Theme.AddPopupLogo(frame)
-    local title = Text(frame, "Group Snapshot", 16, Colors.gold)
+    local title = Text(frame, "Preparation Panel", 16, Colors.gold)
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", 66, -14)
-    local subtitle = Text(frame, "Class/Spec capabilities only. Drag to move; open the full dashboard for details.", 9, Colors.muted)
-    subtitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 66, -36); subtitle:SetSize(258, 30)
-    local minimize = Theme.CreateButton(frame, "—", 30, 24)
+    local subtitle = Text(frame, "Talents, loot, shopping and group readiness. Drag to move.", 9, Colors.muted)
+    subtitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 66, -36); subtitle:SetSize(304, 30)
+    local minimize = Theme.CreateButton(frame, "-", 30, 24)
+    frame.minimizeButton = minimize
     minimize:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -10)
     minimize:SetScript("OnClick", function()
-        frame:Hide(); Dashboard.snapshotCollapsed = true
-        if Dashboard.snapshotHandle and not (InCombatLockdown and InCombatLockdown()) then Dashboard.snapshotHandle:Show() end
+        Dashboard:MinimizePreparationPanel()
     end)
     frame.talentName=Text(frame,"",12,Colors.gold)
-    frame.talentName:SetPoint("TOPLEFT",16,-72); frame.talentName:SetSize(340,40)
-    frame.talentDropdown=CreateCompactDropdown(frame,244)
-    frame.talentDropdown:SetPoint("TOPLEFT",14,-117)
-    frame.talentSwitch=Theme.CreateButton(frame,"Switch",86,26)
+    frame.talentName:SetPoint("TOPLEFT",16,-72); frame.talentName:SetSize(388,28)
+    frame.talentDropdown=CreateCompactDropdown(frame,266)
+    frame.talentDropdown:SetPoint("TOPLEFT",14,-104)
+    frame.talentSwitch=Theme.CreateButton(frame,"Switch",112,26)
     frame.talentSwitch:SetPoint("LEFT",frame.talentDropdown,"RIGHT",8,0)
     frame.talentSwitch:SetScript("OnClick",function()
-        if KeyLab.GuideTalents then KeyLab.GuideTalents.Switch(frame.selectedTalentID) end
+        if InCombatLockdown and InCombatLockdown() then return end
+        if KeyLab.GuideTalents and KeyLab.GuideTalents.Switch(frame.selectedTalentID) then
+            Dashboard:MinimizePreparationPanel()
+        end
     end)
     frame.talentNote=Text(frame,"",10,Colors.muted)
-    frame.talentNote:SetPoint("TOPLEFT",16,-148); frame.talentNote:SetSize(340,42)
-    frame:HookScript("OnHide",function() frame.talentDropdown.menu:Hide() end)
-    local rosterTitle = Text(frame, "GROUP MEMBERS", 10, Colors.blue)
-    rosterTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -202)
+    frame.talentNote:SetPoint("TOPLEFT",16,-136); frame.talentNote:SetSize(388,34)
+    frame.lootName=Text(frame,"Loot Spec: Loading",12,Colors.gold)
+    frame.lootName:SetPoint("TOPLEFT",16,-178); frame.lootName:SetSize(388,26)
+    frame.lootDropdown=CreateCompactDropdown(frame,266)
+    frame.lootDropdown:SetPoint("TOPLEFT",14,-210)
+    frame.lootSwitch=Theme.CreateButton(frame,"Set Loot Spec",112,26)
+    frame.lootSwitch:SetPoint("LEFT",frame.lootDropdown,"RIGHT",8,0)
+    frame.lootSwitch:SetScript("OnClick",function() Dashboard:SetPreparationLootSpec() end)
+    frame.lootNote=Text(frame,"",10,Colors.muted)
+    frame.lootNote:SetPoint("TOPLEFT",16,-242); frame.lootNote:SetSize(388,28)
+    frame.rosterTitle = Text(frame, "GROUP READINESS", 10, Colors.blue)
+    frame.rosterTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -286)
     frame.rosterScroll = Theme.CreateScrollArea(frame, { step = 44 })
-    frame.rosterScroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -224)
-    frame.rosterScroll:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -224)
-    frame.rosterScroll:SetHeight(214); frame.rosterRows = {}
-    local capabilityTitle = Text(frame, "CLASS/SPEC CAPABILITIES", 10, Colors.blue)
-    capabilityTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -450)
+    frame.rosterScroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -316)
+    frame.rosterScroll:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -316)
+    frame.rosterScroll:SetHeight(206); frame.rosterRows = {}
+    frame.capabilityTitle = Text(frame, "CLASS/SPEC CAPABILITIES", 10, Colors.blue)
+    frame.capabilityTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -536)
     frame.capabilityScroll = Theme.CreateScrollArea(frame, { step = 30 })
-    frame.capabilityScroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -472)
-    frame.capabilityScroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 88)
+    frame.capabilityScroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -558)
+    frame.capabilityScroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 116)
     frame.capabilityRows = {}
-    frame.checkButton = Theme.CreateButton(frame, "Check Group Status", 156, 30)
-    frame.checkButton:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 14, 44)
-    frame.checkButton:SetScript("OnClick", function() if Analysis.StartAuraCheck then Analysis.StartAuraCheck() end end)
-    frame.openButton = Theme.CreateButton(frame, "Open Full Dashboard", 174, 30)
-    frame.openButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 44)
-    if Theme.StylePrimaryActionButton then Theme.StylePrimaryActionButton(frame.openButton) end
+    frame.checkButton = Theme.CreateButton(frame, "Check Group Status", 158, 26)
+    frame.checkButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -278)
+    frame.checkButton:SetScript("OnClick", function()
+        if IsCurrentlyGrouped() and not (InCombatLockdown and InCombatLockdown()) and Analysis.StartAuraCheck then Analysis.StartAuraCheck() end
+    end)
+    frame.navigation=CreateCompactDropdown(frame,266)
+    frame.navigation.openUp=true
+    frame.navigation.menu:SetClampedToScreen(true)
+    frame.navigation:SetPoint("BOTTOMLEFT",frame,"BOTTOMLEFT",14,76)
+    frame.openButton = Theme.CreateButton(frame, "Open", 112, 26)
+    frame.openButton:SetPoint("LEFT",frame.navigation,"RIGHT",8,0)
     frame.openButton:SetScript("OnClick", function()
-        frame:Hide(); Dashboard.snapshotCollapsed = true
+        if InCombatLockdown and InCombatLockdown() then return end
+        Dashboard:HidePreparationForMain()
         if KeyLab.UI and KeyLab.UI.Show then KeyLab.UI:Show() end
-        if KeyLab.UI and KeyLab.UI.SelectTab then KeyLab.UI:SelectTab("Group Dashboard") end
+        if KeyLab.UI and KeyLab.UI.SelectTab then KeyLab.UI:SelectTab(frame.selectedDestination or "Home") end
+    end)
+    frame.craftButton=Theme.CreateButton(frame,"Craft Shopping List",190,28)
+    frame.craftButton:SetPoint("BOTTOMLEFT",frame,"BOTTOMLEFT",14,38)
+    frame.craftButton:SetScript("OnClick",function()
+        if InCombatLockdown and InCombatLockdown() then return end
+        if KeyLab.CraftingShoppingWindow and KeyLab.CraftingShoppingWindow.Show then
+            Dashboard:MinimizePreparationPanel(); KeyLab.CraftingShoppingWindow.Show(true)
+        end
+    end)
+    frame.targetsButton=Theme.CreateButton(frame,"Gear Target List",190,28)
+    frame.targetsButton:SetPoint("BOTTOMRIGHT",frame,"BOTTOMRIGHT",-14,38)
+    frame.targetsButton:SetScript("OnClick",function()
+        if InCombatLockdown and InCombatLockdown() then return end
+        if KeyLab.GearTargetsWindow and KeyLab.GearTargetsWindow.ShowManual then
+            Dashboard:MinimizePreparationPanel(); KeyLab.GearTargetsWindow.ShowManual()
+        end
+    end)
+    frame:HookScript("OnHide",function()
+        frame.talentDropdown.menu:Hide(); frame.lootDropdown.menu:Hide(); frame.navigation.menu:Hide()
     end)
     frame.note = Text(frame, "", 9, Colors.muted)
-    frame.note:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 16, 12); frame.note:SetSize(340, 22)
+    frame.note:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 16, 8); frame.note:SetSize(388, 24)
 
-    local handle = Theme.CreateButton(UIParent, "GROUP\nSNAPSHOT", 76, 112)
+    local handle = Theme.CreateButton(UIParent, "PREP\nPANEL", 76, 112)
     local savedHandlePosition = FloatingPositionStore().snapshotHandle
     if type(savedHandlePosition) == "table"
         and savedHandlePosition.point == "RIGHT"
@@ -880,15 +921,11 @@ function Dashboard:EnsureGroupSnapshot()
     end)
     handle:SetScript("OnClick", function()
         if handle.wasDragged then return end
-        if not IsCurrentlyGrouped() or (InCombatLockdown and InCombatLockdown()) then
-            Dashboard:HandleFloatingRefresh("snapshot-click")
-            return
-        end
-        handle:Hide(); Dashboard.snapshotCollapsed = false; Dashboard:RefreshGroupSnapshot(); frame:Show()
+        Dashboard:OpenPreparationPanel()
     end)
     handle:HookScript("OnEnter", function(self)
         if not GameTooltip then return end
-        GameTooltip:SetOwner(self, "ANCHOR_LEFT"); GameTooltip:AddLine("Group Snapshot", 0.82, 0.76, 0.58)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT"); GameTooltip:AddLine("Preparation Panel", 0.82, 0.76, 0.58)
         GameTooltip:AddLine("Drag to move. Click to open.", 0.94, 0.96, 0.99); GameTooltip:Show()
     end)
     handle:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
@@ -898,8 +935,22 @@ end
 
 function Dashboard:RefreshGroupSnapshot()
     local frame = self:EnsureGroupSnapshot()
+    local grouped = IsCurrentlyGrouped()
+    frame:SetHeight(grouped and 800 or 386)
+    frame:SetScale(math.min(1, (UIParent:GetHeight()-40)/(grouped and 800 or 386)))
+    for _, section in ipairs({frame.rosterTitle,frame.rosterScroll,frame.capabilityTitle,frame.capabilityScroll,frame.checkButton}) do
+        section:SetShown(grouped == true)
+    end
     self:RefreshSnapshotTalents()
-    local roster = Analysis.GetRoster and Analysis.GetRoster() or {}
+    self:RefreshPreparationLootSpec()
+    local destinations = KeyLab.UI and KeyLab.UI.GetPreparationDestinations and KeyLab.UI:GetPreparationDestinations() or {{value="Home",label="Home"}}
+    frame.navigation:SetChoices(destinations,frame.selectedDestination or "Home",function(value,option)
+        frame.selectedDestination=value; frame.navigation:SetText("Go To: "..option.label)
+    end)
+    for _,option in ipairs(destinations) do
+        if option.value==(frame.selectedDestination or "Home") then frame.navigation:SetText("Go To: "..option.label); break end
+    end
+    local roster = grouped and Analysis.GetRoster and Analysis.GetRoster() or {}
     local shownMembers, npcCount = {}, 0
     for _, member in ipairs(roster) do
         if member.isNPC then npcCount = npcCount + 1 else table.insert(shownMembers, member) end
@@ -908,8 +959,8 @@ function Dashboard:RefreshGroupSnapshot()
         local row = frame.rosterRows[index]
         if not row then
             row = CreateFrame("Frame", nil, frame.rosterScroll.content, "BackdropTemplate")
-            row:SetSize(330, 38); Theme.StylePanel(row, Colors.analysisRowBg, Colors.softBorder, 1)
-            row.name = Text(row, "", 10, Colors.text); row.name:SetPoint("LEFT", row, "LEFT", 8, 0); row.name:SetSize(132, 32); row.name:SetJustifyV("MIDDLE")
+            row:SetSize(376, 38); Theme.StylePanel(row, Colors.analysisRowBg, Colors.softBorder, 1)
+            row.name = Text(row, "", 10, Colors.text); row.name:SetPoint("LEFT", row, "LEFT", 8, 0); row.name:SetSize(170, 32); row.name:SetJustifyV("MIDDLE")
             row.auraChips = {}; frame.rosterRows[index] = row
         end
         row:ClearAllPoints(); row:SetPoint("TOPLEFT", frame.rosterScroll.content, "TOPLEFT", 0, -((index - 1) * 42))
@@ -919,9 +970,9 @@ function Dashboard:RefreshGroupSnapshot()
             for auraIndex, aura in ipairs(member.presentAuras or {}) do
                 if auraIndex > 7 then break end
                 local chip = row.auraChips[auraIndex]
-                if not chip then chip = CreateAuraChip(row); chip:SetSize(24, 24); row.auraChips[auraIndex] = chip end
+                if not chip then chip = CreateAuraChip(row); chip:SetSize(22, 22); row.auraChips[auraIndex] = chip end
                 displayed = auraIndex; chip.aura = aura; chip.icon:SetTexture(GetAuraTexture(aura)); chip.stack:SetText((aura.applications or 0) > 1 and tostring(aura.applications) or "")
-                chip:ClearAllPoints(); chip:SetPoint("LEFT", row, "LEFT", 142 + ((auraIndex - 1) * 26), 0); chip:Show()
+                chip:ClearAllPoints(); chip:SetPoint("LEFT", row, "LEFT", 184 + ((auraIndex - 1) * 24), 0); chip:Show()
             end
         end
         for auraIndex = displayed + 1, #row.auraChips do row.auraChips[auraIndex]:Hide() end
@@ -929,13 +980,13 @@ function Dashboard:RefreshGroupSnapshot()
     end
     for index = #shownMembers + 1, #frame.rosterRows do frame.rosterRows[index]:Hide() end
     frame.rosterScroll:SetContentHeight(math.max(1, #shownMembers * 42))
-    local capabilities = ActiveCapabilityList()
+    local capabilities = grouped and ActiveCapabilityList() or {}
     for index, capability in ipairs(capabilities) do
         local row = frame.capabilityRows[index]
         if not row then
             row = CreateFrame("Frame", nil, frame.capabilityScroll.content, "BackdropTemplate")
-            row:SetSize(330, 26); Theme.StylePanel(row, Colors.noteBg, Colors.green, 1)
-            row.label = Text(row, "", 10, Colors.green); row.label:SetPoint("LEFT", row, "LEFT", 8, 0); row.label:SetSize(270, 24); row.label:SetJustifyV("MIDDLE")
+            row:SetSize(376, 26); Theme.StylePanel(row, Colors.noteBg, Colors.green, 1)
+            row.label = Text(row, "", 10, Colors.green); row.label:SetPoint("LEFT", row, "LEFT", 8, 0); row.label:SetSize(316, 24); row.label:SetJustifyV("MIDDLE")
             row.badge = Theme.CreateBadge(row, "0", 30, 20); row.badge:SetPoint("RIGHT", row, "RIGHT", -5, 0)
             frame.capabilityRows[index] = row
         end
@@ -945,16 +996,98 @@ function Dashboard:RefreshGroupSnapshot()
     for index = #capabilities + 1, #frame.capabilityRows do frame.capabilityRows[index]:Hide() end
     frame.capabilityScroll:SetContentHeight(math.max(1, #capabilities * 29))
     frame.note:SetText((npcCount > 0 and (tostring(npcCount) .. " follower companion" .. (npcCount == 1 and "" or "s") .. " omitted.  •  ") or "") .. tostring(#capabilities) .. " Class/Spec capabilities")
+    if not grouped then frame.note:SetText("Solo - group readiness appears when you join a party or raid.") end
     local scan = Analysis.GetScanState and Analysis.GetScanState() or {}
-    frame.checkButton:SetEnabled(not scan.active)
+    frame.checkButton:SetEnabled(grouped and not scan.active)
     frame.checkButton:SetText(scan.complete and "Check Again" or "Check Group Status")
+end
+
+local function PreparationLootChoices()
+    local info = C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfo or GetSpecializationInfo
+    local current = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization or GetSpecialization
+    local choices, names = {}, {}
+    if type(info) == "function" then
+        for index=1,4 do
+            local ok,id,name=pcall(info,index)
+            if ok and type(id)=="number" and type(name)=="string" then
+                names[id]=name; choices[#choices+1]={value=id,label=name}
+            end
+        end
+    end
+    local activeName="Unknown"
+    if type(current)=="function" and type(info)=="function" then
+        local ok,index=pcall(current)
+        if ok and index then
+            local valid,id=pcall(info,index)
+            if valid then activeName=names[id] or activeName end
+        end
+    end
+    table.insert(choices,1,{value=0,label="Current Spec ("..activeName..")"})
+    names[0]="Current Spec ("..activeName..")"
+    return choices,names
+end
+
+function Dashboard:RefreshPreparationLootSpec()
+    local frame=self.snapshot
+    if not frame or (InCombatLockdown and InCombatLockdown()) then return end
+    local choices,names=PreparationLootChoices()
+    local ok,current=false,nil
+    if type(GetLootSpecialization)=="function" then ok,current=pcall(GetLootSpecialization) end
+    current=ok and tonumber(current) or nil
+    frame.lootName:SetText("Loot Spec: "..(names[current] or "Unavailable"))
+    ApplyColor(frame.lootName,Colors.gold)
+    if frame.selectedLootSpec==nil or not names[frame.selectedLootSpec] then frame.selectedLootSpec=current end
+    frame.lootDropdown:SetChoices(choices,frame.selectedLootSpec,function(id)
+        frame.selectedLootSpec=id; frame.lootMessage=nil; Dashboard:RefreshPreparationLootSpec()
+    end)
+    local available=current~=nil and #choices>1 and type(SetLootSpecialization)=="function"
+    frame.lootDropdown:SetEnabled(available)
+    frame.lootSwitch:SetEnabled(available and frame.selectedLootSpec~=nil and frame.selectedLootSpec~=current)
+    frame.lootNote:SetText(frame.lootMessage or "Changes loot eligibility only, not your active talent build.")
+end
+
+function Dashboard:SetPreparationLootSpec()
+    if InCombatLockdown and InCombatLockdown() then return false end
+    local frame=self.snapshot
+    if not frame or type(SetLootSpecialization)~="function" then return false end
+    local _,names=PreparationLootChoices()
+    local selected=frame.selectedLootSpec
+    if selected==nil or not names[selected] then return false end
+    local ok=pcall(SetLootSpecialization,selected)
+    -- Read back the game's setting; never claim a change from the click alone.
+    local readOK,current=false,nil
+    if type(GetLootSpecialization)=="function" then readOK,current=pcall(GetLootSpecialization) end
+    frame.lootMessage=ok and readOK and current==selected and "Loot specialization updated."
+        or "Change not confirmed yet. Check the current loot spec above."
+    self:RefreshPreparationLootSpec()
+    return ok and readOK and current==selected
+end
+
+function Dashboard:MinimizePreparationPanel()
+    self.preparationAvailable=true; self.snapshotCollapsed=true
+    if self.snapshot then self.snapshot:Hide() end
+    if self.snapshotHandle and not (InCombatLockdown and InCombatLockdown()) then self.snapshotHandle:Show() end
+end
+
+function Dashboard:HidePreparationForMain()
+    if self.preparationAvailable then self.snapshotCollapsed=true end
+    if self.snapshot then self.snapshot:Hide() end
+    if self.snapshotHandle then self.snapshotHandle:Hide() end
+end
+
+function Dashboard:OpenPreparationPanel()
+    if InCombatLockdown and InCombatLockdown() then return false end
+    self.preparationAvailable=true; self.snapshotCollapsed=false; self.snapshotHiddenForCombat=false
+    if KeyLab.UI and KeyLab.UI.frame and KeyLab.UI.frame:IsShown() then KeyLab.UI.frame:Hide() end
+    self:HandleFloatingRefresh("manual")
+    return true
 end
 
 function Dashboard:RefreshSnapshotTalents()
     local frame=self.snapshot
     local talents=KeyLab.GuideTalents
     if not frame or not talents or (InCombatLockdown and InCombatLockdown()) then return end
-    frame.talentName:SetText("CURRENT BUILD\n"..talents.GetActiveName())
+    frame.talentName:SetText("Talent Build: "..talents.GetActiveName())
     local choices,found={},false
     for _,config in ipairs(talents.GetLoadouts()) do
         choices[#choices+1]={value=config.id,label=config.name}
@@ -1070,41 +1203,35 @@ end
 function Dashboard:HandleFloatingRefresh(reason)
     local grouped = IsCurrentlyGrouped()
     local combat = InCombatLockdown and InCombatLockdown()
-    if not grouped then
-        if self.snapshot then self.snapshot:Hide() end
-        if self.snapshot and self.snapshot.talentDropdown and self.snapshot.talentDropdown.menu then
-            self.snapshot.talentDropdown.menu:Hide()
+    local wasGrouped=self.snapshotSessionActive==true
+    self.snapshotSessionActive=grouped==true
+    if wasGrouped~=(grouped==true) then
+        if grouped then
+            self.preparationAvailable=true
+            if not self.snapshotHiddenForCombat then self.snapshotCollapsed=false end
         end
-        if self.snapshotHandle then self.snapshotHandle:Hide() end
+        if Analysis.SetActive then Analysis.SetActive(grouped==true, "snapshot") end
+    end
+    if not grouped then
         if self.targetChangePopup then
             self.targetChangePopup:Hide()
             for _, row in ipairs(self.targetChangePopup.rows or {}) do
                 if row.dropdown and row.dropdown.menu then row.dropdown.menu:Hide() end
             end
         end
-        self.snapshotSessionActive = false; self.snapshotCollapsed = false
-        self.snapshotHiddenForCombat = false
-        if Analysis.SetActive then Analysis.SetActive(false, "snapshot") end
-        return
     end
+    if not self.preparationAvailable then return end
     if combat then self:HideFloatingForCombat(); return end
-    if not self.snapshotSessionActive then
-        self.snapshotSessionActive = true; self.snapshotCollapsed = false
-        self.snapshotHiddenForCombat = false
-        if Analysis.SetActive then Analysis.SetActive(true, "snapshot") end
-        self:RefreshGroupSnapshot(); self.snapshot:Show()
-    else
-        self:RefreshGroupSnapshot()
-        if self.snapshotHiddenForCombat then
-            self.snapshotHiddenForCombat = false
-            self.snapshotCollapsed = true
-            if self.snapshot then self.snapshot:Hide() end
-            if self.snapshotHandle then self.snapshotHandle:Show() end
-        elseif self.snapshotCollapsed then
-            self.snapshotHandle:Show()
-        end
+    if KeyLab.UI and KeyLab.UI.frame and KeyLab.UI.frame:IsShown() then
+        self:HidePreparationForMain(); return
     end
-    self:RefreshTargetChangePopup()
+    self:RefreshGroupSnapshot()
+    if self.snapshotHiddenForCombat then
+        self.snapshotHiddenForCombat=false; self.snapshotCollapsed=true
+    end
+    self.snapshot:SetShown(not self.snapshotCollapsed)
+    self.snapshotHandle:SetShown(self.snapshotCollapsed==true)
+    if grouped then self:RefreshTargetChangePopup() end
 end
 
 function Dashboard:RefreshReadiness()
@@ -1315,9 +1442,15 @@ local floatingEvents = CreateFrame("Frame")
 floatingEvents:RegisterEvent("PLAYER_LOGIN")
 floatingEvents:RegisterEvent("GROUP_ROSTER_UPDATE")
 floatingEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
+floatingEvents:RegisterEvent("PLAYER_LOOT_SPEC_UPDATED")
+floatingEvents:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 floatingEvents:RegisterEvent("PLAYER_REGEN_DISABLED")
 floatingEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
 floatingEvents:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_LOOT_SPEC_UPDATED" and Dashboard.snapshot then
+        Dashboard.snapshot.selectedLootSpec=nil
+        Dashboard.snapshot.lootMessage=nil
+    end
     if event == "PLAYER_REGEN_DISABLED" then Dashboard:HideFloatingForCombat() else Dashboard:HandleFloatingRefresh(event) end
 end)
 

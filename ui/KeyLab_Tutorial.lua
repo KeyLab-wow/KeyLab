@@ -51,6 +51,16 @@ local function GearButton(name) local t=Tab("GearPlanning"); return t and ({guid
 local function GroupButton(name) local t=Tab("GroupDashboard"); return t and ({readiness=t.readinessTab,composition=t.compositionTab,targets=t.targetsTab})[name] end
 local function SeqButton(name) local t=Tab("Sequencer"); return t and t.viewButtons and t.viewButtons[name] end
 local function SeqField(field) return Field("Sequencer",field) end
+local function MatcherField(field)
+    local t=Tab("GearTargets"); local popup=t and t.preparationPopup
+    return popup and (field and (popup[field] or t[field]) or popup) or Field("GearTargets","matcherButton")
+end
+local function PreparationField(field)
+    local dashboard=Tab("GroupDashboard")
+    local panel=dashboard and dashboard.snapshot
+    local target=field=="handle" and dashboard and dashboard.snapshotHandle or field and panel and panel[field]
+    return target and target:IsShown() and target or panel
+end
 
 local STEPS={
     {section="Start",title="Welcome to KeyLab",body="This tour shows where to click and what each page does. Use Next, Back, or Sections. Drag the top of this window whenever it covers something.",tab="Home",homeView="home",target=function() return HomeField("tourButton") end},
@@ -93,17 +103,24 @@ local STEPS={
     {section="Gear Targets",title="Browse Items",body="Browse Items chooses Dungeon and Raid together, Dungeon only, or Raid only. Slot and Loot Location narrow the list further.",tab="Gear Targets",target=function() return Field("GearTargets","itemTypeDropdown") end},
     {section="Gear Targets",title="Search and sort",body="Search Item finds a name. Click any column header to sort by that column; click it again to reverse the order.",tab="Gear Targets",target=function() return Field("GearTargets","searchBox") end},
     {section="Gear Targets",title="Show saved statuses",body="Show can display All Items, Goal Match Items, Targets, Alternatives, or Targets and Alternatives together.",tab="Gear Targets",target=function() return Field("GearTargets","statusDropdown") end},
-    {section="Gear Targets",title="Primary-stat filters",body="Choose Stamina plus one main stat. Never choose Agility, Intellect, and Strength together; your class uses only one.",tab="Gear Targets",target=function() local t=Tab("GearTargets"); return t and t.primaryChecks and t.primaryChecks[1] and t.primaryChecks[1].button end},
-    {section="Gear Targets",title="Secondary-stat filters",body="Choose up to two: Critical Strike, Haste, Mastery, or Versatility. These filters help inspect stat pairs before using the Matcher.",tab="Gear Targets",target=function() local t=Tab("GearTargets"); return t and t.secondaryChecks and t.secondaryChecks[1] and t.secondaryChecks[1].button end},
+    {section="Gear Targets",title="Primary-stat filters",body="For browsing, choose optional Stamina and at most one of Agility, Intellect, or Strength. These filters narrow the visible item list; they are not Stat Goal Matcher settings.",tab="Gear Targets",target=function() local t=Tab("GearTargets"); return t and t.primaryChecks and t.primaryChecks[1] and t.primaryChecks[1].button end},
+    {section="Gear Targets",title="Secondary-stat filters",body="Choose up to two: Critical Strike, Haste, Mastery, or Versatility. These browsing filters help inspect stat pairs. The Matcher searches independently of the visible list.",tab="Gear Targets",target=function() local t=Tab("GearTargets"); return t and t.secondaryChecks and t.secondaryChecks[1] and t.secondaryChecks[1].button end},
     {section="Gear Targets",title="Unmarked, Target, Alternative",body="Targets are your plan. Alternatives are backup choices you also want to remember. Unmarked items are not saved to either list.",tab="Gear Targets",target=CurrentTabContent},
     {section="Gear Targets",title="Prepare your gear",body="Equip every item you want to keep. Unequip only the slots you want KeyLab to fill. For a full plan, unequip every eligible slot.",tab="Gear Targets",target=function() return Field("GearTargets","matcherButton") end},
-    {section="Gear Targets",title="Refresh Current Stats",body="After unequipping items, click Refresh Current Stats if the numbers have not updated. This gives the Matcher the right starting point.",tab="Gear Targets",target=function() return Field("GearTargets","refreshStatsButton") end},
-    {section="Gear Targets",title="Enter percentage goals",body="Enter the Critical Strike, Haste, Mastery, and Versatility percentages wanted on your Character panel. Each may be 0% to 100%. Arrows change priority order.",tab="Gear Targets",target=function() return Field("GearTargets","matcherPanel") end},
-    {section="Gear Targets",title="Open Matcher setup",body="Click Stat Goal Matcher. Choose Master Item Database or Equipped + Bags. With the database, choose Dungeon, Raid, or both, then Balanced or Favor Priority.",tab="Gear Targets",target=function() return Field("GearTargets","matcherButton") end},
+    {section="Gear Targets",title="Open Matcher setup",body="The Stat Goal Matcher button opens this setup pop-up. Item source, matching style, weapon setup where needed, goal percentages, priority arrows, and Refresh Current Stats are all here. The tour opens setup only; it does not start a search.",tab="Gear Targets",matcherSetup=true,target=function() return MatcherField() end},
+    {section="Gear Targets",title="Choose the search source",body="Choose Master Item Database or Equipped + Bags. With the database, include Dungeon, Raid, or Dungeon and Raid items. This choice does not change the Gear Targets browsing filters.",tab="Gear Targets",matcherSetup=true,target=function() return MatcherField("sourceDropdown") end},
+    {section="Gear Targets",title="Refresh Current Stats",body="After changing equipment, use Refresh Current Stats here if needed. The current-stat comparisons and your goal entries now live inside this setup pop-up.",tab="Gear Targets",matcherSetup=true,target=function() return MatcherField("refreshStatsButton") end},
+    {section="Gear Targets",title="Optional primary stat first",body="Choose None or your spec's primary stat. Choosing Agility for Feral makes it the #1 requirement and excludes Intellect-only weapons. Shared armor follows its item/spec rules. Rings, necklaces, and trinket handling are unchanged. There is no primary-stat percentage goal.",tab="Gear Targets",matcherSetup=true,target=function() return MatcherField("primaryDropdown") end},
+    {section="Gear Targets",title="Choose a valid weapon setup",body="Specs with two valid arrangements choose Two-Handed or Dual Wield before starting. Specs whose core abilities require one setup show that requirement automatically. Dual Wield always means two compatible weapons; a shield or caster off-hand does not complete it.",tab="Gear Targets",matcherSetup=true,target=function() return MatcherField("weaponDropdown") end},
+    {section="Gear Targets",title="Enter percentage goals",body="Enter the Crit, Haste, Mastery, and Versatility percentages wanted on your Character panel. Each may be 0% to 100%; they do not need to total 100%. Use ^ / v to order secondary priorities. If Primary first is selected, the secondary priorities follow it as #2 through #5.",tab="Gear Targets",matcherSetup=true,target=function() return MatcherField("goalPanel") end},
+    {section="Gear Targets",title="Choose a matching style",body="Balanced looks for the smallest total gap from your goals. Favor Priority gives more weight to your #1 stat, then #2, #3, and #4. Goals and priorities are saved for the spec you are planning.",tab="Gear Targets",matcherSetup=true,target=function() return MatcherField("styleDropdown") end},
+    {section="Gear Targets",title="Gear across your class's specs",body="The database search includes recorded loot from all specs of your class, while class and weapon-slot restrictions still apply. An item from another spec is not automatically a good choice for your role. Check its stats, effects, and Loot Spec label.",tab="Gear Targets",matcherSetup=true,target=function() return MatcherField("scopeDropdown") end},
+    {section="Gear Targets",title="Start when ready",body="Leave at least one eligible slot empty, finish setup, and wait for the short countdown. Click Start Matcher while out of combat. Or choose Cancel and continue the tour without running it.",tab="Gear Targets",matcherSetup=true,target=function() return MatcherField("run") end},
     {section="Gear Targets",title="What the Matcher does",body="KeyLab locks equipped items, searches open slots, and projects the finished set. It compares secondary stats, not Tier bonuses, special effects, embellishments, or Best in Slot.",tab="Gear Targets",target=function() return Field("GearTargets","matcherStatusCard") end},
     {section="Gear Targets",title="Open the Results report",body="After a run, Results reopens the last report. It shows projected stats, chosen items, reduced-efficiency warnings, and important notes.",tab="Gear Targets",target=function() return Field("GearTargets","matcherResultsButton") end},
-    {section="Gear Targets",title="Goal Match and Stat Support",body="Goal Match means the closest stat combination found, not Best in Slot. Trinket Stat Support means a passive stat helps, but KeyLab does not judge the trinket effect.",tab="Gear Targets",target=CurrentTabContent},
+    {section="Gear Targets",title="Goal Match and Stat Support",body="Goal Match means the closest stat combination found, not Best in Slot. Trinket secondary stats are excluded from the goal projection. An open trinket slot may receive separate advisory Stat Support suggestions; KeyLab does not judge the effects.",tab="Gear Targets",target=CurrentTabContent},
     {section="Gear Targets",title="Mark the matched plan",body="Mark wanted Goal Match items as Target. Rings and trinkets use Finger 1 or 2 and Trinket 1 or 2 so both slots stay clear.",tab="Gear Targets",target=CurrentTabContent},
+    {section="Gear Targets",title="Check loot spec before drops",body="Loot Spec under each item lists its recorded drop specs. The raid/M+ Gear Targets pop-ups also show Loot Spec Set; orange change-needed labels flag a mismatch. Use Preparation Panel to change loot spec before seeking the item. Raid loot rules may differ.",tab="Gear Targets",target=CurrentTabContent},
     {section="Gear Targets",title="Clear the tutorial plan",body="Clear Targets removes every Target for this specialization at once. This works like unmarking each Target one at a time.",tab="Gear Targets",target=function() return Field("GearTargets","clearTargetsButton") end},
 
     {section="Gear Dashboard",title="Equipped gear",body="Each slot shows item name, item level, upgrade track and rank, saved target, and target source. Hover an item for its normal WoW tooltip.",tab="Gear Dashboard",target=CurrentTabContent},
@@ -114,10 +131,19 @@ local STEPS={
     {section="Groups",title="Group Readiness",body="See each player, class and spec, item level, role, leader or assistant status, and checked auras. Use Check Group Status when everyone is nearby.",tab="Group Dashboard",groupView="readiness",target=function() return GroupButton("readiness") end},
     {section="Groups",title="Read aura icons",body="Hover player-card icons to identify buffs, food, oils, flasks, and other checked auras. Progress tells how many players were checked.",tab="Group Dashboard",groupView="readiness",target=function() return Field("GroupDashboard","readinessView") end},
     {section="Groups",title="Group Composition",body="Green highlighted rows mean the capability is present. Class/Spec is inherent. Talent and Pet columns are capabilities the player could have.",tab="Group Dashboard",groupView="composition",target=function() return GroupButton("composition") end},
-    {section="Groups",title="Condensed group window",body="A condensed Group Dashboard opens in a group or raid. It can be moved or minimized, and Open shows the full details here.",tab="Group Dashboard",groupView="composition",target=function() return Field("GroupDashboard","compositionView") end},
     {section="Groups",title="Macro Targets requirements",body="Macro Targets works only after you create a Macro Sequence and mark a friendly-support block as a Group Target.",tab="Group Dashboard",groupView="targets",target=function() return GroupButton("targets") end},
     {section="Groups",title="Change a target in three clicks",body="Example: Misdirection is saved for your pet, but this group needs the tank. Choose the player, choose the marked macro, then Save Target.",tab="Group Dashboard",groupView="targets",target=function() return Field("GroupDashboard","targetsView") end},
     {section="Groups",title="Temporary targets",body="Assignments change only out of combat. If a raid member moves, choose Keep or Change. Leaving the group restores the original macro target.",tab="Group Dashboard",groupView="targets",target=function() return Field("GroupDashboard","applyTargetButton") end},
+
+    {section="Preparation Panel",title="Your compact preparation hub",body="Minimize the main addon to open Preparation Panel. It is available solo or in a group, with talents, loot spec, shopping lists, and quick navigation. Drag the panel to move it. The tour highlights its controls without changing your setup.",preparationView="panel",target=function() return PreparationField() end},
+    {section="Preparation Panel",title="Check and switch talent builds",body="See your current talent build here. Choose a saved build and press Switch when allowed. You can switch before an M+ key starts, but not during an active key or combat. After switching, the panel minimizes so you can see the game.",preparationView="panel",target=function() return PreparationField("talentDropdown") end},
+    {section="Preparation Panel",title="Choose your loot specialization",body="Check Loot Spec, choose a spec from the dropdown, and press Set Loot Spec. Match it to the item you want before drops. This changes your loot setting, not your active talents. Current Spec follows your active specialization.",preparationView="panel",target=function() return PreparationField("lootDropdown") end},
+    {section="Preparation Panel",title="Readiness at a glance",body="In a party or raid, Check Group Status checks nearby members. Five player rows are visible at a time; scroll for more. Group sections are hidden while solo. Open the full Group Dashboard for detailed readiness information.",preparationView="panel",target=function() return PreparationField("rosterScroll") end},
+    {section="Preparation Panel",title="Confirmed group capabilities",body="The compact composition list shows only present Class/Spec capabilities, not possible Talent or Pet choices. The full Group Dashboard has the detailed columns. This section appears when you are grouped.",preparationView="panel",target=function() return PreparationField("capabilityScroll") end},
+    {section="Preparation Panel",title="Open your shopping lists",body="Craft Shopping List opens your saved crafting materials. Gear Target List opens your saved dungeon and raid items, including their Loot Spec labels. These buttons open the existing lists without needing the full addon window.",preparationView="panel",target=function() return PreparationField("targetsButton") end},
+    {section="Preparation Panel",title="Jump to a full addon page",body="Choose a destination in the Go To dropdown, then press Open. This restores the main addon directly to that page, including the detailed Group Dashboard. The dropdown keeps the compact panel small.",preparationView="panel",target=function() return PreparationField("navigation") end},
+    {section="Preparation Panel",title="Minimize to the small handle",body="Use the panel's minus button to shrink it to the small PREP PANEL handle. The next step highlights that handle so you can recognize it during your runs.",preparationView="panel",target=function() return PreparationField("minimizeButton") end},
+    {section="Preparation Panel",title="Click the handle to reopen",body="This is the minimized handle. Click it whenever you need Preparation Panel while out of combat, even when solo. You can drag it to a convenient spot. The panel and handle hide during combat; the handle returns afterward so you can prepare between pulls.",preparationView="handle",target=function() return PreparationField("handle") end},
 
     {section="Macros",title="Macro Sequencer",body="Build class- and spec-based sequences from your own WoW macros. One physical press tries one block; WoW always decides what can cast.",tab="Sequencer",sequencerView="editor",target=function() return SeqButton("editor") end},
     {section="Macros",title="Create or choose a Sequence",body="Choose an existing Sequence, or use New and give it a name. Copy duplicates one. Delete sends it to Recycle Bin.",tab="Sequencer",sequencerView="editor",target=function() return SeqField("sequenceDropdown") end},
@@ -174,12 +200,26 @@ function Tutorial:Create()
     f.back:SetScript("OnClick",function() Tutorial:ShowStep((Tutorial.stepIndex or 1)-1) end)
     f.next:SetScript("OnClick",function() local i=Tutorial.stepIndex or 1; if i>=#STEPS then Tutorial:Stop() else Tutorial:ShowStep(i+1) end end)
     f.sections:SetScript("OnClick",function() f.menu:SetShown(not f.menu:IsShown()) end); f.close:SetScript("OnClick",function() Tutorial:Stop() end); f:SetScript("OnHide",function() f.menu:Hide() end)
+    f:RegisterEvent("PLAYER_REGEN_DISABLED")
+    f:SetScript("OnEvent",function() if Tutorial.active then Tutorial:Stop() end end)
     self.frame=f; self.highlight=CreateHighlight(); return f
 end
 
 function Tutorial:PrepareStep(step)
     local ui=KeyLab.UI; if not ui then return false end
     if InCombatLockdown and InCombatLockdown() then if KeyLab.Print then KeyLab.Print("Leave combat before starting the KeyLab tour.") end; return false end
+    if not step.matcherSetup and self.matcherTourPopup then
+        self.matcherTourPopup:Hide(); self.matcherTourPopup=nil
+    end
+    self.showingPreparation=step.preparationView~=nil
+    local dashboard=Tab("GroupDashboard")
+    if step.preparationView and dashboard and dashboard.OpenPreparationPanel then
+        if ui.frame and ui.frame:IsShown() then ui:SetMenuOnly(true) end
+        if dashboard.EnsureGroupSnapshot then dashboard:EnsureGroupSnapshot() end
+        if step.preparationView=="handle" then dashboard:MinimizePreparationPanel()
+        else dashboard:OpenPreparationPanel() end
+        return true
+    end
     ui:Show(); if ui.isMenuOnly then ui:SetMenuOnly(false) end
     if step.mode and ui.SetContentMode then ui:SetContentMode(step.mode) end
     if step.tab then ui:SelectTab(step.tab) end
@@ -188,6 +228,14 @@ function Tutorial:PrepareStep(step)
     if step.seasonView and Tab("GearPlanning") then Tab("GearPlanning"):SelectSeason2InfoView(step.seasonView) end
     if step.groupView and Tab("GroupDashboard") then Tab("GroupDashboard"):SetView(step.groupView) end
     if step.sequencerView and Tab("Sequencer") then Tab("Sequencer"):SetView(step.sequencerView) end
+    local targets=Tab("GearTargets")
+    if step.matcherSetup and targets and targets.OpenPreparationPopup then
+        local popup=targets.preparationPopup
+        if not popup or not popup:IsShown() then
+            targets:OpenPreparationPopup()
+            self.matcherTourPopup=targets.preparationPopup
+        end
+    end
     return true
 end
 function Tutorial:HighlightTarget(target)
@@ -206,7 +254,13 @@ end
 function Tutorial:Start()
     if InCombatLockdown and InCombatLockdown() then if KeyLab.Print then KeyLab.Print("Leave combat before starting the KeyLab tour.") end; return end
     self:Create(); local main=KeyLab.UI and KeyLab.UI.frame
-    if main and not self.mainFrameHooked then main:HookScript("OnHide",function() if Tutorial.active then Tutorial:Stop() end end); self.mainFrameHooked=true end
+    if main and not self.mainFrameHooked then main:HookScript("OnHide",function() if Tutorial.active and not Tutorial.showingPreparation then Tutorial:Stop() end end); self.mainFrameHooked=true end
     self:ShowStep(1)
 end
-function Tutorial:Stop() self.active=false; if self.frame then self.frame:Hide() end; if self.highlight then self.highlight:Hide() end end
+function Tutorial:Stop()
+    self.active=false
+    self.showingPreparation=nil
+    if self.matcherTourPopup then self.matcherTourPopup:Hide(); self.matcherTourPopup=nil end
+    if self.frame then self.frame:Hide() end
+    if self.highlight then self.highlight:Hide() end
+end
