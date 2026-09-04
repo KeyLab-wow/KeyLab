@@ -55,6 +55,7 @@ local SUPPORT_COMMANDS = {
     petfollow = true,
     petpassive = true,
     petassist = true,
+    ping = true,
     focus = true,
     clearfocus = true,
     target = true,
