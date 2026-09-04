@@ -86,6 +86,8 @@ local function EnsureGoals(specID)
     goals.targets = goals.targets or {}
     goals.displayOrder = NormalizeDisplayOrder(goals.displayOrder or legacyPriority)
     goals.matchStyle = goals.matchStyle == "priority" and "priority" or "balanced"
+    if goals.primaryStat ~= "Agi" and goals.primaryStat ~= "Int" and goals.primaryStat ~= "Str" then goals.primaryStat = nil end
+    if goals.weaponSetup ~= "two_hand" and goals.weaponSetup ~= "dual_wield" then goals.weaponSetup = nil end
 
     for statKey, defaultValue in pairs(DEFAULT_TARGETS) do
         goals.targets[statKey] = tonumber(goals.targets[statKey]) or defaultValue
@@ -121,6 +123,35 @@ end
 
 function StatGoalsDB.GetMatchStyle(specID)
     return EnsureGoals(specID).matchStyle
+end
+
+function StatGoalsDB.GetPrimaryStat(specID)
+    return EnsureGoals(specID).primaryStat
+end
+
+function StatGoalsDB.SetPrimaryStat(specID, stat)
+    if stat == "none" then stat = nil end
+    if stat ~= nil then
+        local mapping = KeyLab.GearLootMapping
+        local expected = mapping and mapping.GetPrimaryStatForSpec and mapping.GetPrimaryStatForSpec(specID)
+        if stat ~= expected then return false, "Choose the primary stat for this specialization." end
+    end
+    EnsureGoals(specID).primaryStat = stat
+    return true
+end
+
+function StatGoalsDB.GetWeaponSetup(specID)
+    return EnsureGoals(specID).weaponSetup
+end
+
+function StatGoalsDB.SetWeaponSetup(specID, setup)
+    local mapping = KeyLab.GearLootMapping
+    if not mapping or not mapping.ResolveMatcherWeaponSetup then return false, "Weapon setup rules are unavailable." end
+    local resolved, valid, message = mapping.ResolveMatcherWeaponSetup(specID, setup)
+    if not valid then return false, message end
+    local config = mapping and mapping.GetMatcherWeaponSetupConfig and mapping.GetMatcherWeaponSetupConfig(specID)
+    EnsureGoals(specID).weaponSetup = config and not config.fixed and resolved or nil
+    return true
 end
 
 function StatGoalsDB.SetMatchStyle(specID, style)
