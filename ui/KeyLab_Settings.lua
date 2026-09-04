@@ -156,6 +156,7 @@ local function RegisterSeasonOnePopup()
         hideOnEscape = true,
         preferredIndex = 3,
     }
+    KeyLab.UI.Theme.BrandConfirmationDialog(StaticPopupDialogs.KEYLAB_ERASE_MN_S1)
 end
 
 -- =========================================================

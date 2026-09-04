@@ -243,6 +243,30 @@ local function HideTooltip()
     if GameTooltip then GameTooltip:Hide() end
 end
 
+local function LootSpecGuidance(itemID)
+    local mapping = KeyLab.GearLootMapping
+    local targets = KeyLab.LootTargetsDB
+    if mapping and mapping.GetLootSpecGuidance and targets and targets.GetCurrentSpecID then
+        return mapping.GetLootSpecGuidance(itemID, targets.GetCurrentSpecID())
+    end
+end
+
+local function AddLootSpecLines(guidance)
+    if not GameTooltip or not guidance then return end
+    local spec = KeyLab.GearLootDatabase and KeyLab.GearLootDatabase.specs and KeyLab.GearLootDatabase.specs[guidance.lootSpecID]
+    local specName = spec and (spec.specName or spec.name) or "Unavailable"
+    GameTooltip:AddLine("Loot Spec: " .. (guidance.names or "Unavailable"), COLORS.gold[1], COLORS.gold[2], COLORS.gold[3], true)
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine("Loot Spec Set: " .. specName, COLORS.blue[1], COLORS.blue[2], COLORS.blue[3], true)
+end
+
+local function ShowLootSpecTooltip(owner)
+    if not GameTooltip or not owner.lootGuidance then return end
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    AddLootSpecLines(owner.lootGuidance)
+    GameTooltip:Show()
+end
+
 local function MakeSlotCard(parent, x, y, slotName)
     local row = MakeFrame(parent, x, y, SLOT_WIDTH, SLOT_HEIGHT, COLORS.slot, COLORS.softBorder)
     row.slotName = slotName
@@ -272,10 +296,35 @@ local function MakeSlotCard(parent, x, y, slotName)
     row.action:SetSize(249, 16)
     row.action:SetWordWrap(false)
 
+    row.plannedHover = CreateFrame("Frame", nil, row)
+    row.plannedHover:SetPoint("TOPLEFT", row, "TOPLEFT", 57, -28)
+    row.plannedHover:SetSize(249, 16)
+    row.plannedHover:EnableMouse(true)
+    row.plannedHover:SetScript("OnEnter", function(self)
+        local recipes = row.plannedCrafts
+        if not GameTooltip or not recipes or not recipes[1] then return end
+        local recipe = recipes[1]
+        ShowItemTooltip(self, recipe.itemLink or ("item:" .. tostring(recipe.itemID)), recipe.name)
+        GameTooltip:AddLine("Planned: " .. recipe.name, unpack(COLORS.blue))
+        for index = 2, #recipes do
+            GameTooltip:AddLine("Also planned: " .. recipes[index].name, COLORS.blue[1], COLORS.blue[2], COLORS.blue[3], true)
+        end
+        GameTooltip:Show()
+    end)
+    row.plannedHover:SetScript("OnLeave", HideTooltip)
+    row.plannedHover:Hide()
+
     row.sourceLabel = MakeText(row, "", "GameFontDisableSmall", 8, COLORS.muted)
     row.sourceLabel:SetPoint("TOPLEFT", row, "TOPLEFT", 57, -49)
     row.sourceLabel:SetSize(68, 16)
     row.sourceLabel:SetWordWrap(false)
+
+    row.lootSpecBadge = MakeBadge(row, 68)
+    row.lootSpecBadge:SetPoint("TOPLEFT", row, "TOPLEFT", 57, -49)
+    row.lootSpecBadge:EnableMouse(true)
+    row.lootSpecBadge:SetScript("OnEnter", ShowLootSpecTooltip)
+    row.lootSpecBadge:SetScript("OnLeave", HideTooltip)
+    row.lootSpecBadge:Hide()
 
     row.sourceBadges = {}
     for index = 1, 4 do
@@ -287,6 +336,10 @@ local function MakeSlotCard(parent, x, y, slotName)
 
     row:SetScript("OnEnter", function(self)
         if self.itemLink then ShowItemTooltip(self, self.itemLink, self.itemName) end
+        if self.itemLink and self.lootSpecBadge.lootGuidance and GameTooltip then
+            AddLootSpecLines(self.lootSpecBadge.lootGuidance)
+            GameTooltip:Show()
+        end
     end)
     row:SetScript("OnLeave", HideTooltip)
     return row
@@ -386,15 +439,24 @@ function GearDashboard:GetAlternativeRow(index)
     row.source:SetPoint("LEFT", row, "LEFT", 164, 0)
     row.source:SetSize(78, ALT_ROW_HEIGHT - 4)
     row.source:SetWordWrap(false)
-    row:SetScript("OnEnter", function(self)
+    row.lootSpecBadge = MakeBadge(row, 78)
+    row.lootSpecBadge:SetPoint("LEFT", row, "LEFT", 164, 0)
+    row.lootSpecBadge:EnableMouse(true)
+    local function ShowAlternativeTooltip()
+        local self = row
         if not GameTooltip or not self.data then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if self.data.itemLink then GameTooltip:SetHyperlink(self.data.itemLink) else GameTooltip:AddLine(self.data.name or "Item", 1, 1, 1) end
         if self.data.sourceText and self.data.sourceText ~= "" then
             GameTooltip:AddLine("Source: " .. self.data.sourceText, 0.75, 0.82, 0.95, true)
         end
+        local guidance = LootSpecGuidance(self.data.itemID)
+        AddLootSpecLines(guidance)
         GameTooltip:Show()
-    end)
+    end
+    row:SetScript("OnEnter", ShowAlternativeTooltip)
+    row.lootSpecBadge:SetScript("OnEnter", ShowAlternativeTooltip)
+    row.lootSpecBadge:SetScript("OnLeave", HideTooltip)
     row:SetScript("OnLeave", HideTooltip)
     self.altRows[index] = row
     return row
@@ -406,7 +468,7 @@ function GearDashboard:Build()
     self.title, self.subtitle = Theme.CreateTabHeader(
         self.frame,
         "Gear Dashboard",
-        "See your equipped gear, Tier progress, Targets, and Alternatives at a glance."
+        "See your gear and saved plans. Gold Loot Spec badges flag a different loot spec needed; hover for details."
     )
 
     self.leftSlots, self.rightSlots = {}, {}
@@ -453,7 +515,7 @@ function GearDashboard:Build()
     self.progressCard = MakeCard(self.frame, rightX, footerY, SLOT_WIDTH, FOOTER_HEIGHT, "Gear Target Progress")
     self.progressCard.title:SetPoint("TOP", self.progressCard, "TOP", 0, -7)
     self.progressBar = MakeProgressBar(self.progressCard, 16, -31, 284, 14)
-    self.progressText = MakeText(self.progressCard, "0 / 0 Targets Equipped", "GameFontDisableSmall", 9, COLORS.text)
+    self.progressText = MakeText(self.progressCard, "0 / 0 Myth Targets Complete", "GameFontDisableSmall", 9, COLORS.text)
     self.progressText:SetPoint("TOPLEFT", self.progressBar, "BOTTOMLEFT", 0, -5)
     self.progressText:SetSize(200, 16)
     self.progressPercent = MakeText(self.progressCard, "-", "GameFontDisableSmall", 9, COLORS.text, "RIGHT")
@@ -464,6 +526,13 @@ end
 function GearDashboard:RefreshSourceBadges(row, plan)
     local sources = plan.guidanceSources or {}
     row.sourceLabel:SetText(#sources > 0 and (plan.sourceLabel or "Sources:") or "")
+    local guidance = plan.target and LootSpecGuidance(plan.target.itemID)
+    local warning = guidance and guidance.warning and not (plan.targetEquipped and plan.isMythTrack)
+    row.lootSpecBadge.lootGuidance = guidance
+    row.lootSpecBadge.lootItemName = plan.target and plan.target.name
+    row.lootSpecBadge.lootSource = plan.target and (plan.target.displaySourceName or plan.target.sourceName)
+    SetBadge(row.lootSpecBadge, warning and "Loot Spec" or "", COLORS.gold)
+    row.sourceLabel:SetShown(not warning)
     local visibleCount = math.min(#sources, 4)
     for index, badge in ipairs(row.sourceBadges or {}) do
         badge.sourceTooltip = nil
@@ -483,7 +552,8 @@ function GearDashboard:RefreshSourceBadges(row, plan)
             badge:SetScript("OnEnter", function(self)
                 if not GameTooltip or not self.sourceTooltip then return end
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                for line in tostring(self.sourceTooltip):gmatch("[^\n]+") do GameTooltip:AddLine(line, 0.85, 0.90, 1.0) end
+                for line in tostring(self.sourceTooltip):gmatch("[^\n]+") do GameTooltip:AddLine(line, 0.85, 0.90, 1.0, true) end
+                AddLootSpecLines(guidance)
                 GameTooltip:Show()
             end)
         else
@@ -492,7 +562,7 @@ function GearDashboard:RefreshSourceBadges(row, plan)
     end
 end
 
-function GearDashboard:RefreshSlotRow(row, plan)
+function GearDashboard:RefreshSlotRow(row, plan, craftedPlans)
     if not row or not plan then return end
     row.name:SetText(plan.displayName or plan.slotName or "-")
     row.icon:SetTexture(plan.texture or "Interface\\Icons\\INV_Misc_QuestionMark")
@@ -510,7 +580,11 @@ function GearDashboard:RefreshSlotRow(row, plan)
     row.trackBadge:SetWidth(plan.specialUpgradeSystem and 125 or 82)
     SetBadge(row.trackBadge, plan.trackLabel, TrackColor(plan.trackName))
     SetBadge(row.rankBadge, plan.rankText, TrackColor(plan.trackName))
-    row.action:SetText(plan.actionText or "")
+    local actionText = plan.actionText or ""
+    if actionText:sub(1, 8) == "Target: " and plan.target then
+        actionText = "Target: " .. (plan.target.name or plan.target.itemNameClean or actionText:sub(9))
+    end
+    row.action:SetText(actionText)
     if plan.targetEquipped or plan.tierChecked or plan.nebulousAvailable or plan.voidforgeAvailable then
         row.action:SetTextColor(unpack(COLORS.green))
     elseif plan.otherItem then
@@ -523,6 +597,19 @@ function GearDashboard:RefreshSlotRow(row, plan)
         row.action:SetTextColor(unpack(COLORS.text))
     end
     self:RefreshSourceBadges(row, plan)
+    row.plannedCrafts = craftedPlans
+    local crafted = craftedPlans and craftedPlans[1]
+    row.plannedHover:SetShown(crafted ~= nil)
+    if crafted then
+        local extra = #craftedPlans > 1 and (" (+" .. tostring(#craftedPlans - 1) .. ")") or ""
+        row.action:SetText("Planned: " .. crafted.name .. extra)
+        row.action:SetTextColor(unpack(COLORS.blue))
+        row.sourceLabel:SetText("Crafted Plan")
+        row.sourceLabel:Show()
+        row.lootSpecBadge.lootGuidance = nil
+        row.lootSpecBadge:Hide()
+        for _, badge in ipairs(row.sourceBadges) do badge:Hide() end
+    end
 end
 
 function GearDashboard:RefreshTier(state)
@@ -551,6 +638,10 @@ function GearDashboard:RefreshAlternatives(state)
         for _, source in ipairs(item.sources or {}) do table.insert(codes, source.code or source.name) end
         row.source:SetText(ShortText(#codes > 0 and table.concat(codes, ", ") or item.sourceText, 13))
         row.source:SetTextColor(unpack((item.sources and item.sources[1] and item.sources[1].sourceType == "Raid") and COLORS.purple or COLORS.muted))
+        local guidance = LootSpecGuidance(item.itemID)
+        local warning = guidance and guidance.warning
+        SetBadge(row.lootSpecBadge, warning and "Loot Spec" or "", COLORS.gold)
+        row.source:SetShown(not warning)
         row:Show()
     end
     for index = #alternatives + 1, #(self.altRows or {}) do self.altRows[index]:Hide() end
@@ -564,7 +655,7 @@ function GearDashboard:RefreshProgress(state)
     local equipped = tonumber(progress.equipped) or 0
     local pct = total > 0 and math.max(0, math.min(1, equipped / total)) or 0
     self.progressBar.fill:SetWidth(math.max(1, self.progressBar.fillWidth * pct))
-    self.progressText:SetText(equipped .. " / " .. total .. " Targets Equipped")
+    self.progressText:SetText(equipped .. " / " .. total .. " Myth Targets Complete")
     self.progressPercent:SetText(total > 0 and (math.floor((pct * 100) + 0.5) .. "%") or "-")
 end
 
@@ -583,10 +674,12 @@ local function RefreshDashboard(self)
     if not IsVisible(self.frame) then return end
     self.refreshQueued = false
     local state = Analysis().GetDashboardState and Analysis().GetDashboardState() or { plansBySlot = {}, tier = {}, alternatives = {}, progress = {} }
+    local crafting = KeyLab.CraftingAnalysis
+    local craftedPlans = crafting and crafting.GetDashboardPlans and crafting.GetDashboardPlans(state.specID, state.plansBySlot) or {}
     self.itemLevelValue:SetText(FormatItemLevel(state.itemLevel))
     self.itemLevelSubtext:SetText(state.specName and ("Current Spec: " .. state.specName) or "Current Spec")
-    for _, slotName in ipairs(Analysis().LeftSlots or {}) do self:RefreshSlotRow(self.leftSlots[slotName], state.plansBySlot[slotName]) end
-    for _, slotName in ipairs(Analysis().RightSlots or {}) do self:RefreshSlotRow(self.rightSlots[slotName], state.plansBySlot[slotName]) end
+    for _, slotName in ipairs(Analysis().LeftSlots or {}) do self:RefreshSlotRow(self.leftSlots[slotName], state.plansBySlot[slotName], craftedPlans[slotName]) end
+    for _, slotName in ipairs(Analysis().RightSlots or {}) do self:RefreshSlotRow(self.rightSlots[slotName], state.plansBySlot[slotName], craftedPlans[slotName]) end
     self:RefreshTier(state)
     self:RefreshAlternatives(state)
     self:RefreshProgress(state)
@@ -631,6 +724,7 @@ function GearDashboard:Create(parent)
     self:Build()
     frame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
     frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+    frame:RegisterEvent("PLAYER_LOOT_SPEC_UPDATED")
     frame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
     frame:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
     frame:RegisterEvent("BAG_UPDATE_DELAYED")

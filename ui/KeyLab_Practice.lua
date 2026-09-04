@@ -688,8 +688,9 @@ local function EnsureMonitor()
     frame:Hide()
 
     frame.title = MakeText(frame, "Practice Session Started", "GameFontNormalLarge", 18, COLORS.gold)
-    frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -18)
-    frame.title:SetSize(324, 24)
+    Theme.AddPopupLogo(frame)
+    frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 66, -18)
+    frame.title:SetSize(276, 24)
 
     frame.timer = MakeText(frame, "0:00", "GameFontNormalLarge", 24, COLORS.green, "CENTER")
     frame.timer:SetPoint("TOP", frame, "TOP", 0, -54)
@@ -914,6 +915,7 @@ function Practice:BuildNewSession(parent)
     end)
 
     local start = MakeButton(panel, "Start Session", 126, 26)
+    self.startButton = start
     start:SetPoint("TOPLEFT", panel, "TOPLEFT", actionX, -38)
     start:SetScript("OnClick", function()
         local ok, resultOrError

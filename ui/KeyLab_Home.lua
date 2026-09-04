@@ -155,8 +155,16 @@ local function CreateHomeOverview(parent, owner)
         Colors.text
     )
     panel.welcomeBody:SetPoint("TOPLEFT", panel.welcomeTitle, "BOTTOMLEFT", 0, -8)
-    panel.welcomeBody:SetPoint("RIGHT", panel.welcome, "RIGHT", -18, 0)
+    panel.welcomeBody:SetPoint("RIGHT", panel.welcome, "RIGHT", -172, 0)
     panel.welcomeBody:SetHeight(40)
+
+    panel.tourButton = Theme.CreateButton(panel.welcome, "Take the Tour", 136, 32)
+    panel.tourButton:SetPoint("TOPRIGHT", panel.welcome, "TOPRIGHT", -18, -18)
+    if Theme.StylePrimaryActionButton then Theme.StylePrimaryActionButton(panel.tourButton) end
+    panel.tourButton:SetScript("OnClick", function()
+        if KeyLab.Tutorial and KeyLab.Tutorial.Start then KeyLab.Tutorial:Start() end
+    end)
+    owner.tourButton = panel.tourButton
 
     panel.newsPreview = CreatePreviewCard(panel, "NEWEST NEWS & EVENTS")
     panel.updatePreview = CreatePreviewCard(panel, "NEWEST GAME UPDATE")
@@ -1018,6 +1026,7 @@ end
 function HOME:Create(parent)
     local frame = CreateFrame("Frame", "KeyLabHomeTab", parent, "BackdropTemplate")
     frame:SetAllPoints(parent)
+    self.frame = frame
     Theme.StylePanel(frame, Colors.bg, Colors.transparent, 0)
 
     frame.title = Text(frame, "Home", 20, Colors.gold)
@@ -1083,6 +1092,7 @@ function HOME:Create(parent)
     frame.contentHost:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -Layout.outerRight, Layout.contentBottom)
     frame.panels = {}
     frame.panels.home = CreateHomeOverview(frame.contentHost, frame)
+    self.tourButton = frame.panels.home.tourButton
     frame.panels.news = CreateArticleReader(frame.contentHost, "news")
     frame.panels.issues = CreateArticleReader(frame.contentHost, "issues", { hideArticleList = true })
     frame.panels.updates = CreateArticleReader(frame.contentHost, "updates")
@@ -1115,7 +1125,7 @@ function HOME:Create(parent)
         for id, button in pairs(self.subTabs) do button:SetSelected(id == tabID) end
         local panel = self.panels[tabID]
         if tabID == "home" then panel:Refresh() else panel:Refresh(articleID) end
-        self.searchHost:SetShown(tabID == "news" or tabID == "updates")
+        self.searchHost:SetShown(tabID == "news" or tabID == "issues" or tabID == "updates")
         if self.searchHost:IsShown() then self:ApplyArticleSearch() end
     end
 

@@ -1,8 +1,8 @@
 -- KeyLab_UITheme.lua
 -- Shared visual theme and lightweight UI helpers for KeyLab.
 --
--- This intentionally uses only built-in WoW solid-color textures so the addon
--- does not need to load custom media files.
+-- Controls use built-in solid-color textures; popup branding reuses KeyLab's
+-- existing logo asset.
 
 local ADDON_NAME, KeyLab = ...
 
@@ -735,6 +735,36 @@ local function ApplyKeyLabButtonStyle(button, hovered)
     button:SetBackdropColor(Components(Theme.colors.buttonBg))
     button:SetBackdropBorderColor(Components(border))
     Theme.ApplyColor(button.label, text)
+end
+
+-- Shared popup branding; use the same asset, orientation and corner as the
+-- existing gear-shopping windows. Does not change the popup's behavior.
+function Theme.AddPopupLogo(frame)
+    if frame.keyLabIcon then return frame.keyLabIcon end
+    local icon = frame:CreateTexture(nil, "ARTWORK", nil, 2)
+    icon:SetTexture("Interface\\AddOns\\KeyLab\\Assets\\KeyLabKeyIcon.tga")
+    icon:SetTexCoord(0, 1, 1, 0)
+    icon:SetSize(42, 42)
+    icon:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -10)
+    frame.keyLabIcon = icon
+    return icon
+end
+
+function Theme.BrandConfirmationDialog(definition)
+    if definition.keyLabBranded then return end
+    definition.keyLabBranded = true
+    -- Native dialogs size themselves from their text; reserve header space
+    -- without changing shared Blizzard frame anchors or their action handlers.
+    definition.text = "\n\n\n" .. definition.text
+    local onShow, onHide = definition.OnShow, definition.OnHide
+    definition.OnShow = function(self, ...)
+        Theme.AddPopupLogo(self):Show()
+        if onShow then onShow(self, ...) end
+    end
+    definition.OnHide = function(self, ...)
+        if self.keyLabIcon then self.keyLabIcon:Hide() end
+        if onHide then onHide(self, ...) end
+    end
 end
 
 function Theme.CreateButton(parent, text, width, height)

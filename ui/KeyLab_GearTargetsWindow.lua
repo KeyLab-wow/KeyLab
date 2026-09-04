@@ -610,10 +610,21 @@ local function AddDungeonRunCard(f, targetGroups, catalystGroups, bagItems, alte
     targetGroups = targetGroups or {}
     catalystGroups = catalystGroups or {}
     if #targetGroups == 0 and #catalystGroups == 0 then return end
+    local tierSlots = {Head=true, Shoulders=true, Chest=true, Hands=true, Legs=true}
+    local tierGroups, tierBySource, targetSlots = {}, {}, {}
+    local function AddTierRow(group, slot, text)
+        local key = group.sourceID and ("id:" .. group.sourceID) or ("name:" .. tostring(group.sourceName))
+        local tier = tierBySource[key]
+        if not tier then
+            tier = {sourceName=group.sourceName, rows={}}
+            tierBySource[key] = tier; tierGroups[#tierGroups+1] = tier
+        end
+        tier.rows[#tier.rows+1] = {slot=slot, text=text, color=CFG.colors.text}
+    end
 
     local card = NewCard(f, "Dungeon Runs", CFG.colors.blue)
     AddCardLine(card,
-        "Saved Target sources are on the left. Dungeon armor for your Tier slots is on the right.",
+        "Other saved items are on the left. Tier-slot Targets and Catalyst dungeons are on the right.",
         CFG.colors.muted, 0, "GameFontDisableSmall", true)
     AddCardGap(card, 4)
     card.columnYStart = card.cursorY
@@ -631,10 +642,13 @@ local function AddDungeonRunCard(f, targetGroups, catalystGroups, bagItems, alte
                 local slotName = item.slotInstance or item.slot or "Gear"
                 local itemName = StripColorCodes(item.name or ("Item " .. tostring(item.itemID)))
                 local suffix = TargetTrackSuffix(item, bagItems)
-                table.insert(rows, {
-                    text = "•  " .. tostring(slotName) .. " - " .. itemName .. suffix,
-                    color = CFG.colors.text,
-                })
+                local text = "•  " .. tostring(slotName) .. " - " .. itemName .. suffix
+                if tierSlots[slotName] then
+                    targetSlots[slotName] = true
+                    AddTierRow(group, slotName, text)
+                else
+                    table.insert(rows, {text=text, color=CFG.colors.text})
+                end
             end
             for _, item in ipairs(group.alternatives or {}) do
                 if alternativeBudget.value > 0 then
@@ -657,23 +671,27 @@ local function AddDungeonRunCard(f, targetGroups, catalystGroups, bagItems, alte
         end
     end
     if not targetAdded then
-        AddColumnLine(card, 1, "No saved dungeon Targets are currently needed.", CFG.colors.muted, 0, nil, true)
+        AddColumnLine(card, 1, "No other saved dungeon items are currently needed.", CFG.colors.muted, 0, nil, true)
     end
 
-    AddColumnLine(card, 2, "Tier Slot Catalyst Dungeons", CFG.colors.violet, 0, "GameFontNormal")
-    AddColumnLine(card, 2, "Run these for Season 2 armor in Tier slots without a saved Target.",
+    for _, group in ipairs(catalystGroups) do
+        for _, item in ipairs(group.items or {}) do
+            local slot = item.slotName or item.displaySlot
+            if not targetSlots[slot] then
+                AddTierRow(group, slot, "•  " .. tostring(item.displaySlot or slot or "Tier") .. " - Season 2 Tier Slot Needed")
+            end
+        end
+    end
+    table.sort(tierGroups, function(a,b) return tostring(a.sourceName) < tostring(b.sourceName) end)
+    AddColumnLine(card, 2, "Tier Slot Targets & Catalyst", CFG.colors.violet, 0, "GameFontNormal")
+    AddColumnLine(card, 2, "Your saved Tier-slot Targets, plus dungeon options for Tier slots without a Target.",
         CFG.colors.muted, 0, "GameFontDisableSmall", true)
-    if #catalystGroups == 0 then
+    if #tierGroups == 0 then
         AddColumnLine(card, 2, "No Season 2 Tier-slot dungeon armor is currently needed.", CFG.colors.muted, 0, nil, true)
     else
-        for _, group in ipairs(catalystGroups) do
-            local rows = {}
-            for _, item in ipairs(group.items or {}) do
-                table.insert(rows, {
-                    text = "•  " .. tostring(item.displaySlot or item.slotName or "Tier") .. " - Season 2 Tier Slot Needed",
-                    color = CFG.colors.text,
-                })
-            end
+        for _, group in ipairs(tierGroups) do
+            local rows = group.rows
+            table.sort(rows, function(a,b) return (SLOT_SORT[a.slot] or 99) < (SLOT_SORT[b.slot] or 99) end)
             AddDungeonRunPanel(card, 2, group.sourceName,
                 tostring(#rows) .. (#rows == 1 and " TIER SLOT" or " TIER SLOTS"),
                 rows, CFG.colors.violet, {0.045, 0.025, 0.074, 0.98})
@@ -703,6 +721,145 @@ end
 local function GetNebulousRollPlan(filters)
     local shoppingPlan = GetShoppingPlan(filters)
     return shoppingPlan and shoppingPlan.nebulousRollPlan or nil
+end
+
+local function GetVoidcoreCount(shoppingPlan)
+    return math.max(0, tonumber(shoppingPlan and shoppingPlan.nebulousRollPlan
+        and shoppingPlan.nebulousRollPlan.currencyCount) or 0)
+end
+
+local function ToRollItem(item)
+    return {
+        slotName = item.slotInstance or item.slot or "Gear",
+        displaySlot = item.slotInstance or item.slot or "Gear",
+        itemName = StripColorCodes(item.name or item.itemName or ("Item " .. tostring(item.itemID))),
+        itemID = tonumber(item.itemID),
+    }
+end
+
+local function ItemHasSource(item, sourceID, specID)
+    sourceID = tonumber(sourceID)
+    if not item or not sourceID then return false end
+    if tonumber(item.sourceID) == sourceID then return true end
+    if item.sources and item.sources[sourceID] then return true end
+    for _, candidateSourceID in ipairs(item.sourceIDs or {}) do
+        if tonumber(candidateSourceID) == sourceID then return true end
+    end
+
+    local mapping = KeyLab.GearLootMapping
+    if mapping and mapping.GetItemSources then
+        for _, source in ipairs(mapping.GetItemSources(item.itemID, specID) or {}) do
+            if tonumber(source.sourceID or source.mapID or source.instanceID) == sourceID then return true end
+        end
+    end
+    return false
+end
+
+local function CountDungeonAndRaidTargets(targets)
+    local count = 0
+    for _, item in ipairs(targets or {}) do
+        local info = GetTargetSource(item)
+        if info.sourceType == "Dungeon" or info.sourceType == "Raid" then count = count + 1 end
+    end
+    return count
+end
+
+local function MatchesActivity(item, sourceID, encounterID, specID)
+    local mapping = KeyLab.GearLootMapping
+    if encounterID then
+        return mapping and mapping.ItemHasEncounter and mapping.ItemHasEncounter(item, sourceID, encounterID) == true
+    end
+    return ItemHasSource(item, sourceID, specID)
+end
+
+local function BuildRollGroup(items, sourceID, sourceName, sourceType, encounterID)
+    local rows = {}
+    for _, item in ipairs(items or {}) do table.insert(rows, ToRollItem(item)) end
+    if #rows == 0 then return {} end
+    return {
+        {
+            sourceName = tostring(sourceName or "Current Activity"),
+            sourceType = sourceType,
+            sourceID = sourceID,
+            encounterID = encounterID,
+            items = rows,
+        },
+    }
+end
+
+local function GetActivityTargetPlan(sourceID, sourceName, sourceType, encounterID)
+    sourceID = tonumber(sourceID)
+    encounterID = tonumber(encounterID)
+    local shoppingPlan = GetShoppingPlan()
+    if not shoppingPlan then return nil end
+
+    local targets, alternatives = {}, {}
+    for _, item in ipairs(shoppingPlan.targets or {}) do
+        if MatchesActivity(item, sourceID, encounterID, shoppingPlan.specID) then table.insert(targets, item) end
+    end
+    for _, item in ipairs(shoppingPlan.alternatives or {}) do
+        if MatchesActivity(item, sourceID, encounterID, shoppingPlan.specID) then
+            table.insert(alternatives, item)
+        end
+    end
+    SortItems(targets)
+    SortItems(alternatives)
+
+    return {
+        specID = shoppingPlan.specID,
+        specName = shoppingPlan.specName,
+        currencyCount = GetVoidcoreCount(shoppingPlan),
+        allTargetCount = CountDungeonAndRaidTargets(shoppingPlan.targets),
+        allAlternativeCount = CountDungeonAndRaidTargets(shoppingPlan.alternatives),
+        itemCount = #targets,
+        alternativeCount = #alternatives,
+        targetGroups = BuildRollGroup(targets, sourceID, sourceName, sourceType, encounterID),
+        alternativeGroups = BuildRollGroup(alternatives, sourceID, sourceName, sourceType, encounterID),
+    }
+end
+
+local function GetGreatVaultTargetPlan()
+    local shoppingPlan = GetShoppingPlan()
+    if not shoppingPlan then return nil end
+
+    local targetGroups, alternativeGroups = {}, {}
+    for _, group in ipairs(BuildTargetGroups(shoppingPlan.targets, shoppingPlan.alternatives)) do
+        if group.sourceType == "Dungeon" or group.sourceType == "Raid" then
+            local targetItems, alternativeItems = {}, {}
+            for _, item in ipairs(group.targets or {}) do table.insert(targetItems, ToRollItem(item)) end
+            for _, item in ipairs(group.alternatives or {}) do table.insert(alternativeItems, ToRollItem(item)) end
+            if #targetItems > 0 then
+                table.insert(targetGroups, {
+                    sourceID = group.sourceID,
+                    sourceName = group.sourceName,
+                    sourceType = group.sourceType,
+                    items = targetItems,
+                })
+            end
+            if #alternativeItems > 0 then
+                table.insert(alternativeGroups, {
+                    sourceID = group.sourceID,
+                    sourceName = group.sourceName,
+                    sourceType = group.sourceType,
+                    items = alternativeItems,
+                })
+            end
+        end
+    end
+
+    local itemCount = CountDungeonAndRaidTargets(shoppingPlan.targets)
+    local alternativeCount = CountDungeonAndRaidTargets(shoppingPlan.alternatives)
+    return {
+        specID = shoppingPlan.specID,
+        specName = shoppingPlan.specName,
+        currencyCount = GetVoidcoreCount(shoppingPlan),
+        allTargetCount = itemCount,
+        allAlternativeCount = alternativeCount,
+        itemCount = itemCount,
+        alternativeCount = alternativeCount,
+        targetGroups = targetGroups,
+        alternativeGroups = alternativeGroups,
+    }
 end
 
 local function AddNebulousRollCard(f, plan, compact)
@@ -738,6 +895,60 @@ local function AddNebulousRollCard(f, plan, compact)
         end
         card.cursorY = math.min(card.columnY[1], card.columnY[2])
     end
+    FinishCard(f, card)
+    return true
+end
+
+local function AddRollGroupsToCard(card, groups)
+    if #(groups or {}) == 1 then
+        AddRollGroupPanel(card, 1, groups[1], true)
+        return
+    end
+
+    card.columnY = { card.cursorY, card.cursorY }
+    local columns, weights = { {}, {} }, { 0, 0 }
+    for _, group in ipairs(groups or {}) do
+        local column = weights[1] <= weights[2] and 1 or 2
+        table.insert(columns[column], group)
+        weights[column] = weights[column] + 3 + #(group.items or {})
+    end
+    for column = 1, 2 do
+        for _, group in ipairs(columns[column]) do AddRollGroupPanel(card, column, group, false) end
+    end
+    card.cursorY = math.min(card.columnY[1], card.columnY[2])
+end
+
+local function AddTargetRollCard(f, plan, title, description, accentColor)
+    if not plan or (tonumber(plan.itemCount) or 0) == 0 then return false end
+    local card = NewCard(f, title or "Your Saved Targets", accentColor or CFG.colors.gold)
+    AddCardLine(card,
+        description or "These are the still-needed items you marked as Targets for this specialization.",
+        CFG.colors.muted, 0, "GameFontDisableSmall", true)
+    AddCardLine(card, "Nebulous Voidcores Available: " .. tostring(plan.currencyCount or 0), CFG.colors.green)
+    AddCardLine(card,
+        "Targets Here: " .. tostring(plan.itemCount or 0)
+            .. "  |  All Saved Dungeon and Raid Targets: "
+            .. tostring(plan.allTargetCount or plan.itemCount or 0),
+        CFG.colors.blue)
+    AddCardGap(card, 4)
+    AddRollGroupsToCard(card, plan.targetGroups)
+    FinishCard(f, card)
+    return true
+end
+
+local function AddAlternativeRollCard(f, plan, title, description)
+    if not plan or (tonumber(plan.alternativeCount) or 0) == 0 then return false end
+    local card = NewCard(f, title or "Your Alternatives", CFG.colors.blue)
+    AddCardLine(card,
+        description or "These are the still-needed backup choices you saved for this specialization.",
+        CFG.colors.muted, 0, "GameFontDisableSmall", true)
+    AddCardLine(card,
+        "Alternatives Here: " .. tostring(plan.alternativeCount or 0)
+            .. "  |  All Saved Dungeon and Raid Alternatives: "
+            .. tostring(plan.allAlternativeCount or plan.alternativeCount or 0),
+        CFG.colors.blue)
+    AddCardGap(card, 4)
+    AddRollGroupsToCard(card, plan.alternativeGroups)
     FinishCard(f, card)
     return true
 end
@@ -989,16 +1200,76 @@ local function EnsureCompletionFrame()
     return f
 end
 
-local function ShowCompletionPlan(plan, subtitle)
-    if not plan or (tonumber(plan.itemCount) or 0) == 0 then return false end
+local function ShowCompletionPlan(plan, title, subtitle, cardTitle, description, isRaid)
+    if not plan or ((tonumber(plan.itemCount) or 0) == 0 and (tonumber(plan.alternativeCount) or 0) == 0) then
+        return false
+    end
     local f = EnsureCompletionFrame()
     ResetCards(f)
+    f.raidReminder = isRaid == true
+    f.title:SetText(title or "Nebulous Voidcore Roll Reminder")
     f.subtitle:SetText(subtitle or "This activity is complete. Check your saved Myth-item roll list.")
-    AddNebulousRollCard(f, plan, true)
+    AddTargetRollCard(f, plan, cardTitle, description, isRaid and CFG.colors.gold or CFG.colors.violet)
+    AddAlternativeRollCard(f, plan,
+        isRaid and "Your Alternatives from This Boss" or "Your Alternatives from This Dungeon",
+        isRaid and "These are the still-needed backup choices you saved from this boss."
+            or "These are the still-needed backup choices you saved from this dungeon.")
+
+    if isRaid and (tonumber(plan.itemCount) or 0) == 0 then
+        local balance = NewCard(f, "Nebulous Voidcore Rolls", CFG.colors.violet)
+        AddCardLine(balance, "Nebulous Voidcores Available: " .. tostring(plan.currencyCount or 0), CFG.colors.green)
+        FinishCard(f, balance)
+    end
 
     local note = NewCard(f, "Before You Roll", CFG.colors.blue)
     AddCardLine(note,
-        "This reminder only lists slots from your current Gear Dashboard plan. It does not press, move, or use any Blizzard loot controls.",
+        "This reminder only lists your saved Targets and Alternatives. It does not guarantee roll eligibility or press, move, or use any Blizzard loot controls.",
+        CFG.colors.muted, 0, "GameFontDisableSmall", true)
+    FinishCard(f, note)
+
+    local contentHeight = math.max(1, math.abs(f.contentY or 0))
+    f.content:SetHeight(contentHeight)
+    f.scroll:SetVerticalScroll(0)
+    local screenHeight = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 760
+    local maximumHeight = math.min(680, math.max(390, screenHeight - 80))
+    f:SetHeight(math.max(390, math.min(maximumHeight, 108 + contentHeight)))
+    f:Show()
+    if f.Raise then f:Raise() end
+    return true
+end
+
+
+local function ShowGreatVaultTargets(plan)
+    if not plan or ((tonumber(plan.itemCount) or 0) == 0
+        and (tonumber(plan.alternativeCount) or 0) == 0
+        and (tonumber(plan.currencyCount) or 0) == 0) then
+        return false
+    end
+    local f = EnsureCompletionFrame()
+    ResetCards(f)
+    f.raidReminder = false
+    f.title:SetText("Great Vault Target Reminder")
+    f.subtitle:SetText("Review your Voidcore balance and saved Dungeon and Raid Targets and Alternatives before making a broader roll.")
+
+    if (tonumber(plan.itemCount) or 0) > 0 then
+        AddTargetRollCard(f, plan, "Your Saved Dungeon and Raid Targets",
+            "These are all still-needed Dungeon and Raid Targets for your current specialization.", CFG.colors.violet)
+    end
+    if (tonumber(plan.alternativeCount) or 0) > 0 then
+        AddAlternativeRollCard(f, plan, "Your Saved Dungeon and Raid Alternatives",
+            "These are all still-needed backup choices saved for your current specialization.")
+    end
+    if (tonumber(plan.itemCount) or 0) == 0 and (tonumber(plan.alternativeCount) or 0) == 0 then
+        local balance = NewCard(f, "Nebulous Voidcores", CFG.colors.violet)
+        AddCardLine(balance, "Nebulous Voidcores Available: " .. tostring(plan.currencyCount or 0), CFG.colors.green)
+        AddCardLine(balance, "You do not currently have any saved Dungeon or Raid Targets or Alternatives for this specialization.",
+            CFG.colors.muted, 0, "GameFontDisableSmall", true)
+        FinishCard(f, balance)
+    end
+
+    local note = NewCard(f, "Great Vault Rolls", CFG.colors.blue)
+    AddCardLine(note,
+        "A Great Vault Voidcore roll is broader than one completed boss or dungeon. This list is a planning reminder, not a promise that a specific item can appear.",
         CFG.colors.muted, 0, "GameFontDisableSmall", true)
     FinishCard(f, note)
 
@@ -1139,18 +1410,69 @@ function GearWindow.ShowCompletionForDungeon(mapID, dungeonName)
         and KeyLab.GearLootMapping.GetSource(mapID) or nil
     local name = dungeonName or source and (source.sourceName or source.name) or "Mythic+ dungeon"
     return ShowCompletionPlan(
-        GetNebulousRollPlan({ sourceID = mapID }),
-        tostring(name) .. " is complete. These are the Myth items in your plan for this dungeon."
+        GetActivityTargetPlan(mapID, name, "Dungeon"),
+        "Dungeon Target and Alternative Reminder",
+        tostring(name) .. " is complete. Check your saved Targets and Alternatives and use any available Voidcore roll before you leave.",
+        "Your Targets from This Dungeon",
+        "These are the still-needed items you marked as Targets from this dungeon."
     )
 end
 
-function GearWindow.ShowCompletionForRaid(encounterID, encounterName)
-    encounterID = tonumber(encounterID)
-    if not encounterID then return false end
+local pendingRaidCompletion
+local lastRaidCompletionID
+
+local function FlushRaidCompletion()
+    local pending = pendingRaidCompletion
+    if not pending then return false end
+    if InCombatLockdown and InCombatLockdown() then return false end
+
+    -- Discard reminders after leaving this raid/difficulty. No loot lookup or
+    -- equipment scan runs until the player is out of combat and still inside.
+    local name, instanceType, difficultyID, _, _, _, _, mapID
+    if GetInstanceInfo then
+        name, instanceType, difficultyID, _, _, _, _, mapID = GetInstanceInfo()
+    end
+    local raids = KeyLab.Mapping and KeyLab.Mapping.Raids
+    local sameRaid = tonumber(mapID) ~= nil and tonumber(mapID) == pending.instanceMapID
+    if not sameRaid and raids and raids.GetInstanceByName then
+        local instance = raids.GetInstanceByName(name)
+        sameRaid = instance and instance.instanceID == pending.instanceID
+    end
+    pendingRaidCompletion = nil
+    if instanceType ~= "raid" or not sameRaid
+        or tonumber(difficultyID) ~= pending.difficultyID then return false end
+
+    local lootEncounterID = raids and raids.GetLootEncounterByName
+        and raids.GetLootEncounterByName(pending.instanceID, pending.encounterName)
+    -- Never fall back to all raid loot or assume the runtime ID is a loot ID.
+    if not lootEncounterID then return false end
     return ShowCompletionPlan(
-        GetNebulousRollPlan({ encounterID = encounterID }),
-        tostring(encounterName or "Raid boss") .. " is defeated. These are the Myth items in your plan for this boss."
+        GetActivityTargetPlan(pending.instanceID, pending.encounterName, "Raid", lootEncounterID),
+        "Raid Target and Alternative Reminder",
+        pending.encounterName .. " is defeated. Check your saved Targets and Alternatives before you leave.",
+        "Your Targets from This Boss",
+        "These are the still-needed items you marked as Targets from this boss.",
+        true
     )
+end
+
+function GearWindow.NotifyRaidEncounterSaved(encounter)
+    local raid = type(encounter) == "table" and encounter.raid
+    if not raid or encounter.contentType ~= "raid" or raid.killed ~= true
+        or not encounter.id or encounter.id == lastRaidCompletionID then return false end
+    if type(raid.encounterName) ~= "string" then return false end
+    lastRaidCompletionID = encounter.id
+    pendingRaidCompletion = {
+        instanceID = tonumber(raid.instanceID),
+        instanceMapID = tonumber(raid.instanceMapID),
+        difficultyID = tonumber(raid.difficultyID),
+        encounterName = raid.encounterName,
+    }
+    return FlushRaidCompletion()
+end
+
+function GearWindow.ShowForGreatVault()
+    return ShowGreatVaultTargets(GetGreatVaultTargetPlan())
 end
 
 local activeChallengeMapID
@@ -1165,11 +1487,30 @@ end
 EnsureCompletionFrame()
 
 local completionEvents = CreateFrame("Frame")
+local vaultHooked = false
+local function HookGreatVault()
+    if vaultHooked then return end
+    local vault = WeeklyRewardsFrame
+    if not (vault and vault.HookScript) then return end
+    vault:HookScript("OnShow", function() GearWindow.ShowForGreatVault() end)
+    vaultHooked = true
+    completionEvents:UnregisterEvent("ADDON_LOADED")
+    if vault:IsShown() then GearWindow.ShowForGreatVault() end
+end
+
 completionEvents:RegisterEvent("CHALLENGE_MODE_START")
 completionEvents:RegisterEvent("CHALLENGE_MODE_COMPLETED")
 completionEvents:RegisterEvent("CHALLENGE_MODE_RESET")
-completionEvents:RegisterEvent("ENCOUNTER_END")
+completionEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
+completionEvents:RegisterEvent("PLAYER_REGEN_DISABLED")
+completionEvents:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+-- The Great Vault is load-on-demand and has no WEEKLY_REWARDS_SHOW event.
+completionEvents:RegisterEvent("ADDON_LOADED")
 completionEvents:SetScript("OnEvent", function(_, event, ...)
+    if event == "ADDON_LOADED" then
+        HookGreatVault()
+        return
+    end
     if event == "CHALLENGE_MODE_START" then
         activeChallengeMapID = ReadActiveChallengeMapID()
         return
@@ -1184,12 +1525,15 @@ completionEvents:SetScript("OnEvent", function(_, event, ...)
         if mapID then GearWindow.ShowCompletionForDungeon(mapID) end
         return
     end
-    if event == "ENCOUNTER_END" then
-        local encounterID, encounterName, _, _, success = ...
-        if success == 1 or success == true then
-            GearWindow.ShowCompletionForRaid(encounterID, encounterName)
-        end
+    if event == "PLAYER_REGEN_ENABLED" or event == "ZONE_CHANGED_NEW_AREA" then
+        FlushRaidCompletion()
+        return
+    end
+    if event == "PLAYER_REGEN_DISABLED" then
+        if completionFrame and completionFrame.raidReminder then completionFrame:Hide() end
+        return
     end
 end)
+HookGreatVault()
 
 return GearWindow

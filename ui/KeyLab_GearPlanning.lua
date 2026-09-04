@@ -371,6 +371,50 @@ local SECTIONS = {
     },
 }
 
+function GearPlanning:SaveCraftedPlan()
+    local db = KeyLab.CraftedPlansDB
+    local recipeID, specID = self.selectedRecipeID, db.GetCurrentSpecID()
+    local draft = self.guideCraftDraft
+    if draft then specID = draft.specID end
+    local previous = db.GetPlan(recipeID, specID)
+    local options = db.GetSlotOptions(recipeID, specID)
+    local choices = {}
+    for index, choice in pairs((draft or previous or {}).choices or {}) do choices[index]={kind=choice.kind,id=choice.id} end
+    local function Save(slot)
+        KeyLab.UI.RunPlanChange(specID, function(approval)
+            if draft then return db.SaveGuideDraft(recipeID, specID, choices, slot, approval) end
+            local plan, message, details = db.Add(recipeID, specID, slot, approval)
+            return plan ~= nil, message, details
+        end, function(ok, message)
+            if not ok then self.reagentHint:SetText(message or "The plan could not be saved."); return end
+            if draft and self.guideCraftDraft == draft then
+                self.guideCraftDraft = nil
+                self:ShowView(draft.returnSource)
+            else self:RefreshRecipes() end
+            for _, tabName in ipairs({"GearDashboard", "GearTargets"}) do
+                local tab = KeyLab.Tabs[tabName]
+                if tab and tab.frame and tab.frame:IsShown() and tab.Refresh then tab:Refresh() end
+            end
+        end)
+    end
+    if previous and previous.slotInstance then Save(previous.slotInstance); return end
+    if #options == 1 then Save(options[1]); return end
+    if #options == 0 then self.reagentHint:SetText("No equipment slot was recorded for this recipe."); return end
+    self.craftSlotMenu = self.craftSlotMenu or Theme.CreateLegacyDropdown(UIParent, "KeyLabCraftedSlotMenu")
+    self.craftSlotMenu:Hide()
+    UIDropDownMenu_Initialize(self.craftSlotMenu, function(_, level)
+        for _, candidate in ipairs(options) do
+            local slot = candidate
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = "Plan for " .. slot
+            info.notCheckable = true
+            info.func = function() if CloseDropDownMenus then CloseDropDownMenus() end; Save(slot) end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end, "MENU")
+    ToggleDropDownMenu(1, nil, self.craftSlotMenu, self.planButton, 0, 0)
+end
+
 function GearPlanning:RefreshRecipeEditor()
     if not self.craftedView then return end
     local analysis, plans = KeyLab.CraftingAnalysis, KeyLab.CraftedPlansDB
@@ -378,17 +422,24 @@ function GearPlanning:RefreshRecipeEditor()
     self.recipeEditorEmpty:SetShown(not recipe)
     self.recipeEditorContent:SetShown(recipe ~= nil)
     if not recipe then return end
-    local plan = plans.GetPlan(recipe.recipeID)
+    local draft = self.guideCraftDraft
+    local plan = draft and draft.recipeID == recipe.recipeID and draft or plans.GetPlan(recipe.recipeID)
     self.recipeTitle:SetText(recipe.name or "Crafted Item")
     self.recipeTitle:SetTextColor(unpack(ItemLevelColor(recipe.iLvlMin)))
     self.recipeMeta:SetText("Item Level " .. tostring(recipe.iLvlMin or "-") .. "  |  "
         .. (recipe.slot or "Gear") .. "  |  "
-        .. tostring((KeyLab.CraftedRecipeDatabase.professionNames or {})[recipe.professionID] or "Profession"))
-    self.planButton.text:SetText(plan and "Remove from Plan" or "Add to Plan")
+        .. tostring((KeyLab.CraftedRecipeDatabase.professionNames or {})[recipe.professionID] or "Profession")
+        .. (plan and plan.slotInstance and (" | " .. plan.slotInstance) or ""))
+    local options = plans.GetSlotOptions(recipe.recipeID, plans.GetCurrentSpecID())
+    local slot = plan and plan.slotInstance or (#options == 1 and options[1])
+    self.craftPlanNeedsReview = plan and not draft and (not slot or #plans.GetConflicts(plans.GetCurrentSpecID(), slot, recipe.recipeID, plans.ClosesOffHand(recipe.recipeID, plans.GetCurrentSpecID()), true) > 0)
+    self.planButton.text:SetText(draft and "Save & Return" or (self.craftPlanNeedsReview and "Resolve Plan") or (plan and "Remove from Plan" or "Add to Plan"))
     self.planButton:SetSelected(plan ~= nil)
-    self.reagentHint:SetText(plan
+    self.draftBackButton:SetText(draft and "Cancel & Return" or "Remove from Plan")
+    self.draftBackButton:SetShown(draft ~= nil or self.craftPlanNeedsReview == true)
+    self.reagentHint:SetText(self.craftPlanNeedsReview and "Choose a slot or confirm which plan to keep. Nothing is removed without confirmation." or draft and "Choose optional reagents, then Save & Return. Nothing is added until you save." or (plan
         and "Required materials are added automatically. Choose any optional reagents you want."
-        or "Add this item to your plan. Required materials will be added automatically.")
+        or "Add this item to your plan. Required materials will be added automatically."))
 
     local displayRows = analysis.GetRecipeDisplayRows(recipe.recipeID)
     local nextTop = 0
@@ -454,6 +505,7 @@ function GearPlanning:RefreshRecipes()
     for rowIndex, row in ipairs(self.recipeRows) do
         local recipe = self.filteredRecipes[((self.recipePage - 1) * pageSize) + rowIndex]
         row.recipe = recipe
+        row:SetEnabled(self.guideCraftDraft == nil)
         row:SetShown(recipe ~= nil)
         if recipe then
             row.icon:SetTexture(ItemIcon(recipe.itemID))
@@ -631,8 +683,12 @@ function GearPlanning:BuildCraftedView(parent)
     self.planButton = Button(self.recipeEditorContent, "Add to Plan", 140, 28); self.planButton:SetPoint("TOPRIGHT", -14, -12)
     self.planButton:SetScript("OnClick", function()
         if not self.selectedRecipeID then return end
-        KeyLab.CraftedPlansDB.Toggle(self.selectedRecipeID)
-        self:RefreshRecipes()
+        if not self.guideCraftDraft and not self.craftPlanNeedsReview and KeyLab.CraftedPlansDB.IsPlanned(self.selectedRecipeID) then
+            KeyLab.CraftedPlansDB.Remove(self.selectedRecipeID)
+            self:RefreshRecipes()
+        else
+            self:SaveCraftedPlan()
+        end
     end)
     self.reagentHint = Text(self.recipeEditorContent, "", nil, 10, COLORS.muted); self.reagentHint:SetPoint("TOPLEFT", 15, -57)
     local reagentScroll = CreateFrame("ScrollFrame", nil, self.recipeEditorContent, "UIPanelScrollFrameTemplate")
@@ -648,11 +704,13 @@ function GearPlanning:BuildCraftedView(parent)
         row.dropdown = Dropdown(row, 350,
             function() return KeyLab.CraftingAnalysis.GetChoiceOptions(row.recipeID, row.slotIndex) end,
             function()
-                local plan = KeyLab.CraftedPlansDB.GetPlan(row.recipeID)
+                local plan = self.guideCraftDraft or KeyLab.CraftedPlansDB.GetPlan(row.recipeID)
                 return KeyLab.CraftingAnalysis.GetChoiceValue(plan, row.slotIndex)
             end,
             function(value, option)
-                if value == "none" then KeyLab.CraftedPlansDB.SetChoice(row.recipeID, row.slotIndex, nil, nil)
+                if self.guideCraftDraft then
+                    self.guideCraftDraft.choices[row.slotIndex] = value ~= "none" and {kind=option.kind,id=option.id} or nil
+                elseif value == "none" then KeyLab.CraftedPlansDB.SetChoice(row.recipeID, row.slotIndex, nil, nil)
                 else KeyLab.CraftedPlansDB.SetChoice(row.recipeID, row.slotIndex, option.kind, option.id) end
                 self:RefreshRecipes()
             end)
@@ -660,7 +718,32 @@ function GearPlanning:BuildCraftedView(parent)
         self.reagentRows[index] = row
     end
     self.planCount = Text(editor, "", nil, 10, COLORS.gold); self.planCount:SetPoint("BOTTOMLEFT", 15, 14)
+    self.draftBackButton = Theme.CreateButton(editor,"Cancel & Return",150,26)
+    self.draftBackButton:SetPoint("BOTTOMRIGHT",-14,8); self.draftBackButton:Hide()
+    self.draftBackButton:SetScript("OnClick",function()
+        local draft=self.guideCraftDraft
+        if draft then
+            self.guideCraftDraft=nil
+            self:ShowView(draft.returnSource)
+        elseif self.craftPlanNeedsReview and self.selectedRecipeID then
+            KeyLab.CraftedPlansDB.Remove(self.selectedRecipeID)
+            self:RefreshRecipes()
+        end
+    end)
     return view
+end
+
+function GearPlanning:OpenGuideCraft(recipeID, specID, source)
+    if specID ~= KeyLab.CraftedPlansDB.GetCurrentSpecID() then return end
+    if InCombatLockdown and InCombatLockdown() then return end
+    local recipe=KeyLab.CraftingAnalysis.GetRecipe(recipeID)
+    if not recipe then return end
+    local previous=KeyLab.CraftedPlansDB.GetPlan(recipeID,specID)
+    local choices={}
+    for index,choice in pairs(previous and previous.choices or {}) do choices[index]={kind=choice.kind,id=choice.id} end
+    self.guideCraftDraft={recipeID=recipeID,specID=specID,choices=choices,slotInstance=previous and previous.slotInstance,returnSource=source}
+    self.selectedRecipeID=recipeID
+    self:ShowView("crafted")
 end
 
 local function Season2Track(trackID)
@@ -1341,7 +1424,8 @@ function GearPlanning:RefreshSeason2Info()
 end
 
 function GearPlanning:ShowView(name)
-    if name ~= "crafted" and name ~= "season2Info" then name = "guide" end
+    if name ~= "crafted" and name ~= "season2Info" and name ~= "WH" and name ~= "IV" then name = "guide" end
+    if name ~= "crafted" then self.guideCraftDraft=nil end
     self.selectedView = name
     self.guideView:SetShown(self.selectedView == "guide")
     self.craftedView:SetShown(self.selectedView == "crafted")
@@ -1349,6 +1433,11 @@ function GearPlanning:ShowView(name)
     self.guideTab:SetSelected(self.selectedView == "guide")
     self.craftedTab:SetSelected(self.selectedView == "crafted")
     self.season2InfoTab:SetSelected(self.selectedView == "season2Info")
+    for source,view in pairs(self.sourceViews or {}) do
+        view:SetShown(name==source)
+        self.sourceTabs[source]:SetSelected(name==source)
+        if name==source then view:Refresh() end
+    end
     if self.selectedView == "crafted" then self:RefreshRecipes() end
     if self.selectedView == "season2Info" then self:RefreshSeason2Info() end
 end
@@ -1372,6 +1461,20 @@ function GearPlanning:Create(parent)
     self.guideView = self:BuildGuideView(views)
     self:BuildCraftedView(views)
     self:BuildSeason2InfoView(views)
+    self.sourceViews,self.sourceTabs={},{}
+    local previousTab=self.season2InfoTab
+    for _,definition in ipairs({{id="WH",name="Wowhead"},{id="IV",name="Icy Veins"}}) do
+        local source=definition.id
+        local button=Theme.CreateButton(frame,definition.name,140,34)
+        button:SetPoint("LEFT",previousTab,"RIGHT",10,0)
+        function button:SetSelected(selected)
+            self.label:SetTextColor(unpack(selected and COLORS.gold or COLORS.text))
+            self:SetBackdropBorderColor(unpack(selected and COLORS.gold or COLORS.border))
+        end
+        self.sourceTabs[source]=button; previousTab=button
+        self.sourceViews[source]=KeyLab.UI.GuideRecommendations.Create(views,source)
+        button:SetScript("OnClick",function() self:ShowView(source) end)
+    end
     self.guideTab:SetScript("OnClick", function() self:ShowView("guide") end)
     self.craftedTab:SetScript("OnClick", function() self:ShowView("crafted") end)
     self.season2InfoTab:SetScript("OnClick", function() self:ShowView("season2Info") end)
@@ -1395,6 +1498,16 @@ end
 
 if KeyLab.RegisterTab then
     KeyLab.RegisterTab("Gear Planning", function(parent) return GearPlanning:Create(parent) end)
+end
+
+if KeyLab.GuideTalents then
+    KeyLab.GuideTalents.Listen(function()
+        local draft=GearPlanning.guideCraftDraft
+        if draft and draft.specID~=KeyLab.CraftedPlansDB.GetCurrentSpecID() then
+            GearPlanning.guideCraftDraft=nil
+            if GearPlanning.frame then GearPlanning:ShowView(draft.returnSource) end
+        end
+    end)
 end
 
 return GearPlanning

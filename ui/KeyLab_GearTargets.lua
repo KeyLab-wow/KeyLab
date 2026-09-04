@@ -28,7 +28,7 @@ local CFG = {
         warning = {0.840, 0.720, 0.420, 1.0},
         raid = {0.900, 0.680, 0.900, 1.0},
     },
-    rowHeight = 38,
+    rowHeight = 54,
 }
 
 -- These dimensions deliberately match the previous Gear Targets tab.
@@ -312,8 +312,8 @@ local function SourceLabel(sourceID)
 end
 
 local function LootLocationLabel()
-    if GearTargets.selectedEncounterID and KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetRaidBossListForSpec then
-        for _, boss in ipairs(KeyLab.GearLootMapping.GetRaidBossListForSpec(TargetSpecID()) or {}) do
+    if GearTargets.selectedEncounterID and KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetRaidBossListForClass then
+        for _, boss in ipairs(KeyLab.GearLootMapping.GetRaidBossListForClass(CurrentClassID()) or {}) do
             if tonumber(boss.encounterID) == tonumber(GearTargets.selectedEncounterID)
                 and tonumber(boss.sourceID) == tonumber(GearTargets.selectedSourceID) then
                 return boss.text or ((boss.bossName or "Raid Boss") .. " - " .. (boss.raidName or "Raid"))
@@ -329,7 +329,7 @@ end
 local function GetSlotOptions()
     local list = { { text = "All Slots", value = nil } }
     if KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetSlotList then
-        for _, slot in ipairs(KeyLab.GearLootMapping.GetSlotList(TargetSpecID()) or {}) do
+        for _, slot in ipairs(KeyLab.GearLootMapping.GetSlotList(nil, CurrentClassID()) or {}) do
             if slot and slot ~= "" then table.insert(list, { text = slot, value = slot }) end
         end
     end
@@ -342,9 +342,9 @@ local function GetSourceOptions()
         { text = "All Dungeons", sourceType = "Dungeon" },
         { text = "All Raids", sourceType = "Raid" },
     }
-    if KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetSourceListForSpec then
+    if KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetSourceListForClass then
         table.insert(list, { text = "Dungeons", title = true })
-        for _, source in ipairs(KeyLab.GearLootMapping.GetSourceListForSpec(TargetSpecID(), "Dungeon") or {}) do
+        for _, source in ipairs(KeyLab.GearLootMapping.GetSourceListForClass(CurrentClassID(), "Dungeon") or {}) do
             table.insert(list, {
                 text = source.sourceName or source.name or tostring(source.sourceID),
                 sourceType = "Dungeon",
@@ -352,9 +352,9 @@ local function GetSourceOptions()
             })
         end
     end
-    if KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetRaidBossListForSpec then
+    if KeyLab.GearLootMapping and KeyLab.GearLootMapping.GetRaidBossListForClass then
         table.insert(list, { text = "Raid Bosses", title = true })
-        for _, boss in ipairs(KeyLab.GearLootMapping.GetRaidBossListForSpec(TargetSpecID()) or {}) do
+        for _, boss in ipairs(KeyLab.GearLootMapping.GetRaidBossListForClass(CurrentClassID()) or {}) do
             table.insert(list, {
                 text = boss.text or ((boss.bossName or "Raid Boss") .. " - " .. (boss.raidName or "Raid")),
                 sourceType = "Raid",
@@ -382,12 +382,12 @@ local function PrintAssignmentError(reason)
     local messages = {
         slot_required = "Choose the exact equipment slot for this item.",
         invalid_slot = "That item cannot be used in the selected slot for your current specialization.",
-        target_required = "Select a Target for that slot before adding an Alternative.",
+        target_required = "Select a Target or crafted plan for that slot before adding an Alternative.",
         already_target = "That item is already the Target for this slot.",
         already_targeted = "That item is already saved as a Target in another paired slot.",
         slot_has_target = "That slot already has a Target.",
         off_hand_closed = "Off Hand is closed by the selected Main Hand weapon.",
-        main_hand_required = "Select a compatible one-handed Main Hand Target before saving this Off Hand item.",
+        main_hand_required = "Select a compatible one-handed Main Hand Target or crafted plan before saving this Off Hand item.",
         incompatible_main_hand = "This Off Hand item requires a one-handed Main Hand Target.",
         owned_catalyst_slot_only = "Owned Catalyst Targets are available for Back, Wrist, Waist, and Feet. Head, Shoulders, Chest, Hands, and Legs remain Tier Set slots.",
     }
@@ -405,6 +405,17 @@ end
 local function ApplyStatus(item, status, slotInstance)
     local targets = KeyLab.LootTargetsDB
     if not targets then return end
+    if status == "target" then
+        local specID = TargetSpecID()
+        KeyLab.UI.RunPlanChange(specID, function(approval)
+            return targets.SetTargetForSlot(specID, item, slotInstance, item.sourceID, true, approval)
+        end, function(ok, reason)
+            if not ok then PrintAssignmentError(reason); return end
+            GearTargets:RefreshContent()
+            RefreshExternalTargetViews()
+        end)
+        return
+    end
     local ok, reason
     if status == nil then
         ok, reason = targets.SetStatus(TargetSpecID(), item.itemID, nil)
@@ -420,7 +431,7 @@ end
 
 local function EligibleStatusSlots(item, status)
     local mapping = KeyLab.GearLootMapping
-    local slots = mapping and mapping.GetEligibleSlotInstances and mapping.GetEligibleSlotInstances(item, TargetSpecID()) or {}
+    local slots = mapping and mapping.GetTargetSlotInstances and mapping.GetTargetSlotInstances(item, TargetSpecID()) or {}
     if item and item.sourceType == "Owned" then
         local ownedSlot = mapping and mapping.NormalizeSlotName and mapping.NormalizeSlotName(item.slot) or tostring(item.slot or "")
         if not CATALYST_NON_SET_ARMOR_SLOTS[ownedSlot] then return {}, "owned_catalyst_slot_only" end
@@ -429,7 +440,9 @@ local function EligibleStatusSlots(item, status)
     if status ~= "alternative" then return slots, nil end
     local out = {}
     for _, slotInstance in ipairs(slots) do
-        if KeyLab.LootTargetsDB.GetTargetForSlot(TargetSpecID(), slotInstance) then table.insert(out, slotInstance) end
+        local crafts = KeyLab.CraftedPlansDB
+        if KeyLab.LootTargetsDB.GetTargetForSlot(TargetSpecID(), slotInstance)
+            or (crafts and #crafts.GetPlansForSlot(TargetSpecID(), slotInstance) > 0) then table.insert(out, slotInstance) end
     end
     return out, nil
 end
@@ -551,6 +564,7 @@ function GearTargets:GetFilteredItems()
     if self.selectedStamina then primaryStats.Stam = true end
     local filters = {
         specID = TargetSpecID(),
+        browseClass = true,
         classID = CurrentClassID(),
         sourceID = self.selectedSourceID,
         sourceType = self.selectedItemType,
@@ -658,12 +672,27 @@ local function ItemLinkForSpec(item, specID)
     end, 1))
 end
 
+local function AddLootSpecLines(guidance)
+    if not GameTooltip or not guidance then return end
+    local spec = KeyLab.GearLootDatabase and KeyLab.GearLootDatabase.specs and KeyLab.GearLootDatabase.specs[guidance.lootSpecID]
+    local specName = spec and (spec.specName or spec.name) or "Unavailable"
+    local colors = Theme.colors or CFG.colors
+    GameTooltip:AddLine("Loot Spec: " .. (guidance.names or "Unavailable"), colors.gold[1], colors.gold[2], colors.gold[3], true)
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine("Loot Spec Set: " .. specName, colors.blue[1], colors.blue[2], colors.blue[3], true)
+end
+
 local function AddItemTooltip(frame, item, itemLink)
     frame:EnableMouse(true)
     frame:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if itemLink then GameTooltip:SetHyperlink(itemLink)
         elseif item.itemID then GameTooltip:SetHyperlink("item:" .. tostring(item.itemID)) end
+        local guidance = KeyLab.GearLootMapping.GetLootSpecGuidance(item, TargetSpecID())
+        AddLootSpecLines(guidance)
+        if item.statsNotCapturedForSpec then
+            GameTooltip:AddLine("Stats were not captured for your current spec. This is not a claim that the item has no stats; review Blizzard's tooltip above.", 0.8, 0.85, 1, true)
+        end
         GameTooltip:Show()
     end)
     frame:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -683,8 +712,15 @@ function GearTargets:MakeLootRow(parent, item, y)
 
     local itemLink = ItemLinkForSpec(item, TargetSpecID())
     local name = MakeText(row, itemLink or ItemDisplayName(item), "GameFontNormal", nil, CFG.colors.text)
-    name:SetPoint("LEFT", row, "LEFT", TABLE_COLUMNS.item.x, 0)
-    name:SetSize(TABLE_COLUMNS.item.width, 20)
+    name:SetPoint("TOPLEFT", row, "TOPLEFT", TABLE_COLUMNS.item.x, -4)
+    name:SetSize(TABLE_COLUMNS.item.width, 18)
+    name:SetWordWrap(false)
+    local guidance = KeyLab.GearLootMapping.GetLootSpecGuidance(item, TargetSpecID())
+    local lootSpec = MakeText(row, "Loot Spec: " .. (guidance and guidance.names or "Not recorded"), "GameFontDisableSmall", 9, (Theme.colors or CFG.colors).gold)
+    lootSpec:SetPoint("TOPLEFT", row, "TOPLEFT", TABLE_COLUMNS.item.x, -24)
+    lootSpec:SetSize(TABLE_COLUMNS.item.width, 22)
+    lootSpec:SetJustifyV("TOP")
+    lootSpec:SetWordWrap(true)
     local itemHover = CreateFrame("Frame", nil, row)
     itemHover:SetPoint("LEFT", row, "LEFT", 5, 0)
     itemHover:SetSize(TABLE_COLUMNS.item.x + TABLE_COLUMNS.item.width - 5, CFG.rowHeight - 4)
@@ -708,6 +744,8 @@ function GearTargets:MakeLootRow(parent, item, y)
         GameTooltip:AddLine(ItemDisplaySource(item))
         if item.sourceType == "Raid" then GameTooltip:AddLine("Raid source - weekly opportunity", 0.9, 0.68, 0.9, true)
         elseif item.sourceType == "Dungeon" then GameTooltip:AddLine("Dungeon source - repeatable", 0.5, 0.68, 0.94, true) end
+        local guidance = KeyLab.GearLootMapping.GetLootSpecGuidance(item, TargetSpecID())
+        AddLootSpecLines(guidance)
         GameTooltip:Show()
     end)
     sourceHover:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1321,6 +1359,7 @@ function GearTargets:CreateMatcherResultsPopup()
     dragHandle:SetScript("OnDragStop", function() popup:StopMovingOrSizing() end)
 
     local title = MakeText(popup, "Stat Goal Matcher Results", "GameFontNormalLarge", nil, CFG.colors.gold, "CENTER")
+    Theme.AddPopupLogo(popup)
     title:SetPoint("TOP", popup, "TOP", 0, -18)
     title:SetSize(790, 28)
     local subtitle = MakeText(popup, "Review the matched items, projected stats, and important notes.", "GameFontDisableSmall", nil, CFG.colors.muted, "CENTER")
@@ -1398,6 +1437,7 @@ function GearTargets:CreatePreparationPopup()
     dragHandle:SetScript("OnDragStop", function() popup:StopMovingOrSizing() end)
 
     local title = MakeText(popup, "Prepare Your Gear", "GameFontNormalLarge", nil, CFG.colors.gold, "CENTER")
+    Theme.AddPopupLogo(popup)
     title:SetPoint("TOP", popup, "TOP", 0, -18)
     title:SetSize(530, 28)
     local body = MakeText(popup,
@@ -1623,6 +1663,37 @@ function GearTargets:Refresh()
     self:RefreshContent()
 end
 
+function GearTargets:ClearAllTargets()
+    local db = KeyLab.LootTargetsDB
+    local specID = TargetSpecID()
+    local targets = db and db.GetAllTargetsForSpec and db.GetAllTargetsForSpec(specID) or {}
+    if #targets == 0 then
+        if KeyLab.Print then KeyLab.Print("There are no saved Targets to clear for this specialization.") end
+        return
+    end
+    for _, item in ipairs(targets) do
+        if item and item.itemID and db.SetStatus then db.SetStatus(specID, item.itemID, nil) end
+    end
+    self:Refresh()
+    RefreshExternalTargetViews()
+    if KeyLab.Print then KeyLab.Print(tostring(#targets) .. " saved Target" .. (#targets == 1 and " was" or "s were") .. " cleared.") end
+end
+
+local function ConfirmClearAllTargets()
+    StaticPopupDialogs.KEYLAB_CLEAR_ALL_TARGETS = StaticPopupDialogs.KEYLAB_CLEAR_ALL_TARGETS or {
+        text = "Clear every saved Target for your current specialization?\n\nThis works like unmarking each Target one at a time.",
+        button1 = "Clear Targets",
+        button2 = "Cancel",
+        OnAccept = function() GearTargets:ClearAllTargets() end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+        preferredIndex = 3,
+    }
+    Theme.BrandConfirmationDialog(StaticPopupDialogs.KEYLAB_CLEAR_ALL_TARGETS)
+    StaticPopup_Show("KEYLAB_CLEAR_ALL_TARGETS")
+end
+
 function GearTargets:Create(parent)
     local frame = CreateFrame("Frame", "KeyLabGearTargetsTab", parent, "BackdropTemplate")
     frame:SetAllPoints(parent)
@@ -1646,8 +1717,8 @@ function GearTargets:Create(parent)
     Theme.CreateTabHeader(
         frame,
         "Gear Targets",
-        "Browse dungeon and raid gear, save your Targets and Alternatives, or match items to your stat goals.",
-        { descriptionWidth = 540 }
+        "Browse all loot specs of your class; save Targets for your current spec. Some items need another loot spec. Hover an item for details.",
+        { descriptionWidth = 540, descriptionHeight = 32 }
     )
 
     self.statusDropdown = MakeDropdown(frame, 150, 580, -12, "Show", function(_, level)
@@ -1673,6 +1744,9 @@ function GearTargets:Create(parent)
             GearTargets:OpenPreparationPopup()
         end
     end)
+
+    self.clearTargetsButton = MakeActionButton(frame, "Clear Targets", 118, 28)
+    self.clearTargetsButton:SetScript("OnClick", ConfirmClearAllTargets)
 
     local controls = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     controls:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, HEADER.standardContentY)
@@ -1744,12 +1818,15 @@ function GearTargets:Create(parent)
         if GearTargets.searchText ~= text then GearTargets.searchText = text; GearTargets:RefreshContent() end
     end)
 
-    local specLabel = MakeText(controls, "Current Spec", "GameFontDisableSmall", nil, CFG.colors.muted)
-    specLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", 855, -12)
-    specLabel:SetSize(140, 16)
+    local specLabel = MakeText(controls, "Saving For Spec", "GameFontDisableSmall", nil, CFG.colors.muted)
+    specLabel:SetPoint("TOPRIGHT", controls, "TOPRIGHT", -14, -12)
+    specLabel:SetSize(120, 16)
     self.specValue = MakeText(controls, "", "GameFontHighlightSmall", nil, CFG.colors.gold)
-    self.specValue:SetPoint("TOPLEFT", controls, "TOPLEFT", 855, -38)
-    self.specValue:SetSize(140, 20)
+    self.specValue:SetPoint("TOPLEFT", specLabel, "TOPLEFT", 0, -26)
+    self.specValue:SetSize(120, 20)
+    searchLabel:SetPoint("TOPRIGHT", specLabel, "TOPLEFT", -12, 0)
+    self.searchBox:SetPoint("TOPRIGHT", specLabel, "TOPLEFT", -12, -22)
+    self.searchBox.placeholder:SetPoint("RIGHT", self.searchBox, "RIGHT", -8, -1)
 
     local primaryLabel = MakeText(controls, "Primary Stats (Choose Stamina and one of Int / Str / Agi)", "GameFontDisableSmall", nil, CFG.colors.muted)
     primaryLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", 18, -76)
@@ -1778,6 +1855,7 @@ function GearTargets:Create(parent)
     local secondaryLabel = MakeText(controls, "Secondary Stats (choose up to 2)", "GameFontDisableSmall", nil, CFG.colors.muted)
     secondaryLabel:SetPoint("TOPLEFT", controls, "TOPLEFT", 460, -76)
     secondaryLabel:SetSize(220, 16)
+    self.secondaryChecks = {}
     x = 460
     for _, option in ipairs(SECONDARY_OPTIONS) do
         local opt = option
@@ -1796,6 +1874,7 @@ function GearTargets:Create(parent)
         local label = MakeText(controls, opt.shortLabel, "GameFontHighlightSmall", nil, CFG.colors.text)
         label:SetPoint("LEFT", cb, "RIGHT", 2, 0)
         label:SetSize(70, 18)
+        table.insert(self.secondaryChecks, { button = cb, value = opt.value })
         x = x + 112
     end
 
@@ -1888,14 +1967,17 @@ function GearTargets:Create(parent)
     self.goalTotal:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 14, -116)
     self.goalTotal:SetSize(260, 18)
     local goalHint = MakeText(matcherPanel, "Each may be 0%–100%", "GameFontDisableSmall", nil, CFG.colors.muted)
-    goalHint:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 150, -116)
+    goalHint:SetPoint("TOPLEFT", matcherPanel, "TOPLEFT", 278, -116)
     goalHint:SetSize(180, 18)
+    self.goalHint = goalHint
 
     self.summary = MakeText(frame, "Loading loot...", "GameFontDisableSmall", nil, CFG.colors.blue)
     self.summary:SetPoint("TOPLEFT", matcherPanel, "BOTTOMLEFT", 4, -8)
-    self.summary:SetSize(900, 18)
+    self.summary:SetSize(760, 18)
+    self.clearTargetsButton:SetSize(108, 22)
+    self.clearTargetsButton:SetPoint("TOPRIGHT", matcherPanel, "BOTTOMRIGHT", -4, -4)
     local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -400)
+    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -410)
     scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 18)
     local content = CreateFrame("Frame", nil, scroll)
     content:SetSize(TABLE_WIDTH, 620)
