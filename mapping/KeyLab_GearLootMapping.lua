@@ -474,6 +474,26 @@ function Mapping.GetSlotList(specID, classID)
     return indexes.slotList or {}
 end
 
+local function ClassLootList(classID, method, sourceType)
+    local out, seen = {}, {}
+    for _, spec in ipairs(Mapping.GetSpecList(classID)) do
+        for _, row in ipairs(method(spec.specID, sourceType)) do
+            local key = tostring(row.sourceID) .. ":" .. tostring(row.encounterID or "")
+            if not seen[key] then seen[key]=true; table.insert(out,row) end
+        end
+    end
+    table.sort(out, function(a,b) return tostring(a.text or a.sourceName or a.name) < tostring(b.text or b.sourceName or b.name) end)
+    return out
+end
+
+function Mapping.GetSourceListForClass(classID, sourceType)
+    return ClassLootList(classID, Mapping.GetSourceListForSpec, sourceType)
+end
+
+function Mapping.GetRaidBossListForClass(classID)
+    return ClassLootList(classID, Mapping.GetRaidBossListForSpec)
+end
+
 function Mapping.IsItemEligibleForSpec(itemOrItemID, specID)
     local db = DB()
     local item = type(itemOrItemID) == "table" and itemOrItemID or (db and db.items and db.items[tonumber(itemOrItemID)])
@@ -495,6 +515,48 @@ function Mapping.IsItemEligibleForClass(itemOrItemID, classID)
         if spec and tonumber(spec.classID) == classID then return true end
     end
     return false
+end
+
+-- Loot eligibility and a player's saved plan are different questions. Keep
+-- IsItemEligibleForSpec unchanged for the matcher and captured loot filters.
+function Mapping.GetLootSpecsForClass(itemOrItemID, specID)
+    local db = DB()
+    local item = type(itemOrItemID) == "table" and itemOrItemID or (db and db.items and db.items[tonumber(itemOrItemID)])
+    local classID = GetClassIDForSpec(specID)
+    local out = {}
+    if not item or not classID then return out end
+    for id, eligible in pairs(item.specs or {}) do
+        if eligible == true and GetClassIDForSpec(id) == classID then
+            table.insert(out, {specID=tonumber(id), name=GetSpecName(id) or tostring(id)})
+        end
+    end
+    table.sort(out, function(a,b) return a.name < b.name end)
+    return out
+end
+
+function Mapping.GetLootSpecGuidance(itemOrItemID, specID)
+    local specs = Mapping.GetLootSpecsForClass(itemOrItemID, specID)
+    if #specs == 0 then return nil end -- No captured eligibility is not a claim about in-game loot.
+    local lootID
+    if GetLootSpecialization then
+        local ok, value = pcall(GetLootSpecialization)
+        if ok and not (issecretvalue and issecretvalue(value)) and type(value) == "number" then
+            lootID = value == 0 and tonumber(specID) or value
+        end
+    end
+    local names, matches = {}, false
+    for _, spec in ipairs(specs) do
+        names[#names+1] = spec.name
+        if spec.specID == lootID then matches = true end
+    end
+    local warning = lootID and not matches or false
+    local text = "Captured loot specs: " .. table.concat(names, ", ") .. "."
+    text = text .. (lootID and ("\nCurrent loot spec: " .. (GetSpecName(lootID) or tostring(lootID)) .. ".")
+        or "\nYour current loot specialization could not be read. Check it before seeking this item.")
+    if warning then text = text .. "\nFor spec-filtered loot, choose one of the listed loot specs before seeking this item." end
+    text = text .. "\nRight-click your character portrait > Loot Specialization. This does not change your active talents."
+        .. "\nLoot eligibility is not a recommendation for your active spec. Check the item's stats and effects; raid loot rules may differ."
+    return {warning=warning, names=table.concat(names, ", "), text=text, lootSpecID=lootID}
 end
 
 function Mapping.IsCurrentSeasonItem(itemOrItemID, season)
@@ -618,6 +680,45 @@ function Mapping.GetEligibleSlotInstances(itemOrItemID, specID)
     return slot ~= "" and { slot } or {}
 end
 
+function Mapping.GetTargetSlotInstances(itemOrItemID, specID)
+    local db = DB()
+    local item = type(itemOrItemID) == "table" and itemOrItemID or (db and db.items and db.items[tonumber(itemOrItemID)])
+    if not item then return {} end
+    if item.sourceType == "Owned" then return Mapping.GetEligibleSlotInstances(item, specID) end
+    local classID = GetClassIDForSpec(specID)
+    if not classID or not Mapping.IsItemEligibleForClass(item, classID) then return {} end
+    local slot = Mapping.NormalizeSlotName(item.slot)
+    if slot == "Finger" then return {"Finger 1", "Finger 2"} end
+    if slot == "Trinket" then return {"Trinket 1", "Trinket 2"} end
+    if slot == "One-Hand" or slot == "Two-Hand" then
+        if Mapping.IsTargetDualWieldEligible(item, specID) then return {"Main Hand", "Off Hand"} end
+        return {"Main Hand"}
+    end
+    if slot == "Ranged" then return {"Main Hand"} end
+    -- In particular, do not reinterpret an explicitly Main-Hand-only item.
+    return slot ~= "" and {slot} or {}
+end
+
+function Mapping.IsTargetDualWieldEligible(itemOrItemID, specID)
+    if Mapping.IsDualWieldEligible(itemOrItemID, specID) then return true end
+    local db = DB()
+    local item = type(itemOrItemID) == "table" and itemOrItemID or (db and db.items and db.items[tonumber(itemOrItemID)])
+    if not item then return false end
+    local slot = Mapping.NormalizeSlotName(item.slot)
+    -- The existing captured rules already establish which specs dual-wield.
+    -- Extend that ability to generic one-hand items available to their class,
+    -- without granting it to a healer/caster just because another spec has it.
+    if slot == "One-Hand" and (not item.equipLoc or item.equipLoc == "INVTYPE_WEAPON") then
+        for id, specs in pairs(db.dualWieldBySpec or {}) do
+            local known = db.items[id]
+            if specs[tonumber(specID)] and known and Mapping.NormalizeSlotName(known.slot) == "One-Hand" then return true end
+        end
+    end
+    -- Fury's Titan's Grip also supports polearms, absent from the captured
+    -- off-hand map. This is planning-only; matcher candidates remain unchanged.
+    return tonumber(specID) == 72 and slot == "Two-Hand" and item.armorType == "Polearm"
+end
+
 function Mapping.GetItemSpecs(itemID)
     local indexes = Mapping.BuildIndexes()
     return indexes and indexes.itemToSpecs and indexes.itemToSpecs[tonumber(itemID)] or {}
@@ -707,6 +808,11 @@ end
 function Mapping.GetItem(itemID, displaySpecID, classID, sourceID)
     local db = DB()
     local item = db and db.items and db.items[tonumber(itemID)]
+    if not item and KeyLab.GuideRecommendations then
+        item = KeyLab.GuideRecommendations.GetSupplementalItem(itemID)
+        if item and Mapping.IsItemEligibleForSpec(item, displaySpecID) then return item end
+        return nil
+    end
     return item and WithDisplaySource(item, sourceID, displaySpecID, classID) or nil
 end
 
@@ -771,6 +877,8 @@ function Mapping.GetFilteredItems(filters)
     filters = filters or {}
 
     local specID = tonumber(filters.specID)
+    local displaySpecID = specID
+    if filters.browseClass then specID = nil end
     local classID = tonumber(filters.classID)
     local sourceID = tonumber(filters.sourceID or filters.mapID)
     local encounterID = tonumber(filters.encounterID)
@@ -801,9 +909,16 @@ function Mapping.GetFilteredItems(filters)
         if slot and slot ~= "" and slot ~= "All" and normalizedSlot ~= slot then return end
         if not includeNonGear and ItemIsNonGear(item) then return end
         if not ItemMatchesSearch(item, filters.searchText) then return end
-        if not SelectedStatsMatch(item, specID, primaryStats, secondaryStats) then return end
+        if not SelectedStatsMatch(item, displaySpecID or specID, primaryStats, secondaryStats) then return end
         seen[itemID] = true
-        table.insert(out, WithDisplaySource(item, sourceID, specID, classID, sourceType))
+        local display = WithDisplaySource(item, sourceID, displaySpecID or specID, classID, sourceType)
+        if filters.browseClass and displaySpecID and db.statsBySpec and db.statsBySpec[itemID]
+            and not db.statsBySpec[itemID][displaySpecID] then
+            display.displayStatText = "Check tooltip"
+            display.statText = display.displayStatText
+            display.statsNotCapturedForSpec = true
+        end
+        table.insert(out, display)
     end
 
     if specID and sourceID then

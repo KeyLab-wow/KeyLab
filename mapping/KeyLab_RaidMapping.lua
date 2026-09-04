@@ -78,6 +78,26 @@ function Raids.GetInstanceForEncounter(encounterID)
     return match
 end
 
+-- Called only for a finished raid pull. Resolve the loot boss from the small
+-- local catalog; do not scan or change the Encounter Journal during combat.
+function Raids.GetLootEncounterByName(instanceID, encounterName)
+    local instance = Raids.GetInstance(instanceID)
+    if not instance or type(encounterName) ~= "string" then return nil end
+    local function Normalize(name)
+        return name:lower():gsub("’", "'"):gsub("[%p%s]+", "")
+    end
+    local wanted = Normalize(encounterName)
+    if wanted == "" then return nil end
+    local match
+    for journalID, name in pairs(instance.encounterNames or {}) do
+        if Normalize(name) == wanted then
+            if match then return nil end
+            match = journalID
+        end
+    end
+    return match
+end
+
 function Raids.GetInstanceByName(instanceName)
     if type(instanceName) ~= "string" or instanceName == "" then return nil end
 
