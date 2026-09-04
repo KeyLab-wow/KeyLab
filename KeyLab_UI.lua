@@ -300,6 +300,11 @@ function KeyLab.UI:Create()
     StylePanel(frame, CFG.colors.windowBg, CFG.colors.windowBorder)
 
     self.frame = frame
+    frame:SetScript("OnShow", function()
+        if KeyLab.GroupQuickUI and KeyLab.GroupQuickUI.HidePreparationForMain then
+            KeyLab.GroupQuickUI:HidePreparationForMain()
+        end
+    end)
     frame:SetScript("OnHide", function()
         if KeyLab.GroupQuickUI and KeyLab.GroupQuickUI.HandleFloatingRefresh then
             if C_Timer and C_Timer.After then
@@ -450,6 +455,12 @@ function KeyLab.UI:SetMenuOnly(enabled)
     end
     self:Create()
     enabled = enabled == true
+    if enabled and KeyLab.GroupQuickUI and KeyLab.GroupQuickUI.OpenPreparationPanel then
+        self.isMenuOnly = true
+        self.frame:Hide()
+        KeyLab.GroupQuickUI:OpenPreparationPanel()
+        return
+    end
     if self.isMenuOnly == enabled then return end
 
     self.isMenuOnly = enabled
@@ -901,9 +912,25 @@ function KeyLab.UI:SelectTab(tabName)
 
 end
 
+function KeyLab.UI:GetPreparationDestinations()
+    local choices = {}
+    for _, category in ipairs(GetVisibleNavigationTabs()) do
+        local route = ANALYSIS_ROUTES[category]
+        if route then
+            for _, mode in ipairs({"mplus", "raid"}) do
+                choices[#choices+1] = {value=route[mode], label=(mode=="raid" and "Raid - " or "Mythic+ - ")..GetNavigationLabel(category,mode)}
+            end
+        else
+            choices[#choices+1] = {value=category,label=GetNavigationLabel(category,self.contentMode)}
+        end
+    end
+    return choices
+end
+
 function KeyLab.UI:Show()
     if InCombatLockdown and InCombatLockdown() then return end
     self:Create()
+    if self.isMenuOnly then self:SetMenuOnly(false) end
     self.frame:Show()
     self:SelectTab(self.selectedTab or "Home")
 end
@@ -929,7 +956,6 @@ function KeyLab.UI:Toggle()
     if self.frame:IsShown() then
         self:Hide()
     else
-        self.frame:Show()
-        self:SelectTab(self.selectedTab or "Home")
+        self:Show()
     end
 end

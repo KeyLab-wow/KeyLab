@@ -1,5 +1,60 @@
 # KeyLab Changelog
 
+## Version 2.0.85 - Stat Matcher Weapon Setups
+
+- Adds spec-aware weapon setup rules to Stat Goal Matcher based on the saved SimulationCraft 12.1 spell requirements. Retribution, Arms, Unholy, and Survival require a two-handed setup; Enhancement requires two compatible one-handed weapons.
+- Adds a required Two-Handed or Dual Wield choice for Frost Death Knight, Brewmaster Monk, and Windwalker Monk, saved per character/spec. Other specs retain their existing weapon behavior.
+- Evaluates complete weapon configurations: a two-handed weapon closes the off-hand, while Dual Wield requires both weapon slots and rejects shields and caster off-hands. Main-hand-only weapons can pair with a compatible off-hand weapon.
+- Validates locked equipped weapons against the required/selected setup, identifies the weapon setup in results, and updates the Matcher guide and guided tour.
+
+## Version 2.0.84 - Aman'muso Adaptive Primary Stat
+
+- Recognizes Aman'muso, Warlord's Vengeance as supporting Agility or Strength for Stat Goal Matcher's optional primary requirement, including owned copies. The item's in-game adaptive behavior was confirmed despite all saved captures showing Strength.
+- Preserves captured stats, item links, loot-spec eligibility, and all other weapon rules. Does not grant this weapon Intellect support.
+
+## Version 2.0.83 - Optional Primary Stat Requirement
+
+- Adds an optional Primary first selector to Stat Goal Matcher setup: None preserves the class-wide search; selecting the current spec's primary stat requires new armor and weapon candidates to support it before secondary-stat matching. This is an eligibility requirement, not primary-stat amount maximization or a percentage goal.
+- Preserves shared adaptive armor, fixed weapon stat distinctions, equipped-item locks, ring/neck eligibility, and existing trinket handling. Applies the requirement to database and owned-bag searches without rewriting captured item data.
+- Saves the choice per character/spec, displays it in results, and updates the Gear Planning guide and guided tour. Secondary priorities remain reorderable below the optional primary requirement.
+- Corrects Devourer's primary-stat mapping from Agility to Intellect. Leaves unresolved captured item-stat discrepancies unchanged; incompatible or unverified primary-stat candidates do not qualify while the requirement is enabled.
+
+## Version 2.0.82 - Matcher Guide and Preparation Panel Tour
+
+- Updates Gear Planning's Stat Goal Matcher guide for the setup popup, goal/priority controls, class-wide search, independent browsing filters, loot-spec labels, and separate trinket Stat Support suggestions. Keeps Season 2 Tier and Catalyst guidance.
+- Reorders the guided Matcher walkthrough and highlights controls inside setup without starting a search. Closes only setup windows opened by the tour when leaving those steps.
+- Adds a Preparation Panel tour section highlighting the compact panel, talent and loot selectors, grouped readiness/capabilities, shopping/navigation controls, minimize button, and PREP PANEL handle. Explains solo access and combat/M+ restrictions.
+- Keeps the tour running while demonstrating minimization; stops it for combat. Adds Preparation Panel quick-access instructions to the Matcher guide without changing matcher or panel behavior.
+
+## Version 2.0.81 - Macro Sequencer Ping Command
+
+- Adds /ping to the Macro Sequencer's supported commands, alongside a block's existing cast/use action. Preserves command arguments and normal target/condition validation; Blizzard handles the ping itself.
+
+## Version 2.0.80 - Loot Specs in Gear Target Popups
+
+- Shows recorded same-class loot specs beneath saved Targets and Alternatives in the dungeon/raid shopping popup, including tier-slot Targets and completion/roll reminders.
+- Displays Loot Spec Set near the top and highlights item labels in orange when the current setting does not match; unknown eligibility is marked Not recorded rather than guessed.
+- Refreshes visible labels when loot specialization changes, with combat-safe deferred refresh. Keeps existing saved items, raid boss filtering, currencies, and roll behavior unchanged.
+- Allows item rows to wrap and grow for longer names and multiple loot specs. Generic Catalyst slot suggestions remain slot-only.
+
+## Version 2.0.79 - Matcher Setup Popup and Class-Wide Gear Search
+
+- Moves goal percentages, secondary-stat priority arrows, current-stat comparisons, and Refresh Current Stats into the Stat Goal Matcher popup beside item source, database scope, and matching style.
+- Retains a compact progress/results strip in Gear Targets and returns the freed space to its item list; ordinary browsing filters remain independent of matcher settings.
+- Allows opening setup before goals are entered, validates on Start, and keeps invalid input available for correction. Preserves the preparation countdown and protects edits across specialization changes and combat.
+- Expands matcher candidates to recorded loot for every spec of the current class, retaining class and weapon-slot restrictions. Known bag candidates use the same class-wide eligibility.
+- Uses recorded same-class secondary stats when an item has no active-spec capture, without changing master item data, captured loot-spec eligibility, or tooltip stat resolution. Keeps trinket scoring and special-effect exclusions unchanged.
+- Adds setup messaging about class-wide loot and checking each item's loot spec through Preparation Panel.
+
+## Version 2.0.78 - Compact Preparation Panel
+
+- Renames Group Snapshot to Preparation Panel and makes it available solo through KeyLab's Minimize action, replacing the old menu-only presentation. Minimize again for the draggable tiny right-side handle.
+- Adds a current loot-spec display, class-specific dropdown including Current Spec, and Set Loot Spec button with game-setting readback; retains saved talent selection and the existing combat/Mythic+ talent locks.
+- Shows five readiness members at a time with scrolling for larger groups and keeps the confirmed Class/Spec capability list. Group-only sections disappear in solo mode, reducing panel height.
+- Adds Craft Shopping List and Gear Target List shortcuts plus a compact Go To dropdown for main-menu destinations, including both Mythic+ and Raid views.
+- Hides the panel and its menus for combat and returns minimized afterward, including while solo. Opening full KeyLab hides the compact panel and handle.
+- Preserves saved positions, shopping content, matcher rules, trinket handling, and the full Group Dashboard.
+
 ## Version 2.0.77 - Close Group Snapshot When Leaving a Group
 
 - Checks live party/raid membership for floating Snapshot visibility and responds directly to roster and world-entry events instead of relying only on cached readiness updates.
