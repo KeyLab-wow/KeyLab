@@ -1,5 +1,7 @@
 # KeyLab
 
+## Releases are more up to date
+
 ## Your gameplay. Your progress. Your journey.
 
 Follow your favorite guide. Find gear that fits your goals. See what works for you.
