@@ -25,6 +25,14 @@ local MODE_OPTIONS_WITH_MIXED = {
     {value="even_cycle",label="Even Cycle",description="Each macro receives one turn in the order shown."},
     {value="weighted_cycle",label="Weighted Cycle",description="Macros nearer the top receive additional turns."},
 }
+local RAID_HEALING_POSITION_OPTIONS = {
+    {value=0,label="Raid Healing: Off",description="This version remains an ordinary Macro Sequencer version."},
+    {value=1,label="Raid Position 1",description="Routes @raidmember to the first member of the selected raid group."},
+    {value=2,label="Raid Position 2",description="Routes @raidmember to the second member of the selected raid group."},
+    {value=3,label="Raid Position 3",description="Routes @raidmember to the third member of the selected raid group."},
+    {value=4,label="Raid Position 4",description="Routes @raidmember to the fourth member of the selected raid group."},
+    {value=5,label="Raid Position 5",description="Routes @raidmember to the fifth member of the selected raid group."},
+}
 local function Trim(value)
     value = tostring(value or "")
     value = value:gsub("^%s+", "")
@@ -761,7 +769,9 @@ function Sequencer:RefreshVersionRows()
     local order=self.draft and self.draft.versionOrder or {}; local y=0
     for index,id in ipairs(order) do
         local version=self.draft.versions[id]; local row=self:AcquireVersionRow(index); row.versionID=id; row:Show(); row:ClearAllPoints(); row:SetPoint("TOPLEFT",0,-y)
-        local active=id==self.draft.activeVersionId; row.label:SetText((self.viewOnly and active and "Shown:  " or active and "*  " or "")..tostring(version and version.name or "Missing"))
+        local active=id==self.draft.activeVersionId
+        local raidPosition=version and tonumber(version.raidHealingPosition) or nil
+        row.label:SetText((self.viewOnly and active and "Shown:  " or active and "*  " or "")..tostring(version and version.name or "Missing")..(raidPosition and ("  [R"..tostring(raidPosition).."]") or ""))
         Color(row.label,active and COLORS.gold or COLORS.text)
         if row.SetBackdropBorderColor then row:SetBackdropBorderColor(unpack(id==self.editVersionId and COLORS.gold or (COLORS.softBorder or COLORS.border))) end
         y=y+40
@@ -771,6 +781,7 @@ function Sequencer:RefreshVersionRows()
     local version=self:CurrentVersion(); local blockCount=version and #(version.blocks or {}) or 0
     local mode=version and Lib().GetVersionModeSummary and Lib().GetVersionModeSummary(version) or (version and version.mode)
     self.versionSummary:SetText(tostring(#order).." / 20 versions\n"..tostring(blockCount).." / 50 macros in sequence\n"..tostring(version and (Lib().MODE_NAMES[mode] or mode) or "No mode"))
+    if self.raidHealingPositionDropdown then self.raidHealingPositionDropdown:RefreshText() end
 end
 
 local function CapturedBinding(key)
@@ -830,7 +841,7 @@ function Sequencer:RefreshEditor()
     SetControlEnabled(self.sequenceNameBox,editable); SetControlEnabled(self.sequenceCopyButton,editable); SetControlEnabled(self.sequenceDeleteButton,editable)
     SetControlEnabled(self.bindingSetButton,editable); SetControlEnabled(self.bindingEditButton,editable); SetControlEnabled(self.bindingDeleteButton,editable)
     SetControlEnabled(self.macroEdit,editable); SetControlEnabled(self.macroClearButton,editable); SetControlEnabled(self.macroAddButton,editable); SetControlEnabled(self.macroSaveButton,editable); SetControlEnabled(self.macroDeleteButton,editable)
-    SetControlEnabled(self.modeDropdown,editable); SetControlEnabled(self.versionNewButton,editable); SetControlEnabled(self.versionRenameButton,editable); SetControlEnabled(self.versionDuplicateButton,editable); SetControlEnabled(self.versionDeleteButton,editable); SetControlEnabled(self.versionActivateButton,editable)
+    SetControlEnabled(self.modeDropdown,editable); SetControlEnabled(self.raidHealingPositionDropdown,editable); SetControlEnabled(self.versionNewButton,editable); SetControlEnabled(self.versionRenameButton,editable); SetControlEnabled(self.versionDuplicateButton,editable); SetControlEnabled(self.versionDeleteButton,editable); SetControlEnabled(self.versionActivateButton,editable)
     SetControlEnabled(self.resetSequenceButton,editable); SetControlEnabled(self.saveChangesButton,editable)
     if self.macroEditorTitle then self.macroEditorTitle:SetText(self.viewOnly and "Reference Macro" or "Create or Edit Macro") end
     if self.versionsTitle then self.versionsTitle:SetText(self.viewOnly and "Example Versions" or "Versions") end
@@ -1026,13 +1037,25 @@ end
 function Sequencer:BuildVersions(parent)
     local panel=Panel(parent,690,-92,216,520); self.versionsPanel=panel
     local title=Text(panel,"Versions","GameFontNormal",15,COLORS.gold); title:SetPoint("TOPLEFT",12,-12); self.versionsTitle=title
-    local scroll=CreateFrame("ScrollFrame",nil,panel,"UIPanelScrollFrameTemplate"); scroll:SetPoint("TOPLEFT",10,-42); scroll:SetPoint("BOTTOMRIGHT",-28,166)
+    local scroll=CreateFrame("ScrollFrame",nil,panel,"UIPanelScrollFrameTemplate"); scroll:SetPoint("TOPLEFT",10,-42); scroll:SetPoint("BOTTOMRIGHT",-28,224)
     local content=CreateFrame("Frame",nil,scroll); content:SetWidth(178); content:SetHeight(1); scroll:SetScrollChild(content); self.versionsContent=content
-    local new=Button(panel,"New",54,function() Sequencer:AddVersion(false) end); new:SetPoint("BOTTOMLEFT",10,130)
-    local rename=Button(panel,"Rename",60,function() Sequencer:RenameVersion() end); rename:SetPoint("BOTTOMLEFT",68,130)
-    local duplicate=Button(panel,"Duplicate",72,function() Sequencer:AddVersion(true) end); duplicate:SetPoint("BOTTOMLEFT",132,130)
-    local delete=Button(panel,"Delete",60,function() Sequencer:DeleteVersion() end); delete:SetPoint("BOTTOMLEFT",10,100)
-    local activate=Button(panel,"Activate Selected",132,function() Sequencer:ActivateVersion() end); activate:SetPoint("BOTTOMRIGHT",-10,100)
+    local raidLabel=Text(panel,"Raid Healing Template","GameFontHighlightSmall",10,COLORS.muted); raidLabel:SetPoint("BOTTOMLEFT",12,194)
+    self.raidHealingPositionDropdown=Dropdown(panel,196,RAID_HEALING_POSITION_OPTIONS,function()
+        local version=Sequencer:CurrentVersion(); return tonumber(version and version.raidHealingPosition) or 0
+    end,function(value)
+        if Sequencer.viewOnly then return false end
+        local version=Sequencer:CurrentVersion(); if not version then return false end
+        version.raidHealingPosition=tonumber(value)~=0 and tonumber(value) or nil
+        Sequencer:MarkDirty("Raid Healing position changed. Save Changes to apply it.")
+        Sequencer:RefreshVersionRows()
+        return true
+    end)
+    self.raidHealingPositionDropdown:SetPoint("BOTTOMLEFT",10,164)
+    local new=Button(panel,"New",54,function() Sequencer:AddVersion(false) end); new:SetPoint("BOTTOMLEFT",10,128)
+    local rename=Button(panel,"Rename",60,function() Sequencer:RenameVersion() end); rename:SetPoint("BOTTOMLEFT",68,128)
+    local duplicate=Button(panel,"Duplicate",72,function() Sequencer:AddVersion(true) end); duplicate:SetPoint("BOTTOMLEFT",132,128)
+    local delete=Button(panel,"Delete",60,function() Sequencer:DeleteVersion() end); delete:SetPoint("BOTTOMLEFT",10,98)
+    local activate=Button(panel,"Activate Selected",132,function() Sequencer:ActivateVersion() end); activate:SetPoint("BOTTOMRIGHT",-10,98)
     self.versionNewButton=new; self.versionRenameButton=rename; self.versionDuplicateButton=duplicate; self.versionDeleteButton=delete; self.versionActivateButton=activate
     self.versionSummary=Text(panel,"0 / 20 versions\n0 / 50 macros in sequence\nEven Cycle","GameFontHighlightSmall",11,COLORS.muted); self.versionSummary:SetPoint("BOTTOMLEFT",12,16); self.versionSummary:SetSize(190,68)
 end
@@ -1137,6 +1160,10 @@ local INFORMATION_SECTIONS={
                 "Multi-Target",
             }),
             "Only one version is active at a time. You must change it yourself while out of combat.\n\nThe binding belongs to the sequence, so changing versions does not change its key or mouse button.\n\nPractice Sessions save the sequence and active version used during the test.",
+            InfoHeading("Raid Healing Position Versions"),
+            "Create one dedicated Raid version in each of five separately bound sequences. Set those versions to Raid Healing Positions 1 through 5 and use @raidmember wherever the selected raid member belongs. For example:\n\n/focus raidmember\n/cast [@raidmember,help,nodead] Flash Heal",
+            "The Raid versions do not need to be active. Prepare Raid Healing temporarily loads them while you are in a raid, then restores your normal active versions when paging ends or you leave the raid.",
+            "INS, HOME, DEL, and END select Groups 1-4. Hold Ctrl with those four keys to select Groups 5-8. Your five sequence bindings then choose positions 1-5 in the selected group. Every target is fixed out of combat; KeyLab never chooses a player from health, Atonement, or another combat condition.",
         }),
     },
     {

@@ -19,7 +19,16 @@ local rootHooked = false
 local groupFinderSessionActive = false
 local dismissedForCurrentSession = false
 
+local function AreAutomaticHelperPopupsEnabled()
+    if KeyLab.DB and KeyLab.DB.GetSetting then
+        return KeyLab.DB.GetSetting("autoShowHelperPopups", true) ~= false
+    end
+    return not (KeyLabDB and KeyLabDB.settings
+        and KeyLabDB.settings.autoShowHelperPopups == false)
+end
+
 local function IsAutoShowEnabled()
+    if not AreAutomaticHelperPopupsEnabled() then return false end
     if KeyLab.DB and KeyLab.DB.GetSetting then
         return KeyLab.DB.GetSetting("autoShowGroupFinderHelper", true) ~= false
     end

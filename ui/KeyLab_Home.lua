@@ -377,7 +377,7 @@ local function RenderClassContentBlocks(reader, blocks, x, y, width)
             local _, height = AddText(reader, block.text or "", 14, Colors.text, x, y, width)
             y = y + height + 9
         else
-            y = AddChange(reader, { text = block.text or "" }, 0, x, y, width)
+            y = AddChange(reader, block, 0, x, y, width)
         end
     end
     return y
@@ -705,30 +705,71 @@ local function RenderGameUpdateArticle(reader, article, x, y, width)
         return y + height + 16
     end
 
-    local selectedCategory
-    if reader.selectedHotfixCategoryID ~= false then
-        selectedCategory = FindByID(categories, reader.selectedHotfixCategoryID) or categories[1]
-        reader.selectedHotfixCategoryID = selectedCategory and selectedCategory.id or false
+    local selectedCategory = FindByID(categories, reader.selectedHotfixCategoryID) or categories[1]
+    reader.selectedHotfixCategoryID = selectedCategory.id
+    local categoryCaption = article.internalTab == "issues" and "ISSUE" or (article.internalTab == "news" and "TOPIC" or "CATEGORY")
+    y = RenderWrappedArticleNavigation(reader, categories, selectedCategory.id, x, y, width, function(categoryData)
+        reader.selectedHotfixCategoryID = categoryData.id
+        reader.selectedHotfixSubmenuID = nil
+        reader.selectedHotfixSectionID = nil
+        reader:Render(true)
+    end, {
+        caption = categoryCaption,
+        minWidth = 82,
+        horizontalPadding = 24,
+        bottomGap = 18,
+    })
+
+    local submenus = {}
+    for _, submenu in ipairs(selectedCategory.submenus or {}) do
+        if HasHotfixContent(submenu) then submenus[#submenus + 1] = submenu end
+    end
+    local selectedSubmenu
+    if #submenus > 0 then
+        selectedSubmenu = FindByID(submenus, reader.selectedHotfixSubmenuID) or submenus[1]
+        reader.selectedHotfixSubmenuID = selectedSubmenu.id
+        local submenuCaption = "SECTION"
+        if selectedCategory.id == "classes" or selectedCategory.id == "player-versus-player" then
+            submenuCaption = "CLASS"
+        elseif selectedCategory.id == "dungeons-and-raids" then
+            submenuCaption = "INSTANCE"
+        end
+        y = RenderWrappedArticleNavigation(reader, submenus, selectedSubmenu.id, x, y, width, function(submenuData)
+            reader.selectedHotfixSubmenuID = submenuData.id
+            reader.selectedHotfixSectionID = nil
+            reader:Render(true)
+        end, {
+            caption = submenuCaption,
+            minWidth = 78,
+            horizontalPadding = 24,
+            bottomGap = 18,
+        })
+    else
+        reader.selectedHotfixSubmenuID = nil
     end
 
-    for _, category in ipairs(categories) do
-        local categoryData = category
-        local expanded = selectedCategory and selectedCategory.id == categoryData.id
-        y = RenderUpdateAccordionHeader(reader, categoryData.label, expanded, 0, x, y, width, function()
-            if reader.selectedHotfixCategoryID == categoryData.id then
-                reader.selectedHotfixCategoryID = false
-            else
-                reader.selectedHotfixCategoryID = categoryData.id
-                reader.selectedHotfixSubmenuID = nil
-                reader.selectedHotfixSectionID = nil
+    local _, categoryHeight = AddText(reader, string.upper(selectedCategory.label or "SECTION"), 19, Colors.text, x, y, width)
+    y = y + categoryHeight + 12
+    if #(selectedCategory.content or {}) > 0 then
+        y = RenderHotfixBlocks(reader, selectedCategory.content, x, y, width) + 6
+    end
+
+    if selectedSubmenu then
+        local _, submenuHeight = AddText(reader, selectedSubmenu.label or "Section", 15, Colors.gold, x, y, width)
+        y = y + submenuHeight + 12
+        if #(selectedSubmenu.content or {}) > 0 then
+            y = RenderHotfixBlocks(reader, selectedSubmenu.content, x, y, width) + 4
+        end
+        for _, section in ipairs(selectedSubmenu.sections or {}) do
+            if section.heading then
+                local _, headingHeight = AddText(reader, section.heading, 14, Colors.text, x, y, width)
+                y = y + headingHeight + 9
             end
-            reader:Render(false)
-        end)
-        if expanded then
-            y = RenderUpdateCategoryBody(reader, categoryData, x, y, width) + 6
+            y = RenderHotfixBlocks(reader, section.content, x, y, width) + 8
         end
     end
-    return y + 4
+
+    return y + 10
 end
 
 local function RenderHotfixArticle(reader, article, x, y, width)

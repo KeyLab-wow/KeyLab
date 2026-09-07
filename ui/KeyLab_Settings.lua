@@ -269,6 +269,95 @@ local function BuildWindowSettings(parent, y)
     return RefreshControl
 end
 
+local function BuildAutomaticPopupSettings(parent, y)
+    local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    card:SetPoint("TOPLEFT", parent, "TOPLEFT", CONTENT_PAD, y)
+    card:SetSize(862, 152)
+    SetBackdrop(card, COLORS.box, COLORS.border)
+
+    local check = CreateFrame("CheckButton", nil, card, "UICheckButtonTemplate")
+    check:SetPoint("TOPLEFT", card, "TOPLEFT", 12, -13)
+    check:SetSize(24, 24)
+
+    local label = MakeText(card, "Do Not Open Helper Popups Automatically",
+        "GameFontNormal", FONT_ACTION_TITLE, COLORS.text, "LEFT")
+    label:SetPoint("LEFT", check, "RIGHT", 5, 0)
+    label:SetSize(540, 22)
+
+    local description = MakeText(card,
+        "Stops automatic Preparation Panel, Group Finder, Auction House, activity-completion, Great Vault, and macro-target reminders. Manual buttons, confirmations, errors, and the Stat Goal Matcher still open normally.",
+        "GameFontHighlightSmall", FONT_BODY, COLORS.muted, "LEFT")
+    description:SetPoint("TOPLEFT", card, "TOPLEFT", 17, -47)
+    description:SetSize(820, 44)
+
+    local function AddManualButton(text, x, width, callback)
+        local button = Theme.CreateButton and Theme.CreateButton(card, text, width, 28)
+            or MakeButton(card, text, x, -108, width, callback)
+        if Theme.CreateButton then
+            button:SetPoint("TOPLEFT", card, "TOPLEFT", x, -108)
+            button:SetScript("OnClick", callback)
+        end
+        return button
+    end
+
+    AddManualButton("Preparation Panel", 17, 196, function()
+        if not (KeyLab.GroupQuickUI and KeyLab.GroupQuickUI.OpenPreparationPanel
+            and KeyLab.GroupQuickUI:OpenPreparationPanel()) then
+            Print("The Preparation Panel is unavailable during combat.")
+        end
+    end)
+    AddManualButton("Gear Target List", 227, 196, function()
+        if KeyLab.GearTargetsWindow and KeyLab.GearTargetsWindow.ShowManual then
+            KeyLab.GearTargetsWindow.ShowManual()
+        else
+            Print("The Gear Target List is not available yet.")
+        end
+    end)
+    AddManualButton("Craft Shopping List", 437, 196, function()
+        if KeyLab.CraftingShoppingWindow and KeyLab.CraftingShoppingWindow.Show then
+            KeyLab.CraftingShoppingWindow.Show(true)
+        else
+            Print("The Craft Shopping List is not available yet.")
+        end
+    end)
+    AddManualButton("Great Vault Reminder", 647, 196, function()
+        if not (KeyLab.GearTargetsWindow and KeyLab.GearTargetsWindow.ShowForGreatVault
+            and KeyLab.GearTargetsWindow.ShowForGreatVault(true)) then
+            Print("No saved Dungeon or Raid targets, alternatives, or Voidcores are available to show.")
+        end
+    end)
+
+    local function RefreshControl()
+        local enabled = true
+        if KeyLab.DB and KeyLab.DB.GetSetting then
+            enabled = KeyLab.DB.GetSetting("autoShowHelperPopups", true) ~= false
+        end
+        check:SetChecked(not enabled)
+    end
+
+    check:SetScript("OnClick", function(button)
+        local enabled = button:GetChecked() ~= true
+        if KeyLab.DB and KeyLab.DB.SetSetting then
+            KeyLab.DB.SetSetting("autoShowHelperPopups", enabled)
+        end
+        if not enabled then
+            if KeyLab.GroupQuickUI and KeyLab.GroupQuickUI.SetAutomaticPopupsEnabled then
+                KeyLab.GroupQuickUI:SetAutomaticPopupsEnabled(false)
+            end
+            if KeyLab.GearTargetsWindow and KeyLab.GearTargetsWindow.HideAutomaticPopups then
+                KeyLab.GearTargetsWindow.HideAutomaticPopups()
+            end
+            if KeyLab.CraftingShoppingWindow and KeyLab.CraftingShoppingWindow.Hide then
+                KeyLab.CraftingShoppingWindow.Hide()
+            end
+        end
+        RefreshControl()
+    end)
+
+    RefreshControl()
+    return RefreshControl
+end
+
 local function BuildGroupFinderSettings(parent, y)
     local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", CONTENT_PAD, y)
@@ -341,6 +430,12 @@ local function BuildSettings(content)
 
     local refreshWindow = BuildWindowSettings(content, y)
     y = y - 104 - SECTION_GAP
+
+    MakeSectionHeader(content, "Helper Popups", y)
+    y = y - 50
+
+    local refreshAutomaticPopups = BuildAutomaticPopupSettings(content, y)
+    y = y - 152 - SECTION_GAP
 
     MakeSectionHeader(content, "Group Finder Helper", y)
     y = y - 50
@@ -434,6 +529,7 @@ local function BuildSettings(content)
     content:SetHeight(math.abs(y) + 40)
     return function()
         if refreshWindow then refreshWindow() end
+        if refreshAutomaticPopups then refreshAutomaticPopups() end
         if refreshGroupFinder then refreshGroupFinder() end
     end
 end

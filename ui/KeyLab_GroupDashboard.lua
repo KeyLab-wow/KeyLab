@@ -14,6 +14,13 @@ local Colors = Theme.colors or {}
 local Analysis = KeyLab.GroupDashboardAnalysis or {}
 local UtilityDB = KeyLab.GroupUtilityDB or {}
 local function SequencerLibrary() return KeyLab.SequencerLibrary or {} end
+local function AutomaticHelperPopupsEnabled()
+    if KeyLab.DB and KeyLab.DB.GetSetting then
+        return KeyLab.DB.GetSetting("autoShowHelperPopups", true) ~= false
+    end
+    return not (KeyLabDB and KeyLabDB.settings
+        and KeyLabDB.settings.autoShowHelperPopups == false)
+end
 local function IsCurrentlyGrouped()
     if IsInGroup then
         return (IsInRaid and IsInRaid()) or IsInGroup()
@@ -812,10 +819,14 @@ function Dashboard:EnsureGroupSnapshot()
     subtitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 66, -36); subtitle:SetSize(304, 30)
     local minimize = Theme.CreateButton(frame, "-", 30, 24)
     frame.minimizeButton = minimize
-    minimize:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -10)
+    minimize:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -46, -10)
     minimize:SetScript("OnClick", function()
         Dashboard:MinimizePreparationPanel()
     end)
+    local close = Theme.CreateButton(frame, "X", 30, 24)
+    frame.closeButton = close
+    close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -10)
+    close:SetScript("OnClick", function() Dashboard:ClosePreparationPanel() end)
     frame.talentName=Text(frame,"",12,Colors.gold)
     frame.talentName:SetPoint("TOPLEFT",16,-72); frame.talentName:SetSize(388,28)
     frame.talentDropdown=CreateCompactDropdown(frame,266)
@@ -839,20 +850,34 @@ function Dashboard:EnsureGroupSnapshot()
     frame.lootSwitch:SetScript("OnClick",function() Dashboard:SetPreparationLootSpec() end)
     frame.lootNote=Text(frame,"",10,Colors.muted)
     frame.lootNote:SetPoint("TOPLEFT",16,-242); frame.lootNote:SetSize(388,28)
+    frame.raidHealingTitle=Text(frame,"RAID HEALING",10,Colors.blue)
+    frame.raidHealingTitle:SetPoint("TOPLEFT",16,-280); frame.raidHealingTitle:SetSize(210,18)
+    frame.raidHealingStatus=Text(frame,"",9,Colors.muted)
+    frame.raidHealingStatus:SetPoint("TOPLEFT",16,-300); frame.raidHealingStatus:SetSize(230,42)
+    frame.raidHealingButton=Theme.CreateButton(frame,"Prepare Raid Healing",158,28)
+    frame.raidHealingButton:SetPoint("TOPRIGHT",frame,"TOPRIGHT",-14,-294)
+    frame.raidHealingButton:SetScript("OnClick",function()
+        if InCombatLockdown and InCombatLockdown() then return end
+        local library=SequencerLibrary()
+        local status=library.GetRaidHealingStatus and library.GetRaidHealingStatus() or {}
+        if status.active and library.EndRaidHealing then library.EndRaidHealing()
+        elseif library.PrepareRaidHealing then library.PrepareRaidHealing() end
+        Dashboard:RefreshPreparationRaidHealing()
+    end)
     frame.rosterTitle = Text(frame, "GROUP READINESS", 10, Colors.blue)
-    frame.rosterTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -286)
+    frame.rosterTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -346)
     frame.rosterScroll = Theme.CreateScrollArea(frame, { step = 44 })
-    frame.rosterScroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -316)
-    frame.rosterScroll:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -316)
+    frame.rosterScroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -376)
+    frame.rosterScroll:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -376)
     frame.rosterScroll:SetHeight(206); frame.rosterRows = {}
     frame.capabilityTitle = Text(frame, "CLASS/SPEC CAPABILITIES", 10, Colors.blue)
-    frame.capabilityTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -536)
+    frame.capabilityTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -596)
     frame.capabilityScroll = Theme.CreateScrollArea(frame, { step = 30 })
-    frame.capabilityScroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -558)
+    frame.capabilityScroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -618)
     frame.capabilityScroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 116)
     frame.capabilityRows = {}
     frame.checkButton = Theme.CreateButton(frame, "Check Group Status", 158, 26)
-    frame.checkButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -278)
+    frame.checkButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -338)
     frame.checkButton:SetScript("OnClick", function()
         if IsCurrentlyGrouped() and not (InCombatLockdown and InCombatLockdown()) and Analysis.StartAuraCheck then Analysis.StartAuraCheck() end
     end)
@@ -909,6 +934,11 @@ function Dashboard:EnsureGroupSnapshot()
     handle.label:ClearAllPoints()
     handle.label:SetPoint("TOPLEFT", handle, "TOPLEFT", 5, -42)
     handle.label:SetPoint("BOTTOMRIGHT", handle, "BOTTOMRIGHT", -5, 8)
+    local handleClose = Theme.CreateButton(handle, "X", 17, 17)
+    handle.closeButton = handleClose
+    handleClose:SetFrameLevel(handle:GetFrameLevel() + 5)
+    handleClose:SetPoint("TOPRIGHT", handle, "TOPRIGHT", -3, -3)
+    handleClose:SetScript("OnClick", function() Dashboard:ClosePreparationPanel() end)
     handle:SetMovable(true); handle:SetClampedToScreen(true); handle:RegisterForDrag("LeftButton")
     handle:SetScript("OnDragStart", function(self)
         if InCombatLockdown and InCombatLockdown() then return end
@@ -929,20 +959,56 @@ function Dashboard:EnsureGroupSnapshot()
         GameTooltip:AddLine("Drag to move. Click to open.", 0.94, 0.96, 0.99); GameTooltip:Show()
     end)
     handle:HookScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
+
+    local indicator=CreateFrame("Frame","KeyLabRaidHealingIndicator",UIParent,"BackdropTemplate")
+    indicator:SetSize(244,38); RestoreFloatingPosition(indicator,"raidHealingIndicator","TOP","TOP",0,-76)
+    indicator:SetFrameStrata("DIALOG"); indicator:SetFrameLevel(8050); indicator:Hide(); indicator:EnableMouse(true)
+    indicator:SetMovable(true); indicator:SetClampedToScreen(true); indicator:RegisterForDrag("LeftButton")
+    indicator:SetScript("OnDragStart",function(self) if not (InCombatLockdown and InCombatLockdown()) then self:StartMoving() end end)
+    indicator:SetScript("OnDragStop",function(self) self:StopMovingOrSizing(); SaveFloatingPosition(self,"raidHealingIndicator") end)
+    Theme.StylePanel(indicator,Colors.bg,Colors.gold,1)
+    local indicatorTitle=Text(indicator,"RAID HEALING",10,Colors.gold)
+    indicatorTitle:SetPoint("LEFT",indicator,"LEFT",12,0); indicatorTitle:SetSize(116,24); indicatorTitle:SetJustifyV("MIDDLE")
+    local indicatorMarkers={}
+    for group=1,8 do
+        local marker=CreateFrame("Frame",nil,indicator,"BackdropTemplate,SecureHandlerBaseTemplate")
+        marker:SetPoint("TOPRIGHT",indicator,"TOPRIGHT",-6,-5); marker:SetSize(108,28); marker:EnableMouse(false)
+        Theme.StylePanel(marker,Colors.noteBg,Colors.green,1)
+        local markerText=Text(marker,"GROUP "..tostring(group),11,Colors.green,"CENTER")
+        markerText:SetAllPoints(); markerText:SetJustifyH("CENTER"); markerText:SetJustifyV("MIDDLE")
+        marker:Hide(); indicatorMarkers[group]=marker
+    end
+    self.raidHealingIndicator=indicator; self.raidHealingIndicatorMarkers=indicatorMarkers
+    local library=SequencerLibrary()
+    if library.SetRaidHealingIndicator then library.SetRaidHealingIndicator(indicator,indicatorMarkers) end
     self.snapshot = frame; self.snapshotHandle = handle
     return frame
+end
+
+function Dashboard:RefreshPreparationRaidHealing()
+    local frame=self.snapshot
+    if not frame or not frame.raidHealingStatus then return end
+    local library=SequencerLibrary()
+    local status=library.GetRaidHealingStatus and library.GetRaidHealingStatus() or {ready=false,active=false,message="Raid Healing is unavailable."}
+    if library.SetRaidHealingIndicator and self.raidHealingIndicator then library.SetRaidHealingIndicator(self.raidHealingIndicator,self.raidHealingIndicatorMarkers) end
+    frame.raidHealingStatus:SetText(status.message or "")
+    ApplyColor(frame.raidHealingStatus,status.active and Colors.green or (status.ready and Colors.gold or Colors.muted))
+    frame.raidHealingButton:SetText(status.active and "End Raid Healing" or "Prepare Raid Healing")
+    local inRaid=type(IsInRaid)=="function" and IsInRaid()
+    frame.raidHealingButton:SetEnabled(not (InCombatLockdown and InCombatLockdown()) and (status.active or (status.ready and inRaid)))
 end
 
 function Dashboard:RefreshGroupSnapshot()
     local frame = self:EnsureGroupSnapshot()
     local grouped = IsCurrentlyGrouped()
-    frame:SetHeight(grouped and 800 or 386)
-    frame:SetScale(math.min(1, (UIParent:GetHeight()-40)/(grouped and 800 or 386)))
+    frame:SetHeight(grouped and 860 or 446)
+    frame:SetScale(math.min(1, (UIParent:GetHeight()-40)/(grouped and 860 or 446)))
     for _, section in ipairs({frame.rosterTitle,frame.rosterScroll,frame.capabilityTitle,frame.capabilityScroll,frame.checkButton}) do
         section:SetShown(grouped == true)
     end
     self:RefreshSnapshotTalents()
     self:RefreshPreparationLootSpec()
+    self:RefreshPreparationRaidHealing()
     local destinations = KeyLab.UI and KeyLab.UI.GetPreparationDestinations and KeyLab.UI:GetPreparationDestinations() or {{value="Home",label="Home"}}
     frame.navigation:SetChoices(destinations,frame.selectedDestination or "Home",function(value,option)
         frame.selectedDestination=value; frame.navigation:SetText("Go To: "..option.label)
@@ -1069,6 +1135,19 @@ function Dashboard:MinimizePreparationPanel()
     if self.snapshotHandle and not (InCombatLockdown and InCombatLockdown()) then self.snapshotHandle:Show() end
 end
 
+function Dashboard:ClosePreparationPanel()
+    self.preparationAvailable=false
+    self.preparationManualSession=false
+    self.snapshotCollapsed=true
+    self.snapshotHiddenForCombat=false
+    if self.snapshot then self.snapshot:Hide() end
+    if self.snapshotHandle then self.snapshotHandle:Hide() end
+end
+
+function Dashboard:SetAutomaticPopupsEnabled(enabled)
+    if enabled == false then self:ClosePreparationPanel() end
+end
+
 function Dashboard:HidePreparationForMain()
     if self.preparationAvailable then self.snapshotCollapsed=true end
     if self.snapshot then self.snapshot:Hide() end
@@ -1077,7 +1156,8 @@ end
 
 function Dashboard:OpenPreparationPanel()
     if InCombatLockdown and InCombatLockdown() then return false end
-    self.preparationAvailable=true; self.snapshotCollapsed=false; self.snapshotHiddenForCombat=false
+    self.preparationAvailable=true; self.preparationManualSession=true
+    self.snapshotCollapsed=false; self.snapshotHiddenForCombat=false
     if KeyLab.UI and KeyLab.UI.frame and KeyLab.UI.frame:IsShown() then KeyLab.UI.frame:Hide() end
     self:HandleFloatingRefresh("manual")
     return true
@@ -1119,6 +1199,12 @@ function Dashboard:EnsureTargetChangePopup()
     popup.title:SetPoint("TOPLEFT", popup, "TOPLEFT", 66, -14)
     popup.help = Text(popup, "A selected player moved to a different group position. Choose Change to follow that player, or Keep to leave the macro on its current position.", 10, Colors.text)
     popup.help:SetPoint("TOPLEFT", popup.title, "BOTTOMLEFT", 0, -5); popup.help:SetSize(504, 34)
+    popup.closeButton = Theme.CreateButton(popup, "X", 28, 26)
+    popup.closeButton:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -10, -10)
+    popup.closeButton:SetScript("OnClick", function()
+        popup.dismissedSignature = popup.changeSignature
+        popup:Hide()
+    end)
     popup.rows = {}
     popup.changeButton = Theme.CreateButton(popup, "Change", 112, 30)
     popup.changeButton:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -16, 14)
@@ -1137,13 +1223,13 @@ function Dashboard:EnsureTargetChangePopup()
                 end
             end
         end
-        if allOkay then popup:Hide() end
+        if allOkay then popup.dismissedSignature = nil; popup:Hide() end
         Dashboard:HandleFloatingRefresh("targets changed")
     end)
     popup.leaveButton:SetScript("OnClick", function()
         local lib = SequencerLibrary()
         for _, row in ipairs(popup.rows) do if row:IsShown() and row.change and lib.AcknowledgeGroupTargetChange then lib.AcknowledgeGroupTargetChange(row.change.markerID) end end
-        popup:Hide()
+        popup.dismissedSignature = nil; popup:Hide()
     end)
     popup:SetScript("OnHide", function()
         for _, row in ipairs(popup.rows or {}) do if row.dropdown and row.dropdown.menu then row.dropdown.menu:Hide() end end
@@ -1156,7 +1242,19 @@ function Dashboard:RefreshTargetChangePopup()
     local lib = SequencerLibrary()
     local changes = lib.GetPendingGroupTargetChanges and lib.GetPendingGroupTargetChanges() or {}
     local popup = self:EnsureTargetChangePopup()
-    if #changes == 0 or (InCombatLockdown and InCombatLockdown()) then popup:Hide(); return end
+    local signatureParts = {}
+    for _, change in ipairs(changes) do
+        signatureParts[#signatureParts + 1] = table.concat({
+            tostring(change.markerID or ""), tostring(change.appliedUnit or ""),
+            tostring(change.currentUnit or ""), tostring(change.targetName or ""),
+        }, ":")
+    end
+    local changeSignature = table.concat(signatureParts, "|")
+    popup.changeSignature = changeSignature
+    if popup.dismissedSignature and popup.dismissedSignature == changeSignature then popup:Hide(); return end
+    if popup.dismissedSignature ~= changeSignature then popup.dismissedSignature = nil end
+    if not AutomaticHelperPopupsEnabled() or #changes == 0
+        or (InCombatLockdown and InCombatLockdown()) then popup:Hide(); return end
     local roster = lib.GetGroupTargetRoster and lib.GetGroupTargetRoster() or {}
     local options = {}
     for _, member in ipairs(roster) do table.insert(options, { value = member.unit, label = tostring(member.name) .. "  " .. tostring(member.selector) }) end
@@ -1205,6 +1303,12 @@ function Dashboard:HandleFloatingRefresh(reason)
     local combat = InCombatLockdown and InCombatLockdown()
     local wasGrouped=self.snapshotSessionActive==true
     self.snapshotSessionActive=grouped==true
+    if not AutomaticHelperPopupsEnabled() and not self.preparationManualSession then
+        if self.snapshot then self.snapshot:Hide() end
+        if self.snapshotHandle then self.snapshotHandle:Hide() end
+        if self.targetChangePopup then self.targetChangePopup:Hide() end
+        return
+    end
     if wasGrouped~=(grouped==true) then
         if grouped then
             self.preparationAvailable=true
@@ -1376,6 +1480,9 @@ function Dashboard:Create(parent)
     self.compositionTab:SetPoint("LEFT", self.readinessTab, "RIGHT", 8, 0)
     self.targetsTab = Theme.CreateTextTabButton(frame, "MACRO TARGETS", 150, 32, { fontSize = 10 })
     self.targetsTab:SetPoint("LEFT", self.compositionTab, "RIGHT", 8, 0)
+    self.preparationButton = Theme.CreateButton(frame, "Open Preparation Panel", 190, 30)
+    self.preparationButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -OUTER_RIGHT, -81)
+    self.preparationButton:SetScript("OnClick", function() Dashboard:OpenPreparationPanel() end)
     self.readinessTab:SetScript("OnClick", function() Dashboard:SetView("readiness") end)
     self.compositionTab:SetScript("OnClick", function() Dashboard:SetView("composition") end)
     self.targetsTab:SetScript("OnClick", function() Dashboard:SetView("targets") end)
@@ -1434,6 +1541,7 @@ end
 if Analysis.AddListener then Analysis.AddListener(Dashboard.floatingListener) end
 local sequencer = SequencerLibrary()
 if sequencer.AddGroupTargetListener then sequencer.AddGroupTargetListener(Dashboard.floatingListener) end
+if sequencer.AddRaidHealingListener then sequencer.AddRaidHealingListener(Dashboard.floatingListener) end
 if KeyLab.GuideTalents then
     KeyLab.GuideTalents.Listen(function() Dashboard:RefreshSnapshotTalents() end)
 end

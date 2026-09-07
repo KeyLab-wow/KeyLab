@@ -30,6 +30,14 @@ local COLOR_RESET = "|r"
 local frame
 local auctionHouseSessionClosed = false
 
+local function AutomaticHelperPopupsEnabled()
+    if KeyLab.DB and KeyLab.DB.GetSetting then
+        return KeyLab.DB.GetSetting("autoShowHelperPopups", true) ~= false
+    end
+    return not (KeyLabDB and KeyLabDB.settings
+        and KeyLabDB.settings.autoShowHelperPopups == false)
+end
+
 local function Backdrop(target, color, border)
     target:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -266,7 +274,8 @@ end
 
 function Window.Show(manual)
     local result = KeyLab.CraftingAnalysis and KeyLab.CraftingAnalysis.GetShoppingList and KeyLab.CraftingAnalysis.GetShoppingList() or nil
-    if not manual and (auctionHouseSessionClosed or not result or (result.planCount or 0) == 0) then return end
+    if not manual and (not AutomaticHelperPopupsEnabled() or auctionHouseSessionClosed
+        or not result or (result.planCount or 0) == 0) then return end
     CreateWindow(); Window.Refresh(); frame:Show(); frame:Raise()
 end
 

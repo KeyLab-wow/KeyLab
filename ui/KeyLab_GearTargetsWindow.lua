@@ -41,6 +41,27 @@ local CFG = {
 local frame
 local completionFrame
 local lootSpecRefreshPending
+local function AutomaticHelperPopupsEnabled()
+    if KeyLab.DB and KeyLab.DB.GetSetting then
+        return KeyLab.DB.GetSetting("autoShowHelperPopups", true) ~= false
+    end
+    return not (KeyLabDB and KeyLabDB.settings
+        and KeyLabDB.settings.autoShowHelperPopups == false)
+end
+
+local function GetItemIconTexture(itemID)
+    itemID = tonumber(itemID)
+    if not itemID then return 134400 end
+    if C_Item and C_Item.GetItemIconByID then
+        local ok, icon = pcall(C_Item.GetItemIconByID, itemID)
+        if ok and icon then return icon end
+    end
+    if GetItemInfoInstant then
+        local ok, _, _, _, _, icon = pcall(GetItemInfoInstant, itemID)
+        if ok and icon then return icon end
+    end
+    return 134400
+end
 local SLOT_SORT = {
     ["Head"] = 1, ["Neck"] = 2, ["Shoulders"] = 3, ["Back"] = 4,
     ["Chest"] = 5, ["Wrist"] = 6, ["Hands"] = 7, ["Waist"] = 8,
@@ -311,6 +332,9 @@ local function NewCard(f, title, accentColor)
     for _, panel in ipairs(card.rollGroupPanels or {}) do panel:Hide() end
     if card.columnDivider then card.columnDivider:Hide() end
     card.cursorY = -12
+    card.showItemIcons = false
+    card.singleColumnGroups = false
+    card.singleColumnItems = false
     card:Show()
 
     if title and title ~= "" then
@@ -388,6 +412,7 @@ local function AddRollGroupPanel(card, column, group, fullWidth)
         panel = CreateFrame("Frame", nil, card, "BackdropTemplate")
         panel.itemLines = {}
         panel.itemRows = {}
+        panel.itemIcons = {}
         panel.title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         panel.title:SetJustifyH("LEFT")
         panel.kind = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -422,7 +447,10 @@ local function AddRollGroupPanel(card, column, group, fullWidth)
     panel.kind:SetTextColor(unpack(kindColor))
     panel.kind:SetText(group.sourceType == "Raid" and "RAID" or "DUNGEON")
 
-    local itemColumnWidth = fullWidth and math.floor((panelWidth - 34) / 2) or (panelWidth - 22)
+    local showItemIcons = card.showItemIcons == true
+    local singleColumnItems = card.singleColumnItems == true
+    local itemColumnWidth = singleColumnItems and (panelWidth - 22)
+        or (fullWidth and math.floor((panelWidth - 34) / 2) or (panelWidth - 22))
     local rowOffset, previousRowHeight = 0, 0
     for index, item in ipairs(group.items or {}) do
         local row = panel.itemRows[index]
@@ -438,8 +466,8 @@ local function AddRollGroupPanel(card, column, group, fullWidth)
             line:SetWordWrap(false)
             panel.itemLines[index] = line
         end
-        local itemColumn = fullWidth and (((index - 1) % 2) + 1) or 1
-        local itemRow = fullWidth and math.floor((index - 1) / 2) or (index - 1)
+        local itemColumn = not singleColumnItems and fullWidth and (((index - 1) % 2) + 1) or 1
+        local itemRow = not singleColumnItems and fullWidth and math.floor((index - 1) / 2) or (index - 1)
         local itemX = 11 + ((itemColumn - 1) * (itemColumnWidth + 12))
         if itemColumn == 1 then
             rowOffset = rowOffset + previousRowHeight
@@ -458,8 +486,9 @@ local function AddRollGroupPanel(card, column, group, fullWidth)
         end
         row:Show()
         line:ClearAllPoints()
-        line:SetPoint("TOPLEFT", panel, "TOPLEFT", itemX, rowY - 1)
-        line:SetWidth(itemColumnWidth)
+        local textOffset = showItemIcons and 39 or 0
+        line:SetPoint("TOPLEFT", panel, "TOPLEFT", itemX + textOffset, rowY - 1)
+        line:SetWidth(itemColumnWidth - textOffset)
         line:SetWordWrap(true)
         line:SetJustifyV("TOP")
         line:SetTextColor(unpack(item.isTier and CFG.colors.gold or CFG.colors.text))
@@ -469,10 +498,25 @@ local function AddRollGroupPanel(card, column, group, fullWidth)
         row:SetHeight(height - 1)
         previousRowHeight = math.max(previousRowHeight, height)
         line:Show()
+        local icon = panel.itemIcons[index]
+        if showItemIcons then
+            if not icon then
+                icon = panel:CreateTexture(nil, "ARTWORK")
+                panel.itemIcons[index] = icon
+            end
+            icon:ClearAllPoints()
+            icon:SetPoint("TOPLEFT", panel, "TOPLEFT", itemX, rowY - 4)
+            icon:SetSize(31, 31)
+            icon:SetTexture(GetItemIconTexture(item.itemID))
+            icon:Show()
+        elseif icon then
+            icon:Hide()
+        end
     end
     for index = itemCount + 1, #(panel.itemLines or {}) do
         panel.itemLines[index]:Hide()
         if panel.itemRows[index] then panel.itemRows[index]:Hide() end
+        if panel.itemIcons[index] then panel.itemIcons[index]:Hide() end
     end
     panelHeight = 42 + rowOffset + previousRowHeight
     panel:SetHeight(panelHeight)
@@ -955,6 +999,10 @@ local function AddNebulousRollCard(f, plan, compact)
 end
 
 local function AddRollGroupsToCard(card, groups)
+    if card.singleColumnGroups then
+        for _, group in ipairs(groups or {}) do AddRollGroupPanel(card, 1, group, true) end
+        return
+    end
     if #(groups or {}) == 1 then
         AddRollGroupPanel(card, 1, groups[1], true)
         return
@@ -973,9 +1021,14 @@ local function AddRollGroupsToCard(card, groups)
     card.cursorY = math.min(card.columnY[1], card.columnY[2])
 end
 
-local function AddTargetRollCard(f, plan, title, description, accentColor)
+local function AddTargetRollCard(f, plan, title, description, accentColor, options)
     if not plan or (tonumber(plan.itemCount) or 0) == 0 then return false end
     local card = NewCard(f, title or "Your Saved Targets", accentColor or CFG.colors.gold)
+    if options then
+        card.showItemIcons = options.showItemIcons == true
+        card.singleColumnGroups = options.singleColumnGroups == true
+        card.singleColumnItems = options.singleColumnItems == true
+    end
     AddCardLine(card,
         description or "These are the still-needed items you marked as Targets for this specialization.",
         CFG.colors.muted, 0, "GameFontDisableSmall", true)
@@ -991,9 +1044,14 @@ local function AddTargetRollCard(f, plan, title, description, accentColor)
     return true
 end
 
-local function AddAlternativeRollCard(f, plan, title, description)
+local function AddAlternativeRollCard(f, plan, title, description, options)
     if not plan or (tonumber(plan.alternativeCount) or 0) == 0 then return false end
     local card = NewCard(f, title or "Your Alternatives", CFG.colors.blue)
+    if options then
+        card.showItemIcons = options.showItemIcons == true
+        card.singleColumnGroups = options.singleColumnGroups == true
+        card.singleColumnItems = options.singleColumnItems == true
+    end
     AddCardLine(card,
         description or "These are the still-needed backup choices you saved for this specialization.",
         CFG.colors.muted, 0, "GameFontDisableSmall", true)
@@ -1255,11 +1313,25 @@ local function EnsureCompletionFrame()
     return f
 end
 
+local function SetCompletionFrameMode(f, greatVault)
+    local width = greatVault and 500 or 650
+    f:SetWidth(width)
+    f.title:SetWidth(width - 90)
+    f.subtitle:SetWidth(width - 90)
+    f.contentWidth = width - 100
+    f.content:SetWidth(f.contentWidth)
+    if f.backgroundArtwork then
+        f.backgroundArtwork:SetTexCoord(0, math.min(1, width / 2048), 0, math.min(1, (f:GetHeight() or 390) / 1024))
+    end
+end
+
 local function ShowCompletionPlan(plan, title, subtitle, cardTitle, description, isRaid)
+    if not AutomaticHelperPopupsEnabled() then return false end
     if not plan or ((tonumber(plan.itemCount) or 0) == 0 and (tonumber(plan.alternativeCount) or 0) == 0) then
         return false
     end
     local f = EnsureCompletionFrame()
+    SetCompletionFrameMode(f, false)
     ResetCards(f)
     f.raidReminder = isRaid == true
     f.title:SetText(title or "Nebulous Voidcore Roll Reminder")
@@ -1310,6 +1382,7 @@ local function ShowGreatVaultTargets(plan)
         return false
     end
     local f = EnsureCompletionFrame()
+    SetCompletionFrameMode(f, true)
     ResetCards(f)
     f.raidReminder = false
     f.title:SetText("Great Vault Target Reminder")
@@ -1324,11 +1397,13 @@ local function ShowGreatVaultTargets(plan)
 
     if (tonumber(plan.itemCount) or 0) > 0 then
         AddTargetRollCard(f, plan, "Your Saved Dungeon and Raid Targets",
-            "These are all still-needed Dungeon and Raid Targets for your current specialization.", CFG.colors.violet)
+            "These are all still-needed Dungeon and Raid Targets for your current specialization.", CFG.colors.violet,
+            {showItemIcons=true, singleColumnGroups=true, singleColumnItems=true})
     end
     if (tonumber(plan.alternativeCount) or 0) > 0 then
         AddAlternativeRollCard(f, plan, "Your Saved Dungeon and Raid Alternatives",
-            "These are all still-needed backup choices saved for your current specialization.")
+            "These are all still-needed backup choices saved for your current specialization.",
+            {showItemIcons=true, singleColumnGroups=true, singleColumnItems=true})
     end
     if (tonumber(plan.itemCount) or 0) == 0 and (tonumber(plan.alternativeCount) or 0) == 0 then
         local balance = NewCard(f, "Nebulous Voidcores", CFG.colors.violet)
@@ -1448,6 +1523,7 @@ function GearWindow.ToggleManual()
 end
 
 function GearWindow.ShowForLFG()
+    if not AutomaticHelperPopupsEnabled() then return false end
     local f = EnsureFrame()
     local now = GetTime and GetTime() or 0
     local needsRefresh = not f:IsShown()
@@ -1459,6 +1535,7 @@ function GearWindow.ShowForLFG()
     if not f.positionApplied then ApplyShoppingWindowGeometry(f) end
     if needsRefresh then GearWindow.Refresh() end
     f:Show()
+    return true
 end
 
 function GearWindow.HideAuto()
@@ -1545,8 +1622,17 @@ function GearWindow.NotifyRaidEncounterSaved(encounter)
     return FlushRaidCompletion()
 end
 
-function GearWindow.ShowForGreatVault()
+function GearWindow.ShowForGreatVault(manual)
+    if not manual and not AutomaticHelperPopupsEnabled() then return false end
     return ShowGreatVaultTargets(GetGreatVaultTargetPlan())
+end
+
+function GearWindow.HideAutomaticPopups()
+    if frame then
+        frame.autoOpen = false
+        if not frame.manualOpen then frame:Hide() end
+    end
+    if completionFrame then completionFrame:Hide() end
 end
 
 local activeChallengeMapID
