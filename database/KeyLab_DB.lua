@@ -27,6 +27,7 @@ local DEFAULT_SETTINGS = {
     contentMode = "mplus",
     selectedSeasonKey = "MN_S2",
     autoShowGroupFinderHelper = true,
+    autoShowHelperPopups = true,
     autoMinimizeForBlizzardPanels = true,
 }
 

@@ -1,5 +1,6 @@
 -- KeyLab_GameUpdatesData.lua
 -- Data source for the Home tab's News & Events and Game Updates readers.
+-- Authoring rules and copy-ready examples: docs/HOME_CONTENT_TEMPLATE.md
 --
 -- Official article wording belongs here rather than in KeyLab_Home.lua. The
 -- starter tuning article below contains only the text present in the approved
@@ -3059,6 +3060,92 @@ Data.articles = {
 
 local suppliedNewsArticles = {
     {
+        id = "this-week-in-wow-2026-09-06",
+        internalTab = "news",
+        category = "WEEKLY ROUNDUP",
+        menuTitle = "This Week in WoW - September 6",
+        title = "This Week in WoW",
+        publicationDate = "September 6, 2026",
+        publicationSort = 20260906,
+        sourceLabel = "KeyLab Weekly Roundup — Official Blizzard News and PTR Posts",
+        articleType = "article",
+        sections = {
+            {
+                paragraphs = {
+                    "This week's highlights include BlizzCon viewing details and rewards, the AWC and MDI Grand Finals, a first look at Midnight 12.1.5 on the PTR, Raid Finder Wing 3, and community updates.",
+                },
+            },
+            {
+                heading = "BlizzCon 2026 — September 12 and 13",
+                paragraphs = {
+                    "BlizzCon returns with free select programming, announcements, panels, esports, and community events available from Anaheim or through the official Warcraft Twitch and YouTube channels.",
+                    "Eligible viewers can earn 200 Trader's Tender, Cuddly Blue Grrgle housing decor, the Fluffy Comfy Flying Quilt mount, and the Venomous Champion's Illustrious Banner toy. Twitch rewards remain available through September 27; YouTube viewing runs during the September 12-13 show.",
+                },
+            },
+            {
+                heading = "AWC and MDI Grand Finals",
+                paragraphs = {
+                    "The Mythic Dungeon International and Arena World Championship Grand Finals return to BlizzCon with a combined $600,000 prize pool. MDI begins September 12 at 12:45 p.m. PDT, followed by AWC on September 13 at 10:45 a.m. PDT.",
+                },
+            },
+            {
+                heading = "Midnight 12.1.5 on the PTR",
+                paragraphs = {
+                    "The PTR is testing The Promise of Tomorrow story campaign, the one-boss Unbinding of Kith'ix raid, the Labyrinth of Kindo'jan, hourly Aqir Invasions, and Ascendant Venomstones for selected fully upgraded Season 2 items.",
+                },
+                changes = {
+                    { text = "Legion and Battle for Azeroth reputations become Warband-wide." },
+                    { text = "Housing gains floor-changing keybinds and quicker blueprint access." },
+                    { text = "Prey gains catch-up progress, while the interface adds optional minimap coordinates and animated raid-frame dispel indicators." },
+                    { text = "Pinging a macro shows information from its #showtooltip line." },
+                },
+            },
+            {
+                heading = "Demon Hunter PTR Testing",
+                paragraphs = {
+                    "Devourer's Collapsing Star gains more range after casting begins, no longer receives a five-second cooldown when cancelled, and limits how long repeated cancelled casts can slow Fury drain. Several Void-Scarred bonuses are also moving toward Collapsing Star.",
+                },
+            },
+            {
+                heading = "Hunter PTR Testing",
+                paragraphs = {
+                    "Marksmanship is testing Blood Fletching, a new Aimed Shot-focused talent that creates a brief bleed-damage window after a critical strike. Unload has been removed.",
+                },
+            },
+            {
+                heading = "Warrior PTR Testing",
+                paragraphs = {
+                    "Protection Warrior's Execute no longer spends additional Rage and receives a matching damage increase. Colossus also reduces the Rage costs of Execute and Revenge through Practiced Strikes.",
+                },
+            },
+            {
+                heading = "The Venomous Abyss",
+                paragraphs = {
+                    "Raid Finder Wing 3, The Serpent Warren, is now open with The Lost Explorers and Sszorak. Wing 4 opens September 8 with The Coiled Altar and Ula'tek.",
+                },
+            },
+            {
+                heading = "Sporebearer Fungal Strider",
+                paragraphs = {
+                    "The 12.1.5 update is expected to add a 5-million-gold utility mount with a mailbox, repair vendor, and interchangeable NPC options such as an auctioneer or transmogrifier. The mount is planned to remain on sale through the end of Midnight.",
+                },
+            },
+            {
+                heading = "Sparks of Tides",
+                paragraphs = {
+                    "Blizzard says some players remained without Sparks after the earlier remedy and expects to restore most outstanding Sparks over the next few days.",
+                },
+            },
+            {
+                heading = "Community Highlight",
+                paragraphs = {
+                    "The Roofus Pack promotion raised more than $1.3 million for Habitat for Humanity through qualifying player purchases.",
+                },
+            },
+        },
+        footer = "Sources: Blizzard Entertainment official World of Warcraft news, forums, and Midnight 12.1.5 PTR development notes",
+    },
+    {
         id = "class-tuning-incoming-2026-09-01",
         internalTab = "news",
         category = "UPCOMING TUNING",
@@ -3313,9 +3400,11 @@ local august17Hotfix = {
 }
 
 local HOTFIX_CATEGORY_IDS = {
+    ["Achievements"] = "achievements",
     ["Classes"] = "classes",
     ["Delves"] = "delves",
     ["Dungeons and Raids"] = "dungeons-and-raids",
+    ["Dungeons and Raid"] = "dungeons-and-raids",
     ["Housing"] = "housing",
     ["Items"] = "items",
     ["Items and Rewards"] = "items-and-rewards",
@@ -3324,6 +3413,7 @@ local HOTFIX_CATEGORY_IDS = {
     ["Player versus Player"] = "player-versus-player",
     ["Prey"] = "prey",
     ["Quests"] = "quests",
+    ["User Interface"] = "user-interface",
 }
 
 local function ParseSuppliedHotfixDate(id, label, publicationSort, sourceText)
@@ -3377,6 +3467,479 @@ local function ParseSuppliedHotfixDate(id, label, publicationSort, sourceText)
     end
 
     return dateData
+end
+
+local function ParseSuppliedHotfixDates(sourceText)
+    local parsedDates = {}
+    local currentLabel
+    local currentLines = {}
+    local monthNumbers = { August = 8, September = 9 }
+
+    local function CommitCurrentDate()
+        if not currentLabel then return end
+        local monthName, dayText, yearText = currentLabel:match("^(%a+) (%d+), (%d+)$")
+        local month = monthNumbers[monthName]
+        local day = tonumber(dayText)
+        local year = tonumber(yearText)
+        if month and day and year then
+            local id = string.format("%04d-%02d-%02d", year, month, day)
+            local publicationSort = (year * 10000) + (month * 100) + day
+            parsedDates[#parsedDates + 1] = ParseSuppliedHotfixDate(
+                id,
+                currentLabel,
+                publicationSort,
+                table.concat(currentLines, "\n")
+            )
+        end
+    end
+
+    for sourceLine in (tostring(sourceText or "") .. "\n"):gmatch("(.-)\r?\n") do
+        local trimmed = sourceLine:gsub("^%s+", ""):gsub("%s+$", "")
+        local possibleMonth, possibleDay, possibleYear = trimmed:match("^(%a+) (%d+), (%d+)$")
+        if monthNumbers[possibleMonth] and tonumber(possibleDay) and tonumber(possibleYear) == 2026 then
+            CommitCurrentDate()
+            currentLabel = trimmed
+            currentLines = { trimmed }
+        elseif currentLabel then
+            currentLines[#currentLines + 1] = sourceLine
+        end
+    end
+    CommitCurrentDate()
+
+    return parsedDates
+end
+
+local latestSuppliedHotfixDates = ParseSuppliedHotfixDates([=[
+September 4, 2026
+Classes
+Druid
+Balance
+Stellar Amplification can now be tracked in the Cooldown Manager.
+Twin Moons' range is now increased by target combat reach, meaning it can spread to farther targets when attacking large enemies.
+Shaman
+Enhancement
+Corrected an issue where the Venomous Abyss 4-set bonus was not properly increasing the upfront damage of Crash Lightning.
+Dungeons and Raid
+The Venomous Abyss
+Ula’tek
+Fixed an issue where applications of Ingested Venom could apply on a target affected by Serpent's Bite.
+Housing
+Endeavors
+Vacation Season
+Fixed instances where collecting a Secret Souvenir could fail to grant achievement credit. Players who were affected by this bug should see their achievement progress retroactively granted upon entering a housing neighborhood. Taggi is sorry for the mishap.
+Items
+Fixed an issue where some non-set class armor items appeared to be eligible for redundant Catalyst conversion.
+Fixed an issue causing the Preternatural Antivenom trinket absorb effect to have a reduced cap for healer specializations as well as healing for a lower percentage of incoming damage than intended.
+September 3, 2026
+Achievements
+Fixed an issue where the achievement Spark in the Night was not granting credit for the Sparks of War quest if completed in the Coiled Isle, Val, or Naigtal.
+Classes
+Priest
+Holy
+Fixed an issue with the Venomous Abyss 2-set bonus that caused Renew to not reliably grant Renewed Vigor.
+Shaman
+Restoration
+Totemic: Corrected an issue where Oversurge did not properly increase the healing done by Surging Totem or Overflowing Shores.
+Dungeons and Raids
+Ruby Life Pools
+Fixed an issue where the Radiant Drake entrance-return NPC did not appear in Mythic+ after defeating the final boss.
+The Venomous Abyss
+Ula’tek
+Caustic Waves have been adjusted so they cannot be avoided by swimming under them.
+Corrected an error in the Blight Vein spell description that was pointing to the wrong damage value.
+Items
+The Zul'jin's Guillotine Technique trinket effect, Perfected Guillotine, will no longer target enemies who are not engaged in combat for its second target.
+Quests
+The Darkwell should now remain for characters who have not finished the “War of Light and Shadow” Campaign but have completed the Arator quests for “Curse of Ula'tek” Campaign.
+September 2, 2026
+Classes
+Druid
+Feral
+Apex Talent: Unseen Predator (Rank 1) now prefers targets that are not immune to damage or taking less than 5% physical damage.
+Warlock
+Destruction
+Fixed an issue where the Font of Venomous Rage trinket channel could be immediately canceled if spell-queued after Cataclysm.
+Warrior
+Bladestorm now displays as an important aura on nameplates.
+Dungeons and Raids
+The Venomous Abyss
+Ula’tek
+Soul Constrictor duration reduced to 5 seconds on Mythic difficulty.
+Blight Vein damage reduced by 25% on Mythic difficulty.
+Corrected an issue where a Doomscale Egg could still be picked up after the Ravenous Doomscale spawns while the Doomscale Warden is alive.
+Added additional protections against triggering an egg pickup multiple times from one egg.
+Items
+Any remaining items sourced from the Great Vault that could not be converted with the Catalyst have been fixed.
+Fixed an issue where certain non-armor items could appear to be convertible at the Catalyst. Affected characters may need to relog.
+Player versus Player
+Druid
+Balance
+Fixed an issue where Faerie Swarm was not a large debuff on raid frames.
+Evoker
+Fixed an issue where staves were not being shown for Evokers on the PvP gear vendor.
+Preservation
+Fixed an issue where Rewind could fail to reverse damage taken on allies if the Evoker was affected by Cyclone.
+September 1, 2026
+Classes
+Death Knight
+Frost
+Developers’ notes: We’re aiming to increase Frost Death Knight’s performance in single target and two target cleave scenarios.
+Howling Blast main target damage increased by 15%.
+Obliterate damage increased by 15%.
+Frost Strike damage increased by 20%.
+Melee damage increased by 10%.
+Unholy
+Resolved an issue causing Mastery: Dreadblade and Foul Infections to not increase the critical strike chance of Plague Erupt effects.
+Demon Hunter
+Havoc
+All damage increased by 4%. This does not affect PvP combat.
+Vengeance
+Developers’ notes: Vengeance is still performing below expectations defensively, so universal mitigation effects are getting a buff. Additionally, Fel Devastation’s effectiveness as a recovery tool has fallen behind as maximum health pools go up, so its healing is being increased.
+Demonic Wards now reduces damage taken by 15% (was 12%).
+Void Reaver now causes Frailty to reduce damage taken by 6% (was 5%).
+Fel Devastation healing increased by 25%.
+Druid
+Shred damage increased by 10%.
+Balance
+All ability damage increased by 4%. Does not affect PvP combat.
+Feral
+Developers’ notes: Feral is performing below expectations, particularly in raid encounters, so we’re providing both an overall lift as well as some specific buffs to single-target abilities.
+All ability damage increased by 5%. Does not apply to PvP combat.
+Auto-attack damage increased by 10%.
+Ferocious Bite damage increased by 10%.
+Restoration
+All healing increased by 4%.
+Hunter
+Beast Mastery
+All damage dealt by you and your pets increased by 7%.
+Resolved an issue causing Wild Thrash to not take target bounding radius into account.
+Survival
+All damage dealt by you and your pet increased by 7%. This increase is only 3% while engaged in PvP combat.
+Mage
+Fire
+All ability damage increased by 3%. Does not apply to PvP combat.
+Frost
+All ability damage increased by 6%.
+Monk
+Mistweaver
+Developers’ notes: We’re looking to increase Mistweavers’ healing capabilities while increasing their 4-piece set bonus value.
+All healing done increased by 5%.
+The Venomous Abyss 4-piece set bonus chance to activate has been increased to 25% (was 20%).
+Windwalker
+All ability damage increased by 4%. Does not affect PvP combat.
+Paladin
+Protection
+Developers’ notes: We’re adjusting Protection Paladin damage to help them keep up with other tanks, especially in dungeons.
+Blaze of Glory damage increased by 150%.
+Consecration damage increased by 30%.
+Divine Guidance damage increased by 30%.
+Priest
+Discipline
+Shadow Mend mana cost reduced by 20%.
+Rogue
+Assassination
+Fixed an issue allowing Caustic Spatter to trigger from non-class Nature damage sources, such as trinkets.
+Shaman
+Hero Talents
+Farseer
+Fixed an issue that caused Natural Harmony to increase the healing of Nature’s Guardian by 20% instead of its listed and intended 10%.
+Delves
+Trinkets no longer drop as abundantly in Delves.
+Dungeons and Raids
+Den of Nalorakk
+Addressed an issue where interacting with Food Offering while mounted can cause it to no longer be interactable for a short period.
+Murder Row
+Addressed an issue where Xathuux the Annihilator's Axe Toss can sometimes inflict less damage than intended.
+The Venomous Abyss
+Nek'zali the Soulcoiler
+Nek'zali’s health reduced by 15% on Raid Finder difficulty.
+Entombed Sentinels
+Breath of Ula'tek and Blood of Ula'tek health reduced by 15% on Raid Finder difficulty.
+Sszorak
+Sszorak's health reduced by up to 10% for smaller raid sizes on Normal and Heroic difficulties.
+Reduced the number of players targeted by Raging Crosswinds on Normal and Heroic difficulties.
+The Twin Fangs
+Resolved an issue where immunities would prevent players from receiving additional applications of Eternal Venom beyond the death threshold on Mythic difficulty.
+Increased the number of applications before the target dies from Eternal Venom to 10 on Mythic difficulty.
+Increased the number of minimum targets to 4 for Ravenous Feast on Mythic difficulty.
+Vexhul and Ithraz health reduced by 20% on Raid Finder difficulty.
+Reduced the maximum health damage effect of Eternal Venom to 50% on Raid Finder difficulty.
+Resolved an issue where Protection Paladin's Mastery did not function correctly against Caustic Deluge or Eternal Venom.
+The Coiled Altar
+Coalesced Venom damage reduced by 15% on Mythic difficulty.
+Venom Rupture damage reduced by 10% on Mythic difficulty.
+Venom Rupture damage reduced by up to 15% on smaller group sizes on Heroic difficulty.
+Volatile Venom damage reduced by up to 15% on smaller group sizes on Raid Finder, Normal, and Heroic difficulties.
+Spiteful Soulcoiler health reduced by up to 10% on smaller group sizes on Heroic difficulty.
+Zul'jan's health reduced by up to 10% on smaller group sizes on Raid Finder, Normal, and Heroic difficulties.
+Wail of Terror cast time increased by up to 20% on smaller group sizes on Heroic difficulty.
+Reduced the minimum players needed to be hit by Guillotine and Grim Guillotine to avoid failure damage to 3 players on Raid Finder, Normal, and Heroic difficulties.
+Ula’tek
+Killing a Blightscale Wretch while outside of its Toxic Womb no longer triggers the Spectral Head to submerge.
+Adjusted the impact animation on a creature affected by the application of Revenge so their nameplate does not shift making interrupts more difficult.
+Tidebound Grotto
+Nymrissa Wavecaller and her murlocs’ health reduced by up to 10% for lower group sizes on Normal, Heroic, and Mythic difficulties.
+Frost Orb initial and periodic damage reduced by up to 33% for lower group sizes on Normal and Heroic difficulty.
+Frost Orb initial and periodic damage reduced by up to 17% for lower group sizes on Mythic difficulty.
+Frost Orb aura duration reduced to 12 seconds (was 16 seconds).
+Voidscar Arena
+Updated visuals of Taz'Rah's Darkbloom orbs to better match their impact radius.
+Items
+Satchel of Corrosive Coins sold by Er'iyne is no longer unique.
+Player versus Player
+Developers’ notes: Healers are able to top off targets too quickly in PvP, resulting in very long combat times. We’re reducing the primary stat from the PvP trinket set bonus for all healer specializations to increase the pace of combat.
+Gladiator’s Distinction set bonus grants 5% primary stat for all healing specializations (was 10%).
+Fixed an issue where the Training Grounds quest for casting an interrupt was not properly granting credit. Note that you may need to abandon and re-accept the quest for this fix to apply.
+Demon Hunter
+Devourer
+All ability damage increased by 5% in PvP combat.
+Havoc
+Rain from Above now deals damage equal to 6% of max health per bolt (was 8%).
+Druid
+Innervate grants 20% mana in PvP combat (was 25%).
+Feral
+Developers’ notes: We’re increasing Feral’s general damage, especially for Druid of the Claw, and nudging down their defensiveness to speed up the pace of combat for Feral.
+Ravage (Druid of the Claw) damage increased by 15% in PvP combat.
+Survival Instincts reduces damage taken by 40% in PvP combat (was 50%).
+Restoration
+Developers’ notes: We’re increasing Restoration’s overall healing while at the same time reducing the power of Swiftmend and some of their mana regeneration talents. The goal is to better balance Restoration’s healing kit to not be so reliant on Swiftmend to top up allies.
+Potent Enchantments increases the duration of Incarnation: Tree of Life by 4 seconds in PvP combat (was 6 seconds).
+Reforestation grants Incarnation: Tree of Life for 8 seconds in PvP combat (was 10 seconds).
+Swiftmend healing reduced by 20% in PvP combat.
+Blossom Burst (Ancient of Lore PvP talent) costs 1.89% base mana (was free).
+Blossom Burst (Ancient of Lore PvP talent) now prioritizes applying Rejuvenation over Lifebloom.
+Mass Blooming (Ancient of Lore PvP talent) costs 3.5% base mana (was free).
+Evoker
+Devastation
+Developers’ notes: The Devastation Flameshaper build is not being utilized much compared to Scalecommander. We’re increasing the power of some Flameshaper focused spells to open up more options for them.
+Disintegrate triggers Consume Flame at 200% effectiveness in PvP combat (was 150%).
+Enkindle damage increased to 30% in PvP combat (was 20%).
+Expanded Lungs increases damage of Fire Breath’s periodic by 40% in PvP combat (was 30%).
+Preservation
+Mana regeneration is now reduced by 35% in PvP combat (was 30%).
+Hunter
+Beast Mastery
+Developers’ notes: Beast Mastery’s damage during burst windows is higher than we’d like in PvP, reducing some of the abilities that can contribute to this situation.
+Bloodshed damage reduced by 25% in PvP combat.
+Bestial Wrath initial damage reduced by 10% in PvP combat.
+Pack Leader: Stampede! damage reduced by 10% in PvP combat.
+Mage
+Developers’ notes: Mages have been extending the duration of PvP matches with frequent access to strong defensive abilities, so we’re reducing the effectiveness of their barriers and the cooldown of Ice Block. Fire damage is also being reduced to bring them in line with other specializations.
+Improved Conjuration reduces the cooldown of Mirror Image by 15 sec in PvP combat.
+Winter’s Protection reduces Ice Block cooldown by 15/30 sec in PvP combat. Tooltip in PvP will be updated in a later patch.
+Arcane
+Prismatic Barrier absorb reduced by 25% in PvP combat.
+Fire
+Blazing Barrier absorb reduced by 25% in PvP combat.
+All damage reduced by 3% in PvP combat.
+Frost
+Ice Barrier absorb reduced by 25% in PvP combat.
+Priest
+Discipline
+Developers’ notes: Discipline could use some help, particularly Voidweaver, so we’re increasing some of its absorption and Atonement healing capabilities to bring them on par with other healers.
+Void Shield absorption increased by 15% in PvP combat.
+Power Word: Shield absorption increased by 15% in PvP combat.
+Atonement healing increased by 10% in PvP combat.
+Rogue
+Developers’ notes: Rogues’ defensive potential improves in coordinated play and as ratings increase, with the predictive effect of Preemptive Maneuver standing out as being too rewarding, so it’s being brought down to be more appropriate.
+Preemptive Maneuver now reduces damage taken by 25% while its effect is active (was 40%).
+Assassination
+All ability damage reduced by 4% in PvP combat.
+Shaman
+Elemental
+Developers’ notes: Elemental’s Farseer hero talent tree is performing better than expected defensively, and its Stormbringer hero talent tree is performing below expectations offensively. As a result we’re targeting key effects of each type to adjust: Natural Harmony’s improvements for the Nature’s Guardian effect are being diminished, while multiple key Stormbringer effects (including Tempest itself) are receiving buffs intended to improve overall damage and burst potential.
+Farseer: Natural Harmony now reduces the cooldown of Nature’s Guardian by 10 seconds in PvP combat (was 15 seconds).
+Stormbringer: Tempest damage increased by 20% in PvP combat.
+Stormbringer: Natural Gift now increases Nature damage by 4% in PvP combat (was 2%).
+Stormbringer: Stormcaller now increases Nature spell critical strike damage by 10% in PvP combat (was 5%).
+Enhancement
+Developers’ notes: Enhancement is on the weaker side offensively, so we’re increasing some of its sustained damage while also reducing its healing capabilities slightly.
+Healing Surge healing reduced by 20% in PvP combat.
+Stromstrike damage increased by15% in PvP combat.
+Lava Lash damage increased by 15% in PvP combat.
+Warrior
+Developers’ notes: Arms and Fury Warriors provide strong group defensive utility through the Safeguard PvP talent, but the frequency of damage reduction prevented enemy teams from having a window of time to strike.
+Arms
+Safeguard (PvP Talent) now increases the cooldown of Intervene by 20 seconds.
+Fury
+Safeguard (PvP Talent) now increases the cooldown of Intervene by 20 seconds.
+Quests
+Fixed an issue that prevented Midnight World Quests from rewarding Adventurer Crests.
+August 31, 2026
+Classes
+Death Knight
+Unholy
+Resolved an issue causing Dread and Virulent Plague Erupt effects to not work as intended with the target damage modifiers and caster damage modifiers Foul Infections, Thrill of Blood, Incite Terror, Morbidity, Soul Reaper, Brittle, and the War debuff of Rune of the Apocalypse.
+Druid
+Restoration
+Fixed an issue where Grove Guardians were not prioritizing healing the target of your Swiftmend or Wild Growth.
+Fixed an issue where Everbloom could incorrectly heal 6 targets instead of the intended 5 targets.
+Mage
+Fire
+Resolved an issue where the 2-piece set bonus: Flamestrike did not correctly always grant Hot Streak when it is a guaranteed critical strike due to Pyroclasm.
+Monk
+Mistweaver
+Fixed an issue where Soothing Mist could rarely cause the incorrect aura to be canceled.
+Priest
+Holy
+Fixed an issue where Guardian Angel would not reduce the cooldown of Guardian Spirit when placed on an ally.
+Warlock
+Affliction
+Hellcaller: Fixed an issue where Blackened Soul would not activate from Unstable Affliction applied via Fatal Echoes.
+Delves
+Gnarldor Isle
+Minchi has been hitting the books and now requires adventurers to help him investigate only 4 bone piles (was 6) in the Minchi's Osseous Adventure story.
+Dungeons and Raids
+The Venomous Abyss
+The Coiled Alter
+Fixed a rare issue where Coalesced Venom's could spawn inside a Virulent Mutation rim on Mythic difficulty.
+Fixed an issue where Soul Sever was incorrectly highlighting which Manifestations of Dread would be destroyed.
+Defilement of the Coiled Altar healing absorb reduced by 20% in Mythic difficulty.
+Ula’tek
+Damage from carrying eggs is now treated as periodic damage (was direct damage).
+Resolved an issue where Blight Vein could occasionally inflict additional damage.
+Resolved an issue where Toxic Burn could occasionally inflict additional damage.
+Resolved an issue that could cause Dancing Rune Weapon to fail to cast spells when targeting the Venomous Heart.
+Increased the range of Grasping Fangs.
+Corrected an issue that would cause Ula'tek to re-emerge during the intermission.
+Omnium Folio
+Fixed a bug that could cause the Rune of Lingering to break crowd-controlled enemies.
+User Interface
+Groups for the Housewarming housing quest are now found in the Questing section of the Premade Group Finder (was the Custom section).
+]=])
+
+local HOTFIX_CLASS_NAMES = {
+    ["Death Knight"] = true,
+    ["Demon Hunter"] = true,
+    ["Druid"] = true,
+    ["Evoker"] = true,
+    ["Hunter"] = true,
+    ["Mage"] = true,
+    ["Monk"] = true,
+    ["Paladin"] = true,
+    ["Priest"] = true,
+    ["Rogue"] = true,
+    ["Shaman"] = true,
+    ["Warlock"] = true,
+    ["Warrior"] = true,
+}
+
+local HOTFIX_SPEC_NAMES = {
+    ["General"] = true,
+    ["Hero Talents"] = true,
+    ["Blood"] = true,
+    ["Frost"] = true,
+    ["Unholy"] = true,
+    ["Havoc"] = true,
+    ["Vengeance"] = true,
+    ["Devourer"] = true,
+    ["Balance"] = true,
+    ["Feral"] = true,
+    ["Guardian"] = true,
+    ["Restoration"] = true,
+    ["Beast Mastery"] = true,
+    ["Marksmanship"] = true,
+    ["Survival"] = true,
+    ["Arcane"] = true,
+    ["Fire"] = true,
+    ["Brewmaster"] = true,
+    ["Mistweaver"] = true,
+    ["Windwalker"] = true,
+    ["Holy"] = true,
+    ["Protection"] = true,
+    ["Retribution"] = true,
+    ["Discipline"] = true,
+    ["Shadow"] = true,
+    ["Assassination"] = true,
+    ["Outlaw"] = true,
+    ["Subtlety"] = true,
+    ["Elemental"] = true,
+    ["Enhancement"] = true,
+    ["Affliction"] = true,
+    ["Demonology"] = true,
+    ["Destruction"] = true,
+    ["Arms"] = true,
+    ["Fury"] = true,
+    ["Devastation"] = true,
+    ["Preservation"] = true,
+    ["Augmentation"] = true,
+}
+
+local HOTFIX_INSTANCE_NAMES = {
+    ["Den of Nalorakk"] = true,
+    ["Murder Row"] = true,
+    ["Ruby Life Pools"] = true,
+    ["The Venomous Abyss"] = true,
+    ["Tidebound Grotto"] = true,
+    ["Voidscar Arena"] = true,
+}
+
+local HOTFIX_ENCOUNTER_NAMES = {
+    ["Nek'zali the Soulcoiler"] = true,
+    ["Entombed Sentinels"] = true,
+    ["Vashnik the Malignant"] = true,
+    ["The Lost Explorers"] = true,
+    ["Sszorak"] = true,
+    ["The Twin Fangs"] = true,
+    ["The Coiled Altar"] = true,
+    ["The Coiled Alter"] = true,
+    ["Ula'tek"] = true,
+    ["Ula’tek"] = true,
+}
+
+local function HotfixNavigationID(label)
+    local id = tostring(label or "section"):lower():gsub("[^%w]+", "-")
+    return id:gsub("^-+", ""):gsub("-+$", "")
+end
+
+local function StructureHotfixCategory(category, submenuNames, sectionNames)
+    local directContent = {}
+    local submenus = {}
+    local currentSubmenu
+    local currentSection
+
+    for _, block in ipairs(category.content or {}) do
+        local text = block.text or ""
+        if submenuNames[text] then
+            currentSubmenu = {
+                id = HotfixNavigationID(text),
+                label = text,
+                content = {},
+                sections = {},
+            }
+            submenus[#submenus + 1] = currentSubmenu
+            currentSection = nil
+        elseif currentSubmenu and sectionNames[text] then
+            currentSection = {
+                heading = text,
+                content = {},
+            }
+            currentSubmenu.sections[#currentSubmenu.sections + 1] = currentSection
+        elseif currentSection then
+            currentSection.content[#currentSection.content + 1] = block
+        elseif currentSubmenu then
+            currentSubmenu.content[#currentSubmenu.content + 1] = block
+        else
+            directContent[#directContent + 1] = block
+        end
+    end
+
+    category.content = directContent
+    category.submenus = submenus
+end
+
+for _, dateData in ipairs(latestSuppliedHotfixDates) do
+    for _, category in ipairs(dateData.categories or {}) do
+        if category.id == "classes" or category.id == "player-versus-player" then
+            StructureHotfixCategory(category, HOTFIX_CLASS_NAMES, HOTFIX_SPEC_NAMES)
+        elseif category.id == "dungeons-and-raids" then
+            StructureHotfixCategory(category, HOTFIX_INSTANCE_NAMES, HOTFIX_ENCOUNTER_NAMES)
+        elseif category.id == "housing" then
+            StructureHotfixCategory(category, { ["Endeavors"] = true }, { ["Vacation Season"] = true })
+        elseif category.id == "delves" then
+            StructureHotfixCategory(category, { ["Gnarldor Isle"] = true }, {})
+        end
+    end
 end
 
 local august27Hotfix = ParseSuppliedHotfixDate("2026-08-27", "August 27, 2026", 20260827, [=[
@@ -3767,7 +4330,11 @@ Quests
 - The weekly quests "Turn Back the Surge" and "Sparks of War: Eversong Woods" no longer incorrectly suggest that they reward two Sparks of Tide.
 ]=])
 
-local suppliedHotfixDates = {
+local suppliedHotfixDates = {}
+for _, dateData in ipairs(latestSuppliedHotfixDates) do
+    suppliedHotfixDates[#suppliedHotfixDates + 1] = dateData
+end
+for _, dateData in ipairs({
     august27Hotfix,
     august26Hotfix,
     august25Hotfix,
@@ -3778,7 +4345,9 @@ local suppliedHotfixDates = {
     august17Hotfix,
     FindStoredHotfixDate("hotfixes-2026-08-14", "2026-08-14"),
     FindStoredHotfixDate("hotfixes-2026-08-14", "2026-08-13"),
-}
+}) do
+    suppliedHotfixDates[#suppliedHotfixDates + 1] = dateData
+end
 
 local function SplitHotfixModes(categories)
     local pve, pvp = {}, {}
@@ -3797,19 +4366,216 @@ local function SplitHotfixModes(categories)
     }
 end
 
+local NEWS_WEEK_BUCKETS = {
+    { id = "2026-09-06", label = "September 6, 2026", shortLabel = "September 6", minimum = 20260831, maximum = 20260906 },
+    { id = "2026-08-30", label = "August 30, 2026", shortLabel = "August 30", minimum = 20260824, maximum = 20260830 },
+    { id = "2026-08-23", label = "August 23, 2026", shortLabel = "August 23", minimum = 20260817, maximum = 20260823 },
+    { id = "2026-08-16", label = "August 16, 2026", shortLabel = "August 16", minimum = 20260810, maximum = 20260816 },
+}
+
+local function FindNewsWeek(publicationSort)
+    publicationSort = tonumber(publicationSort) or 0
+    for _, week in ipairs(NEWS_WEEK_BUCKETS) do
+        if publicationSort >= week.minimum and publicationSort <= week.maximum then return week end
+    end
+end
+
+local function AppendNewsChanges(content, changes)
+    for _, change in ipairs(changes or {}) do
+        local block = type(change) == "table" and change or { text = tostring(change) }
+        content[#content + 1] = {
+            type = "change",
+            text = block.text or "",
+            children = block.children,
+        }
+    end
+end
+
+local function AppendNewsSection(content, section)
+    if section.heading then content[#content + 1] = { type = "heading", text = section.heading } end
+    for _, paragraph in ipairs(section.paragraphs or {}) do
+        content[#content + 1] = { type = "paragraph", text = paragraph }
+    end
+    for _, note in ipairs(section.developerNotes or {}) do
+        content[#content + 1] = { type = "developer_note", text = note }
+    end
+    AppendNewsChanges(content, section.changes)
+    for _, paragraph in ipairs(section.afterParagraphs or {}) do
+        content[#content + 1] = { type = "paragraph", text = paragraph }
+    end
+end
+
+local function ArticleMetadataLine(article)
+    local parts = {}
+    if article.publicationDate then parts[#parts + 1] = article.publicationDate end
+    if article.sourceLabel then parts[#parts + 1] = article.sourceLabel end
+    return table.concat(parts, "  •  ")
+end
+
+local function AddNormalNewsArticle(mode, article)
+    local content = {}
+    local metadata = ArticleMetadataLine(article)
+    if metadata ~= "" then content[#content + 1] = { type = "paragraph", text = metadata } end
+    if article.introduction and article.introduction ~= "" then
+        content[#content + 1] = { type = "paragraph", text = article.introduction }
+    end
+    for _, section in ipairs(article.sections or {}) do AppendNewsSection(content, section) end
+    mode.categories[#mode.categories + 1] = {
+        id = article.id,
+        label = article.menuTitle or article.title or "News",
+        content = content,
+        publicationSort = article.publicationSort,
+    }
+end
+
+local function AddCurrentWeeklyTopics(newsMode, ptrMode, article)
+    for index, section in ipairs(article.sections or {}) do
+        local heading = section.heading or "Week at a Glance"
+        local targetMode = heading:lower():find("ptr", 1, true) and ptrMode or newsMode
+        local content = {}
+        AppendNewsSection(content, {
+            paragraphs = section.paragraphs,
+            developerNotes = section.developerNotes,
+            changes = section.changes,
+            afterParagraphs = section.afterParagraphs,
+        })
+        targetMode.categories[#targetMode.categories + 1] = {
+            id = article.id .. "-topic-" .. tostring(index),
+            label = heading,
+            content = content,
+            publicationSort = article.publicationSort,
+        }
+    end
+end
+
+local function ClassContentBlocks(classData)
+    local content = {}
+    for _, block in ipairs(classData.content or {}) do content[#content + 1] = block end
+    for _, note in ipairs(classData.developerNotes or {}) do
+        content[#content + 1] = { type = "developer_note", text = note }
+    end
+    AppendNewsChanges(content, classData.changes)
+    return content
+end
+
+local function AddClassNewsMode(targetMode, article, sourceMode)
+    local category = {
+        id = article.id .. "-" .. targetMode.id,
+        label = article.menuTitle or article.title or "Class Tuning",
+        content = {},
+        submenus = {},
+        publicationSort = article.publicationSort,
+    }
+    local metadata = ArticleMetadataLine(article)
+    if metadata ~= "" then category.content[#category.content + 1] = { type = "paragraph", text = metadata } end
+    if article.introduction and article.introduction ~= "" then
+        category.content[#category.content + 1] = { type = "paragraph", text = article.introduction }
+    end
+    for _, classData in ipairs(sourceMode.classes or {}) do
+        local submenu = {
+            id = classData.id or HotfixNavigationID(classData.name),
+            label = classData.name or "Class",
+            content = ClassContentBlocks(classData),
+            sections = {},
+        }
+        for _, specData in ipairs(classData.specializations or {}) do
+            submenu.sections[#submenu.sections + 1] = {
+                heading = specData.name or "Specialization",
+                content = ClassContentBlocks(specData),
+            }
+        end
+        category.submenus[#category.submenus + 1] = submenu
+    end
+    targetMode.categories[#targetMode.categories + 1] = category
+end
+
+local function SortWeeklyCategories(categories)
+    table.sort(categories, function(left, right)
+        local leftSort = tonumber(left.publicationSort) or 0
+        local rightSort = tonumber(right.publicationSort) or 0
+        if leftSort == rightSort then return tostring(left.label or "") < tostring(right.label or "") end
+        return leftSort > rightSort
+    end)
+end
+
+local function BuildWeeklyNewsArticles(sourceArticles)
+    local grouped = {}
+    for _, week in ipairs(NEWS_WEEK_BUCKETS) do
+        grouped[week.id] = {
+            news = { id = "news", label = "News & Events", categories = {} },
+            ptr = { id = "ptr", label = "PTR Preview", categories = {} },
+            classes = { id = "class-changes", label = "Class Changes", categories = {} },
+            pvp = { id = "pvp", label = "Player versus Player", categories = {} },
+        }
+    end
+
+    for _, article in ipairs(sourceArticles) do
+        local week = FindNewsWeek(article.publicationSort)
+        local modes = week and grouped[week.id]
+        if modes then
+            if tostring(article.id or ""):find("^this%-week%-in%-wow%-") then
+                AddCurrentWeeklyTopics(modes.news, modes.ptr, article)
+            elseif article.articleType == "class_tuning" then
+                for _, sourceMode in ipairs(article.modes or {}) do
+                    local modeText = tostring(sourceMode.label or sourceMode.id or ""):lower()
+                    local targetMode = (modeText:find("player", 1, true) or modeText:find("pvp", 1, true)) and modes.pvp or modes.classes
+                    AddClassNewsMode(targetMode, article, sourceMode)
+                end
+            else
+                AddNormalNewsArticle(modes.news, article)
+            end
+        end
+    end
+
+    local weeklyArticles = {}
+    for _, week in ipairs(NEWS_WEEK_BUCKETS) do
+        local groupedModes = grouped[week.id]
+        local modes = {}
+        for _, mode in ipairs({ groupedModes.news, groupedModes.ptr, groupedModes.classes, groupedModes.pvp }) do
+            if #mode.categories > 0 then
+                SortWeeklyCategories(mode.categories)
+                modes[#modes + 1] = mode
+            end
+        end
+        if #modes > 0 then
+            weeklyArticles[#weeklyArticles + 1] = {
+                id = "this-week-in-wow-" .. week.id,
+                internalTab = "news",
+                category = "WEEKLY ROUNDUP",
+                menuTitle = "This Week in WoW - " .. week.shortLabel,
+                title = "This Week in WoW",
+                publicationDate = week.label,
+                publicationSort = week.maximum,
+                sourceLabel = "KeyLab Weekly Roundup — Official Blizzard News and Forum Posts",
+                articleType = "game_update",
+                modes = modes,
+                footer = "Sources: Official World of Warcraft news, forums, support articles, and PTR development notes",
+            }
+        end
+    end
+    return weeklyArticles
+end
+
 local rebuiltArticles = {}
 local moveToNews = {
     ["item-adjustment-2026-08-25"] = true,
     ["class-tuning-2026-08-25"] = true,
 }
 
+local newsSourceArticles = {}
 for _, article in ipairs(Data.articles) do
-    if article.internalTab == "news" or article.internalTab == "issues" then
+    if article.internalTab == "issues" then
         rebuiltArticles[#rebuiltArticles + 1] = article
+    elseif article.internalTab == "news" then
+        newsSourceArticles[#newsSourceArticles + 1] = article
     elseif moveToNews[article.id] then
         article.internalTab = "news"
-        rebuiltArticles[#rebuiltArticles + 1] = article
+        newsSourceArticles[#newsSourceArticles + 1] = article
     end
+end
+
+for _, article in ipairs(BuildWeeklyNewsArticles(newsSourceArticles)) do
+    rebuiltArticles[#rebuiltArticles + 1] = article
 end
 
 for _, dateData in ipairs(suppliedHotfixDates) do
