@@ -25,6 +25,9 @@ local MODE_EVEN_CYCLE = "even_cycle"
 local MODE_WEIGHTED_CYCLE = "weighted_cycle"
 local MODE_SCHEMA_VERSION = 2
 local GROUP_TARGET_NAME_CHARS = 40
+local RAID_HEALING_POSITIONS = 5
+local RAID_HEALING_GROUPS = 8
+local RAID_HEALING_PLACEHOLDER = "raidmember"
 
 Library.MAX_SEQUENCES = MAX_SEQUENCES
 Library.MAX_VERSIONS = MAX_VERSIONS
@@ -67,7 +70,7 @@ local SUPPORT_COMMANDS = {
 
 local TARGET_OPTIONS = {
     "", "@target", "@player", "@focus", "@mouseover", "@pet", "@cursor",
-    "@none", "@targettarget", "@focustarget", "@pettarget",
+    "@none", "@targettarget", "@focustarget", "@pettarget", "@raidmember",
 }
 for index = 1, 4 do table.insert(TARGET_OPTIONS, "@party" .. tostring(index)) end
 for index = 1, 40 do table.insert(TARGET_OPTIONS, "@raid" .. tostring(index)) end
@@ -103,6 +106,7 @@ for index = 1, 4 do GROUP_TARGET_SOURCE_SET["@party" .. tostring(index)] = true 
 for index = 1, 40 do GROUP_TARGET_SOURCE_SET["@raid" .. tostring(index)] = true end
 
 local groupTargetListeners = {}
+local raidHealingListeners = {}
 
 local CONDITION_EXACT = {
     exists=true, noexists=true, help=true, harm=true, dead=true, nodead=true,
@@ -314,6 +318,12 @@ local function NotifyGroupTargets(reason)
     end
 end
 
+local function NotifyRaidHealing(reason)
+    for listener in pairs(raidHealingListeners) do
+        pcall(listener, tostring(reason or "updated"))
+    end
+end
+
 local function EnsureCollection(create)
     local db = EnsureRoot()
     local ownerKey, classFile, className, specID, specName = CurrentOwner()
@@ -397,6 +407,7 @@ local function DefaultVersion(name)
         blocks = {},
         modifierKey = nil,
         modifierCommand = nil,
+        raidHealingPosition = nil,
         createdAt = Now(),
         updatedAt = Now(),
     }
@@ -829,6 +840,21 @@ local function SetAllBlockModes(version, mode)
     return true
 end
 
+local RAID_MEMBER_TOKEN_PATTERN = "[Rr][Aa][Ii][Dd][Mm][Ee][Mm][Bb][Ee][Rr]"
+
+local function HasRaidHealingPlaceholder(text)
+    text = tostring(text or "")
+    return text:find("%f[%w]" .. RAID_MEMBER_TOKEN_PATTERN .. "%f[%W]") ~= nil
+end
+
+local function TransformRaidHealingText(text, unit)
+    unit = tostring(unit or "none"):lower()
+    if unit ~= "none" and not unit:match("^raid%d+$") then unit = "none" end
+    text = tostring(text or "")
+    text = text:gsub("@" .. RAID_MEMBER_TOKEN_PATTERN .. "%f[%W]", "@" .. unit)
+    return text:gsub("%f[%w]" .. RAID_MEMBER_TOKEN_PATTERN .. "%f[%W]", unit)
+end
+
 local function ValidateVersion(version)
     if type(version) ~= "table" then return nil, "The selected version is missing." end
     local mode = NormalizeMode(version.mode)
@@ -838,6 +864,10 @@ local function ValidateVersion(version)
     local groups = {}
     local currentGroup
     local inlineModifierSet = {}
+    local raidHealingPosition = tonumber(version.raidHealingPosition)
+    if raidHealingPosition and (raidHealingPosition < 1 or raidHealingPosition > RAID_HEALING_POSITIONS or raidHealingPosition % 1 ~= 0) then
+        return nil, "Choose Off or Raid Healing Position 1-5."
+    end
     if #(version.blocks or {}) > MAX_BLOCKS then return nil, "A version may contain at most 50 macros." end
     for sourceIndex, block in ipairs(version.blocks or {}) do
         local blockMode = GetBlockMode(version, block)
@@ -854,6 +884,14 @@ local function ValidateVersion(version)
         local text, message, disabled = GenerateBlock(block)
         if not text and not disabled then return nil, "Macro " .. tostring(sourceIndex) .. ": " .. tostring(message) end
         if not disabled then
+            if raidHealingPosition and not HasRaidHealingPlaceholder(text) then
+                return nil, "Macro " .. tostring(sourceIndex) .. ": add @raidmember or /focus raidmember so KeyLab can route this Raid Healing version."
+            elseif not raidHealingPosition and HasRaidHealingPlaceholder(text) then
+                return nil, "Macro " .. tostring(sourceIndex) .. ": @raidmember is available only when this version has a Raid Healing Position."
+            end
+            if raidHealingPosition and type(block.groupTarget) == "table" then
+                return nil, "Macro " .. tostring(sourceIndex) .. ": Raid Healing versions use @raidmember and cannot also be marked for Macro Targets."
+            end
             if type(block.groupTarget) == "table" then
                 local sourceTarget, targetMessage = ValidateGroupTargetBlock(block)
                 if not sourceTarget then
@@ -877,6 +915,11 @@ local function ValidateVersion(version)
     if #blocks == 0 then return nil, "Enable and complete at least one macro." end
     local modifierText, modifierError, modifierKey = GenerateModifier(version)
     if modifierError then return nil, "Global Modifier Action: " .. modifierError end
+    if modifierText and raidHealingPosition and not HasRaidHealingPlaceholder(modifierText) then
+        return nil, "Global Modifier Action: add @raidmember so KeyLab can route this Raid Healing version."
+    elseif modifierText and not raidHealingPosition and HasRaidHealingPlaceholder(modifierText) then
+        return nil, "Global Modifier Action: @raidmember requires a Raid Healing Position."
+    end
     if modifierText then
         if inlineModifierSet[modifierKey] then
             return nil, "Global Modifier Action overlaps an inline [mod:" .. tostring(modifierKey):lower() .. "] condition."
@@ -920,6 +963,7 @@ local function ValidateVersion(version)
         modifierKey = modifierKey,
         inlineModifierKeys = inlineModifierKeys,
         loop = loop,
+        raidHealingPosition = raidHealingPosition,
     }
 end
 
@@ -938,6 +982,8 @@ Library.GetBlockGroups = GetBlockGroups
 Library.GetVersionModeSummary = GetVersionModeSummary
 Library.SetBlockGroupMode = SetBlockGroupMode
 Library.SetAllBlockModes = SetAllBlockModes
+Library.HasRaidHealingPlaceholder = HasRaidHealingPlaceholder
+Library.TransformRaidHealingText = TransformRaidHealingText
 Library.DeepCopy = DeepCopy
 Library.DefaultBlock = DefaultBlock
 Library.DefaultCommand = DefaultCommand
@@ -954,6 +1000,14 @@ end
 
 function Library.RemoveGroupTargetListener(listener)
     groupTargetListeners[listener] = nil
+end
+
+function Library.AddRaidHealingListener(listener)
+    if type(listener) == "function" then raidHealingListeners[listener] = true end
+end
+
+function Library.RemoveRaidHealingListener(listener)
+    raidHealingListeners[listener] = nil
 end
 
 function Library.IsGrouped()
@@ -1090,10 +1144,10 @@ local function AssignGroupTargetMember(markerID, member)
         needsUpdate = false,
         changedAt = Now(),
     }
-    local applied, message = Library.ApplyAll("temporary group target changed")
+    local applied, message = Library.ApplySequence(marker.sequenceID, "temporary group target changed")
     if not applied then
         root.groupTargetAssignments[markerID] = previous
-        Library.ApplyAll("temporary group target restored after failed change")
+        Library.ApplySequence(marker.sequenceID, "temporary group target restored after failed change")
     end
     NotifyGroupTargets("assignment changed")
     if not applied then return false, message end
@@ -1118,10 +1172,10 @@ function Library.ClearGroupTarget(markerID)
     if not root.groupTargetAssignments[markerID] then return true, "This macro is already using its saved target." end
     local previous = DeepCopy(root.groupTargetAssignments[markerID])
     root.groupTargetAssignments[markerID] = nil
-    local applied, message = Library.ApplyAll("temporary group target restored")
+    local applied, message = Library.ApplySequence(previous.sequenceID, "temporary group target restored")
     if not applied then
         root.groupTargetAssignments[markerID] = previous
-        Library.ApplyAll("temporary group target restored after failed reset")
+        Library.ApplySequence(previous.sequenceID, "temporary group target restored after failed reset")
     end
     NotifyGroupTargets("assignment cleared")
     if not applied then return false, message end
@@ -1239,13 +1293,16 @@ end
 local secureButtons = {}
 local bindingOwners = {}
 local sequenceSlots = {}
+local raidSelectorButtons = {}
+local raidSelectorOwner = CreateFrame("Frame", "KeyLabRaidHealingBindingOwner", nil)
 
 local function CreateSecureSlot(slot)
     local secureButton = CreateFrame("Button", "KeyLabSequencerButton" .. tostring(slot), nil, "SecureActionButtonTemplate,SecureHandlerBaseTemplate")
     secureButton:RegisterForClicks("AnyDown", "AnyUp")
 
-    -- GOLDEN SECURE CLICK BODY. Keep byte-for-byte behavior aligned with the
-    -- preserved Retail-tested prototype.
+    -- The ordinary sequence path remains aligned with the Retail-tested
+    -- prototype. Raid Healing adds only a preloaded group-specific macro and
+    -- cursor path; it does not make a combat-time targeting decision.
     SecureHandlerWrapScript(secureButton, "OnClick", secureButton, [=[
     local useDown = self:GetAttribute("useOnKeyDown")
     local shouldExecute = (down and useDown) or ((not down) and (not useDown))
@@ -1260,7 +1317,10 @@ local function CreateSecureSlot(slot)
         else
             self:SetAttribute("executedUpEvents", (tonumber(self:GetAttribute("executedUpEvents")) or 0) + 1)
         end
-        local cursor = tonumber(self:GetAttribute("cursor")) or 1
+        local raidHealingActive = self:GetAttribute("raidHealingActive") == true
+        local raidGroup = tonumber(self:GetAttribute("raidHealingGroup")) or 1
+        local cursorAttribute = raidHealingActive and ("raidCursor" .. raidGroup) or "cursor"
+        local cursor = tonumber(self:GetAttribute(cursorAttribute)) or 1
         local loopLength = tonumber(self:GetAttribute("loopLength")) or 1
         local blockIndex = tonumber(self:GetAttribute("loop" .. cursor)) or 1
         local modifierKey = self:GetAttribute("modifierKey")
@@ -1271,9 +1331,9 @@ local function CreateSecureSlot(slot)
 
         local macrotext
         if useModifier then
-            macrotext = self:GetAttribute("modifierMacro")
+            macrotext = raidHealingActive and self:GetAttribute("raidGroup" .. raidGroup .. "Modifier") or self:GetAttribute("modifierMacro")
         else
-            macrotext = self:GetAttribute("block" .. blockIndex)
+            macrotext = raidHealingActive and self:GetAttribute("raidGroup" .. raidGroup .. "Block" .. blockIndex) or self:GetAttribute("block" .. blockIndex)
         end
 
         self:SetAttribute("type", "macro")
@@ -1291,7 +1351,7 @@ local function CreateSecureSlot(slot)
         end
 
         cursor = (cursor % loopLength) + 1
-        self:SetAttribute("cursor", cursor)
+        self:SetAttribute(cursorAttribute, cursor)
     else
         -- Remove the prepared protected action before WoW handles the ignored
         -- edge. The opposite edge must neither execute nor advance.
@@ -1307,9 +1367,36 @@ end
 
 for slot = 1, MAX_SEQUENCES do CreateSecureSlot(slot) end
 
+local function CreateRaidSelector(group)
+    local button = CreateFrame("Button", "KeyLabRaidHealingGroup" .. tostring(group), nil, "SecureHandlerClickTemplate,SecureHandlerBaseTemplate")
+    button:RegisterForClicks("AnyDown", "AnyUp")
+    button:SetAttribute("raidHealingGroup", group)
+    SecureHandlerWrapScript(button, "OnClick", button, [=[
+    local useDown = self:GetAttribute("useOnKeyDown")
+    local shouldSelect = (down and useDown) or ((not down) and (not useDown))
+    if shouldSelect then
+        local group = tonumber(self:GetAttribute("raidHealingGroup")) or 1
+        for position = 1, 5 do
+            local target = self:GetFrameRef("position" .. position)
+            if target then target:SetAttribute("raidHealingGroup", group) end
+        end
+        for groupIndex = 1, 8 do
+            local marker = self:GetFrameRef("indicator" .. groupIndex)
+            if marker then
+                if groupIndex == group then marker:Show() else marker:Hide() end
+            end
+        end
+    end
+]=])
+    raidSelectorButtons[group] = button
+end
+
+for group = 1, RAID_HEALING_GROUPS do CreateRaidSelector(group) end
+
 local function ClearAllBindings()
     if not ClearOverrideBindings then return end
     for slot = 1, MAX_SEQUENCES do ClearOverrideBindings(bindingOwners[slot]) end
+    ClearOverrideBindings(raidSelectorOwner)
 end
 
 local function ClearSlot(slot)
@@ -1372,6 +1459,311 @@ local function ConfigureSlot(slot, sequence, runtime)
     button:SetAttribute("lastResetReason", "configuration applied")
     for index = 1, math.max(oldBlocks, #runtime.blocks) do button:SetAttribute("block" .. index, runtime.blocks[index]) end
     for index = 1, math.max(oldLoop, #runtime.loop) do button:SetAttribute("loop" .. index, runtime.loop[index]) end
+end
+
+local RAID_SELECTOR_BINDINGS = {
+    [1] = "INSERT",
+    [2] = "HOME",
+    [3] = "DELETE",
+    [4] = "END",
+    [5] = "CTRL-INSERT",
+    [6] = "CTRL-HOME",
+    [7] = "CTRL-DELETE",
+    [8] = "CTRL-END",
+}
+local RAID_SELECTOR_BINDING_SET = {}
+for _, binding in pairs(RAID_SELECTOR_BINDINGS) do RAID_SELECTOR_BINDING_SET[binding] = true end
+
+local function InRaidGroup()
+    return type(IsInRaid) == "function" and IsInRaid() == true
+end
+
+local function ClearRaidHealingAttributes()
+    for _, button in ipairs(secureButtons) do
+        local oldBlocks = tonumber(button:GetAttribute("raidHealingBlockCount")) or 0
+        for group = 1, RAID_HEALING_GROUPS do
+            for index = 1, oldBlocks do button:SetAttribute("raidGroup" .. group .. "Block" .. index, nil) end
+            button:SetAttribute("raidGroup" .. group .. "Modifier", nil)
+            button:SetAttribute("raidCursor" .. group, nil)
+        end
+        button:SetAttribute("raidHealingActive", nil)
+        button:SetAttribute("raidHealingPosition", nil)
+        button:SetAttribute("raidHealingBlockCount", nil)
+    end
+end
+
+local function SetRaidHealingStatus(ready, active, message, details, reason)
+    Library.raidHealingStatus = {
+        ready = ready == true,
+        active = active == true,
+        message = tostring(message or "Raid Healing is not configured."),
+        details = details or {},
+        selectedGroup = tonumber(details and details.selectedGroup) or 1,
+        reason = tostring(reason or "refresh"),
+    }
+    if Library.raidHealingIndicator then
+        Library.raidHealingIndicator:SetShown(active == true)
+        for group, marker in ipairs(Library.raidHealingIndicatorMarkers or {}) do
+            marker:SetShown(active == true and group == Library.raidHealingStatus.selectedGroup)
+        end
+    end
+    NotifyRaidHealing(reason or "refresh")
+    return ready == true, Library.raidHealingStatus.message
+end
+
+local function ActiveRaidHealingEntries(collection)
+    local byPosition, marked, errors = {}, {}, {}
+    for _, sequenceID in ipairs(collection.order or {}) do
+        local sequence = collection.sequences[sequenceID]
+        local sequenceEntry
+        for _, versionID in ipairs(sequence and sequence.versionOrder or {}) do
+            local version = sequence.versions and sequence.versions[versionID]
+            local position = version and tonumber(version.raidHealingPosition) or nil
+            if position then
+                local entry = {
+                    sequence = sequence,
+                    version = version,
+                    position = position,
+                    slot = tonumber(sequence.slot),
+                }
+                table.insert(marked, entry)
+                if sequenceEntry then
+                    table.insert(errors, tostring(sequence.name) .. " has more than one version assigned to Raid Healing. Keep one position template in each sequence.")
+                end
+                sequenceEntry = entry
+                if byPosition[position] then
+                    table.insert(errors, "Position " .. tostring(position) .. " is assigned to both " .. tostring(byPosition[position].sequence.name) .. " and " .. tostring(sequence.name) .. ".")
+                else
+                    byPosition[position] = entry
+                end
+                entry.runtime, entry.error = ValidateVersion(version)
+                entry.binding = NormalizeBinding(sequence.binding)
+                if not entry.runtime then
+                    table.insert(errors, tostring(sequence.name) .. " / " .. tostring(version.name) .. ": " .. tostring(entry.error))
+                elseif not entry.binding or entry.binding == "" then
+                    table.insert(errors, tostring(sequence.name) .. " needs a key binding for Raid Healing Position " .. tostring(position) .. ".")
+                elseif not entry.slot or not secureButtons[entry.slot] then
+                    table.insert(errors, tostring(sequence.name) .. " does not have an available secure sequence slot.")
+                else
+                    local plan = BuildBindingPlan(entry.binding, entry.runtime)
+                    for _, planned in ipairs(plan or {}) do
+                        if RAID_SELECTOR_BINDING_SET[planned.binding] then
+                            table.insert(errors, tostring(sequence.name) .. " uses " .. tostring(planned.binding) .. ", which is reserved for selecting a raid group while Raid Healing is prepared.")
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return byPosition, marked, errors
+end
+
+local function RaidRosterGroups()
+    local groups = {}
+    for group = 1, RAID_HEALING_GROUPS do groups[group] = {} end
+    local selectedGroup = 1
+    local count = type(GetNumGroupMembers) == "function" and (tonumber(GetNumGroupMembers()) or 0) or 0
+    for raidIndex = 1, count do
+        local subgroup = 1
+        if type(GetRaidRosterInfo) == "function" then
+            local _, _, rosterGroup = GetRaidRosterInfo(raidIndex)
+            subgroup = tonumber(rosterGroup) or 1
+        end
+        if subgroup >= 1 and subgroup <= RAID_HEALING_GROUPS then
+            table.insert(groups[subgroup], "raid" .. tostring(raidIndex))
+            if type(UnitIsUnit) == "function" and UnitIsUnit("raid" .. tostring(raidIndex), "player") then selectedGroup = subgroup end
+        end
+    end
+    return groups, selectedGroup
+end
+
+local function RefreshRaidHealing(reason, standardAlreadyApplied)
+    reason = tostring(reason or "refresh")
+    if InCombat() then
+        Library.pendingRaidHealingRefresh = true
+        local current = Library.raidHealingStatus or {}
+        current.message = "Raid Healing roster changes are queued until combat ends."
+        current.reason = reason
+        Library.raidHealingStatus = current
+        NotifyRaidHealing(reason)
+        return false, current.message
+    end
+
+    local wasPrepared = Library.raidHealingPrepared == true
+    local selectedGroup
+    for _, button in ipairs(secureButtons) do
+        if button:GetAttribute("raidHealingActive") == true then
+            selectedGroup = tonumber(button:GetAttribute("raidHealingGroup"))
+            if selectedGroup then break end
+        end
+    end
+    if ClearOverrideBindings then ClearOverrideBindings(raidSelectorOwner) end
+    ClearRaidHealingAttributes()
+
+    local collection = EnsureCollection(true)
+    NormalizeSlots(collection)
+    local byPosition, marked, errors = ActiveRaidHealingEntries(collection)
+    local details = { marked = #marked, selectedGroup = selectedGroup or 1, positions = {} }
+    for position = 1, RAID_HEALING_POSITIONS do
+        details.positions[position] = byPosition[position] and tostring(byPosition[position].sequence.name or "Sequence") or nil
+    end
+
+    if #marked == 0 then
+        Library.raidHealingPrepared = false
+        Library.pendingRaidHealingRefresh = false
+        if wasPrepared and not standardAlreadyApplied then
+            Library.ApplyAll("Raid Healing templates were removed")
+        end
+        return SetRaidHealingStatus(false, false, "Mark one saved Raid version for each Raid Healing Position 1-5.", details, reason)
+    end
+    for position = 1, RAID_HEALING_POSITIONS do
+        if not byPosition[position] then table.insert(errors, "Raid Healing Position " .. tostring(position) .. " is missing from the saved Raid versions.") end
+    end
+    if #errors > 0 then
+        Library.raidHealingPrepared = false
+        Library.pendingRaidHealingRefresh = false
+        if wasPrepared and not standardAlreadyApplied then
+            Library.ApplyAll("Raid Healing setup became incomplete")
+        end
+        return SetRaidHealingStatus(false, false, table.concat(errors, " "), details, reason)
+    end
+    if not InRaidGroup() then
+        local wasPrepared = Library.raidHealingPrepared == true
+        Library.raidHealingPrepared = false
+        if wasPrepared and not standardAlreadyApplied then
+            Library.ApplyAll("Raid Healing ended outside a raid")
+            return true, "Raid Healing ended. Normal active Macro Sequencer versions were restored."
+        end
+        Library.pendingRaidHealingRefresh = false
+        return SetRaidHealingStatus(true, false, "All five Raid Healing positions are saved. Paging stays off outside a raid.", details, reason)
+    end
+    if Library.raidHealingPrepared ~= true then
+        Library.pendingRaidHealingRefresh = false
+        return SetRaidHealingStatus(true, false, "All five positions are ready. Choose Prepare Raid Healing before the pull.", details, reason)
+    end
+
+    local groups, playerGroup = RaidRosterGroups()
+    selectedGroup = selectedGroup or playerGroup or 1
+    if selectedGroup < 1 or selectedGroup > RAID_HEALING_GROUPS then selectedGroup = 1 end
+    details.selectedGroup = selectedGroup
+
+    -- Temporarily release any ordinary KeyLab sequences on the eight selector
+    -- keys. ApplyAll restores them when Raid Healing ends, including the
+    -- user's normal M+ support bindings on INS/HOME/DEL/END.
+    for _, sequenceID in ipairs(collection.order or {}) do
+        local sequence = collection.sequences[sequenceID]
+        local version = sequence and sequence.versions and sequence.versions[sequence.activeVersionId]
+        local runtime = version and ValidateVersion(version) or nil
+        local binding = sequence and NormalizeBinding(sequence.binding) or nil
+        local plan = runtime and binding and binding ~= "" and BuildBindingPlan(binding, runtime) or nil
+        for _, planned in ipairs(plan or {}) do
+            if RAID_SELECTOR_BINDING_SET[planned.binding] then
+                local slot = tonumber(sequence.slot)
+                if slot and bindingOwners[slot] and ClearOverrideBindings then ClearOverrideBindings(bindingOwners[slot]) end
+                break
+            end
+        end
+    end
+
+    for position = 1, RAID_HEALING_POSITIONS do
+        local entry = byPosition[position]
+        local button = secureButtons[entry.slot]
+        if ClearOverrideBindings then ClearOverrideBindings(bindingOwners[entry.slot]) end
+        ConfigureSlot(entry.slot, entry.sequence, entry.runtime)
+        button:SetAttribute("activeVersion", entry.version.id)
+        button:SetAttribute("raidHealingActive", true)
+        button:SetAttribute("raidHealingPosition", position)
+        button:SetAttribute("raidHealingGroup", selectedGroup)
+        button:SetAttribute("raidHealingBlockCount", #entry.runtime.blocks)
+        for group = 1, RAID_HEALING_GROUPS do
+            local unit = groups[group][position] or "none"
+            for blockIndex, macroText in ipairs(entry.runtime.blocks) do
+                button:SetAttribute("raidGroup" .. group .. "Block" .. blockIndex, TransformRaidHealingText(macroText, unit))
+            end
+            button:SetAttribute("raidGroup" .. group .. "Modifier", entry.runtime.modifierText and TransformRaidHealingText(entry.runtime.modifierText, unit) or nil)
+            button:SetAttribute("raidCursor" .. group, 1)
+        end
+
+        local plan, planError = BuildBindingPlan(entry.binding, entry.runtime)
+        if not plan then
+            table.insert(errors, tostring(entry.sequence.name) .. ": " .. tostring(planError))
+        else
+            for _, planned in ipairs(plan) do
+                local ok, bindError = pcall(SetOverrideBindingClick, bindingOwners[entry.slot], true, planned.binding, button:GetName(), planned.button)
+                if not ok then table.insert(errors, tostring(bindError)); break end
+            end
+        end
+    end
+
+    if #errors == 0 then
+        for group = 1, RAID_HEALING_GROUPS do
+            local selector = raidSelectorButtons[group]
+            selector:SetAttribute("useOnKeyDown", GetCVarBool and GetCVarBool("ActionButtonUseKeyDown") or false)
+            for position = 1, RAID_HEALING_POSITIONS do
+                if selector.SetFrameRef then selector:SetFrameRef("position" .. position, secureButtons[byPosition[position].slot]) end
+            end
+            local ok, bindError = pcall(SetOverrideBindingClick, raidSelectorOwner, true, RAID_SELECTOR_BINDINGS[group], selector:GetName(), "LeftButton")
+            if not ok then table.insert(errors, tostring(bindError)); break end
+        end
+    end
+
+    if #errors > 0 then
+        local failureMessage = table.concat(errors, " ")
+        if ClearOverrideBindings then ClearOverrideBindings(raidSelectorOwner) end
+        for _, entry in ipairs(marked) do
+            if entry.slot and bindingOwners[entry.slot] and ClearOverrideBindings then ClearOverrideBindings(bindingOwners[entry.slot]) end
+        end
+        ClearRaidHealingAttributes()
+        Library.raidHealingPrepared = false
+        Library.pendingRaidHealingRefresh = false
+        Library.ApplyAll("Raid Healing preparation failed; normal versions restored")
+        return SetRaidHealingStatus(false, false, failureMessage, details, reason)
+    end
+
+    Library.pendingRaidHealingRefresh = false
+    return SetRaidHealingStatus(true, true, "Raid Healing is ready. Group " .. tostring(selectedGroup) .. " is selected.", details, reason)
+end
+
+function Library.RefreshRaidHealing(reason)
+    return RefreshRaidHealing(reason)
+end
+
+function Library.PrepareRaidHealing()
+    if not InRaidGroup() then return false, "Raid Healing can be prepared after you join a raid." end
+    Library.raidHealingPrepared = true
+    return RefreshRaidHealing("manual preparation")
+end
+
+function Library.EndRaidHealing()
+    if InCombat() then return false, "Raid Healing can be ended after combat." end
+    Library.raidHealingPrepared = false
+    return Library.ApplyAll("Raid Healing ended manually")
+end
+
+function Library.GetRaidHealingStatus()
+    return DeepCopy(Library.raidHealingStatus or {
+        ready = false,
+        active = false,
+        message = "Mark one saved Raid version for each Raid Healing Position 1-5.",
+        selectedGroup = 1,
+        details = {},
+    })
+end
+
+function Library.SetRaidHealingIndicator(frame, markers)
+    if InCombat() then return false end
+    Library.raidHealingIndicator = frame
+    Library.raidHealingIndicatorMarkers = type(markers) == "table" and markers or {}
+    for _, selector in ipairs(raidSelectorButtons) do
+        if selector.SetFrameRef then
+            for group, marker in ipairs(Library.raidHealingIndicatorMarkers) do selector:SetFrameRef("indicator" .. group, marker) end
+        end
+    end
+    local status = Library.GetRaidHealingStatus()
+    if frame and frame.SetShown then frame:SetShown(status.active == true) end
+    for group, marker in ipairs(Library.raidHealingIndicatorMarkers) do marker:SetShown(status.active == true and group == status.selectedGroup) end
+    return true
 end
 
 local function PurgeExpired(collection)
@@ -1447,6 +1839,7 @@ function Library.ApplyAll(reason)
 
     Library.pendingApply = false
     Library.lastAppliedReason = tostring(reason or "manual")
+    RefreshRaidHealing(reason or "all sequences applied", true)
     if #errors > 0 then
         Library.lastMessage = table.concat(errors, " ")
         return false, Library.lastMessage
@@ -1504,6 +1897,7 @@ function Library.ApplySequence(sequenceID, reason)
     end
     Library.lastMessage = tostring(sequence.name) .. " was configured without resetting other sequences."
     Library.lastAppliedReason = tostring(reason or "sequence apply")
+    RefreshRaidHealing(reason or "sequence applied")
     return true, Library.lastMessage
 end
 
@@ -1902,6 +2296,7 @@ function Library.ResetAllRuntime(reason)
     for _, button in ipairs(secureButtons) do
         if button:GetAttribute("sequenceId") then
             button:SetAttribute("cursor", 1)
+            for group = 1, RAID_HEALING_GROUPS do button:SetAttribute("raidCursor" .. group, 1) end
             button:SetAttribute("lastResetReason", tostring(reason or "reset"))
             button:SetAttribute("resetCount", (tonumber(button:GetAttribute("resetCount")) or 0) + 1)
         end
@@ -2174,6 +2569,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
         else
             Library.ResetAllRuntime("combat end")
         end
+        if not Library.pendingClearBindings then RefreshRaidHealing("combat ended") end
         return
     end
     if event == "PLAYER_SPECIALIZATION_CHANGED" and (arg1 == nil or arg1 == "player") then
@@ -2183,12 +2579,16 @@ events:SetScript("OnEvent", function(_, event, arg1)
         return
     end
     if event == "PLAYER_ENTERING_WORLD" then
-        local function settleRoster() Library.RefreshGroupTargetPositions("world entered") end
+        local function settleRoster()
+            Library.RefreshGroupTargetPositions("world entered")
+            RefreshRaidHealing("world entered")
+        end
         if C_Timer and C_Timer.After then C_Timer.After(5, settleRoster) else settleRoster() end
         return
     end
     if event == "GROUP_ROSTER_UPDATE" then
         Library.RefreshGroupTargetPositions("group roster changed")
+        RefreshRaidHealing("raid roster changed")
         return
     end
     if event == "SPELLS_CHANGED" or event == "PLAYER_TALENT_UPDATE" then
@@ -2198,5 +2598,7 @@ end)
 
 Library.secureButtons = secureButtons
 Library.bindingOwners = bindingOwners
+Library.raidSelectorButtons = raidSelectorButtons
+Library.RAID_SELECTOR_BINDINGS = RAID_SELECTOR_BINDINGS
 
 return Library
