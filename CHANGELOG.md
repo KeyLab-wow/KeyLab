@@ -1,5 +1,55 @@
 # KeyLab Changelog
 
+## Version 2.0.93 - Home Content Authoring Template
+
+- Adds an authoritative Home content template covering Sunday weekly News & Events, PTR placement, dated hotfixes, S2 Common Issues, and the established themed segmented reader.
+- Documents the exact data shapes for clickable topics, classes, specializations, instances, bosses, headings, bullet changes, paragraphs, and blue Developers’ Notes cards.
+- Makes future `this-week-in-wow-YYYY-MM-DD` source entries automatically use their section headings as clickable weekly topics instead of limiting that behavior to the September 6 edition.
+
+## Version 2.0.92 - Sectioned Home Readers
+
+- Rebuilds News & Events as Sunday-ending weekly editions for August 10 through September 6, replacing fifteen separate article entries with four This Week in WoW entries.
+- Uses the established themed segmented navigation throughout the weekly reader: players can select News & Events, PTR Preview, Class Changes, or Player versus Player when available, then select the exact topic or class they want to read.
+- Changes dated hotfixes from long accordion stacks to the same category and class/instance selection view used by KeyLab's class-tuning reader while retaining specialization and boss sections beneath the chosen entry.
+- Applies the same compact reader to S2 Common Issues while preserving its single full-width tracker, In-Game Issues and Technical Issues top choices, and individually selectable issue articles.
+
+## Version 2.0.91 - Sunday Weekly Roundup
+
+- Consolidates the September 1-7 news into one Sunday This Week in WoW article instead of presenting KeyLab as a stream of individual news posts.
+- Moves Midnight 12.1.5 PTR coverage out of Game Updates and into the weekly News & Events roundup; Game Updates now contains only dated hotfix records.
+- Gives Demon Hunter, Hunter, and Warrior separate PTR highlight sections and includes the week's BlizzCon, esports, viewing rewards, raid opening, mount, Sparks, and community highlights in the same article.
+
+## Version 2.0.90 - Restored Hotfix Navigation
+
+- Restores the established Game Updates hotfix hierarchy for the August 31 and September 1-4 entries: Categories open into class or instance accordions, with specialization and raid-boss sections beneath them.
+- Keeps category-wide, class-wide, and instance-wide fixes in their correct parent section while preserving the supplied hotfix wording.
+
+## Version 2.0.89 - September News and Hotfixes
+
+- Adds concise News & Events coverage for BlizzCon 2026, its viewing rewards, the AWC and MDI Grand Finals, The Venomous Abyss Raid Finder Wing 3, Midnight 12.1.5, the Sporebearer Fungal Strider, the Roofus Pack charity milestone, and the September 4 WoW Weekly roundup.
+- Updates the existing Missing Sparks of Tides article with Blizzard's September 2 status instead of creating a duplicate.
+- Adds the September 3 Midnight 12.1.5 PTR Development Notes to Game Updates, including the new content, class changes, world systems, and interface updates.
+- Adds the supplied official hotfix wording as one entry per date for August 31 and September 1-4, while de-duplicating the two overlapping hotfix source copies.
+
+## Version 2.0.88 - Raid Healing Group Paging
+
+- Adds dedicated Raid Healing Position 1-5 templates to Macro Sequencer versions. These versions use the KeyLab-only `raidmember` / `@raidmember` placeholder and do not need to replace the player's normal active Mythic+ versions.
+- Adds Prepare Raid Healing to the Preparation Panel. Preparation securely preloads each selected raid group's five roster positions out of combat, keeps an independent sequence cursor for each group, and refuses partial or duplicate position setups.
+- Uses INS, HOME, DEL, and END to select raid Groups 1-4, with Ctrl plus those keys selecting Groups 5-8. A compact movable Raid Healing indicator shows the selected group while the Preparation Panel is hidden for combat.
+- Temporarily releases ordinary KeyLab bindings on the eight group-selector keys while Raid Healing is prepared, then automatically restores normal active versions and bindings when paging ends or the player leaves the raid. Party, Mythic+, Macro Targets, and ordinary Macro Sequencer behavior remain unchanged.
+
+## Version 2.0.87 - Reliable Macro Target Saving
+
+- Makes Save Target and Restore Original rebuild only the marked macro's sequence, so unrelated unfinished or invalid sequences cannot reject and roll back a temporary party or raid target.
+- Preserves the existing out-of-combat and grouped requirements while leaving all other sequences and their current positions untouched.
+
+## Version 2.0.86 - Popup Controls and Compact Great Vault Reminder
+
+- Adds close buttons to both the Preparation Panel and its tiny handle, plus a direct Open Preparation Panel button in Group Dashboard.
+- Adds a Settings option that suppresses automatic helper windows while preserving manual openings, confirmations, errors, and the explicitly started Stat Goal Matcher. Manual buttons in Settings open the Preparation Panel, Gear Target List, Craft Shopping List, and Great Vault reminder.
+- Applies the automatic-popup preference to the Preparation Panel, Group Finder and Auction House helpers, dungeon and raid completion reminders, Great Vault reminder, and macro-target position warning.
+- Changes the Great Vault reminder to a narrower, single-column layout and adds an item icon beside every saved Target and Alternative.
+
 ## Version 2.0.85 - Stat Matcher Weapon Setups
 
 - Adds spec-aware weapon setup rules to Stat Goal Matcher based on the saved SimulationCraft 12.1 spell requirements. Retribution, Arms, Unholy, and Survival require a two-handed setup; Enhancement requires two compatible one-handed weapons.
