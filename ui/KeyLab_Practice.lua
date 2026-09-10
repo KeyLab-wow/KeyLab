@@ -674,12 +674,49 @@ local function ScheduleSessionRefreshes(sessionID)
     end
 end
 
+local function InCombat()
+    return InCombatLockdown and InCombatLockdown()
+end
+
+function Practice:TryReopenCompletedSession()
+    if not self.pendingCompletedSessionID or InCombat() then
+        return false
+    end
+    if not (KeyLab.UI and KeyLab.UI.Show and KeyLab.UI.SelectTab) then
+        return false
+    end
+
+    self.pendingCompletedSessionID = nil
+    KeyLab.UI:Show()
+    KeyLab.UI:SelectTab("Practice")
+    RefreshPracticeSoon()
+    return true
+end
+
+function Practice:QueueCompletedSession(session)
+    if type(session) ~= "table" or not session.id then
+        return false
+    end
+
+    self.selectedSessionID = session.id
+    self.selectedTypeFilter = nil
+    self.selectedDurationFilter = session.targetDurationSeconds or "manual"
+    self.selectedStatusFilter = "all"
+    self.pendingCompletedSessionID = session.id
+    ScheduleSessionRefreshes(session.id)
+    return self:TryReopenCompletedSession()
+end
+
 local function EnsureMonitor()
     if Practice.monitor then return Practice.monitor end
 
     local frame = CreateFrame("Frame", "KeyLabPracticeMonitor", UIParent, "BackdropTemplate")
     frame:SetSize(360, 180)
-    frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then
+        KeyLab.UI:AnchorPopupToPreparationPanel(frame)
+    else
+        frame:SetPoint("RIGHT", UIParent, "RIGHT", -24, 0)
+    end
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetFrameLevel(950)
     frame:EnableMouse(true)
@@ -715,15 +752,7 @@ local function EnsureMonitor()
             frame.pendingStop = false
             frame.stopRetryElapsed = 0
             frame:Hide()
-            Practice.selectedSessionID = resultOrError.id
-            Practice.selectedTypeFilter = nil
-            Practice.selectedDurationFilter = resultOrError.targetDurationSeconds or "manual"
-            Practice.selectedStatusFilter = "all"
-            if KeyLab.UI and KeyLab.UI.Show then
-                KeyLab.UI:Show()
-                KeyLab.UI:SelectTab("Practice")
-            end
-            ScheduleSessionRefreshes(resultOrError.id)
+            Practice:QueueCompletedSession(resultOrError)
             return true
         end
 
@@ -804,7 +833,19 @@ function Practice:ShowMonitor()
     if monitor.stop then
         monitor.stop:SetText("Stop Session")
     end
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then
+        KeyLab.UI:AnchorPopupToPreparationPanel(monitor)
+    end
     monitor:Show()
+end
+
+if CreateFrame then
+    local reopenEvents = CreateFrame("Frame")
+    reopenEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
+    reopenEvents:SetScript("OnEvent", function()
+        Practice:TryReopenCompletedSession()
+    end)
+    Practice.reopenEvents = reopenEvents
 end
 
 function Practice:SelectSession(session)

@@ -335,6 +335,8 @@ local function NewCard(f, title, accentColor)
     card.showItemIcons = false
     card.singleColumnGroups = false
     card.singleColumnItems = false
+    card.itemIconIndex = 0
+    for _, icon in ipairs(card.itemIcons or {}) do icon:Hide() end
     card:Show()
 
     if title and title ~= "" then
@@ -377,6 +379,26 @@ local function AddCardLine(card, text, color, indent, template, wrap)
     fs:Show()
     card.cursorY = card.cursorY - lineHeight
     return fs
+end
+
+local function AddIconItemLine(card, item, text, color)
+    card.itemIcons = card.itemIcons or {}
+    card.itemIconIndex = (card.itemIconIndex or 0) + 1
+    local y = card.cursorY
+    local line = AddCardLine(card, tostring(text or "") .. "\n" .. ItemLootSpecLine(item),
+        color or CFG.colors.text, 40, "GameFontHighlightSmall", true)
+    line:SetJustifyV("MIDDLE")
+    local icon = card.itemIcons[card.itemIconIndex]
+    if not icon then
+        icon = card:CreateTexture(nil, "ARTWORK")
+        card.itemIcons[card.itemIconIndex] = icon
+    end
+    icon:ClearAllPoints()
+    icon:SetPoint("TOPLEFT", card, "TOPLEFT", 18, y - 1)
+    icon:SetSize(28, 28)
+    icon:SetTexture(GetItemIconTexture(item and item.itemID))
+    icon:Show()
+    return line
 end
 
 local function AddColumnLine(card, column, text, color, indent, template, wrap)
@@ -485,12 +507,12 @@ local function AddRollGroupPanel(card, column, group, fullWidth)
             row:SetVertexColor(0.030, 0.060, 0.115, 0.72)
         end
         row:Show()
-        line:ClearAllPoints()
         local textOffset = showItemIcons and 39 or 0
-        line:SetPoint("TOPLEFT", panel, "TOPLEFT", itemX + textOffset, rowY - 1)
-        line:SetWidth(itemColumnWidth - textOffset)
+        line:ClearAllPoints()
+        line:SetPoint("LEFT", row, "LEFT", 3 + textOffset, 0)
+        line:SetWidth(itemColumnWidth - textOffset - 3)
         line:SetWordWrap(true)
-        line:SetJustifyV("TOP")
+        line:SetJustifyV("MIDDLE")
         line:SetTextColor(unpack(item.isTier and CFG.colors.gold or CFG.colors.text))
         line:SetText(label)
         local height = WrappedRowHeight(line, 38)
@@ -505,7 +527,7 @@ local function AddRollGroupPanel(card, column, group, fullWidth)
                 panel.itemIcons[index] = icon
             end
             icon:ClearAllPoints()
-            icon:SetPoint("TOPLEFT", panel, "TOPLEFT", itemX, rowY - 4)
+            icon:SetPoint("LEFT", row, "LEFT", 3, 0)
             icon:SetSize(31, 31)
             icon:SetTexture(GetItemIconTexture(item.itemID))
             icon:Show()
@@ -537,6 +559,7 @@ local function AddDungeonRunPanel(card, column, dungeonName, badgeText, rows, ac
         panel = CreateFrame("Frame", nil, card, "BackdropTemplate")
         panel.itemLines = {}
         panel.itemRows = {}
+        panel.itemIcons = {}
         panel.title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         panel.title:SetJustifyH("LEFT")
         panel.kind = panel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
@@ -601,10 +624,10 @@ local function AddDungeonRunPanel(card, column, dungeonName, badgeText, rows, ac
         row:Show()
 
         line:ClearAllPoints()
-        line:SetPoint("TOPLEFT", panel, "TOPLEFT", 13, rowY - 2)
-        line:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -13, rowY - 2)
-        line:SetWidth(columnWidth - 26)
-        line:SetJustifyV(rowData.item and "TOP" or "MIDDLE")
+        local textOffset = rowData.item and 37 or 0
+        line:SetPoint("LEFT", row, "LEFT", 5 + textOffset, 0)
+        line:SetWidth(columnWidth - 26 - textOffset)
+        line:SetJustifyV("MIDDLE")
         line:SetWordWrap(true)
         line:SetTextColor(unpack(rowData.color or CFG.colors.text))
         line:SetText(tostring(rowData.text or "") .. (rowData.item and ("\n" .. ItemLootSpecLine(rowData.item)) or ""))
@@ -613,10 +636,25 @@ local function AddDungeonRunPanel(card, column, dungeonName, badgeText, rows, ac
         row:SetHeight(rowHeight - 2)
         rowOffset = rowOffset + rowHeight
         line:Show()
+        local icon = panel.itemIcons[index]
+        if rowData.item then
+            if not icon then
+                icon = panel:CreateTexture(nil, "ARTWORK")
+                panel.itemIcons[index] = icon
+            end
+            icon:ClearAllPoints()
+            icon:SetPoint("LEFT", row, "LEFT", 6, 0)
+            icon:SetSize(29, 29)
+            icon:SetTexture(GetItemIconTexture(rowData.item.itemID))
+            icon:Show()
+        elseif icon then
+            icon:Hide()
+        end
     end
     for index = #rows + 1, #(panel.itemLines or {}) do
         panel.itemLines[index]:Hide()
         if panel.itemRows[index] then panel.itemRows[index]:Hide() end
+        if panel.itemIcons[index] then panel.itemIcons[index]:Hide() end
     end
 
     panelHeight = 43 + rowOffset
@@ -677,9 +715,8 @@ local function AddSavedGearCard(f, title, groups, bagItems, alternativeBudget)
                 local slotName = item.slotInstance or item.slot or "Gear"
                 local itemName = StripColorCodes(item.name or ("Item " .. tostring(item.itemID)))
                 local suffix = TargetTrackSuffix(item, bagItems)
-                AddCardLine(card, "•  " .. tostring(slotName) .. " - " .. itemName .. suffix,
-                    CFG.colors.text, 16)
-                AddCardLine(card, ItemLootSpecLine(item), CFG.colors.gold, 30, "GameFontDisableSmall", true)
+                AddIconItemLine(card, item, tostring(slotName) .. " - " .. itemName .. suffix,
+                    CFG.colors.text)
             end
             for _, item in ipairs(group.alternatives or {}) do
                 if alternativeBudget.value > 0 then
@@ -691,9 +728,8 @@ local function AddSavedGearCard(f, title, groups, bagItems, alternativeBudget)
                     if bagTrack == "Hero" or bagTrack == "Myth" then
                         suffix = suffix .. " (In Bags - " .. bagTrack .. ")"
                     end
-                    AddCardLine(card, "◇  " .. tostring(slotName) .. " - " .. itemName .. suffix,
-                        CFG.colors.blue, 16)
-                    AddCardLine(card, ItemLootSpecLine(item), CFG.colors.gold, 30, "GameFontDisableSmall", true)
+                    AddIconItemLine(card, item, tostring(slotName) .. " - " .. itemName .. suffix,
+                        CFG.colors.blue)
                     alternativeBudget.value = alternativeBudget.value - 1
                     alternativeBudget.shown = alternativeBudget.shown + 1
                 end
@@ -1369,6 +1405,9 @@ local function ShowCompletionPlan(plan, title, subtitle, cardTitle, description,
     local screenHeight = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 760
     local maximumHeight = math.min(680, math.max(390, screenHeight - 80))
     f:SetHeight(math.max(390, math.min(maximumHeight, 108 + contentHeight)))
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then
+        KeyLab.UI:AnchorPopupToPreparationPanel(f)
+    end
     f:Show()
     if f.Raise then f:Raise() end
     return true
@@ -1425,6 +1464,9 @@ local function ShowGreatVaultTargets(plan)
     local screenHeight = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 760
     local maximumHeight = math.min(680, math.max(390, screenHeight - 80))
     f:SetHeight(math.max(390, math.min(maximumHeight, 108 + contentHeight)))
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then
+        KeyLab.UI:AnchorPopupToPreparationPanel(f)
+    end
     f:Show()
     if f.Raise then f:Raise() end
     return true
@@ -1508,6 +1550,9 @@ function GearWindow.ShowManual()
     if not f.positionApplied then ApplyShoppingWindowGeometry(f) end
     f.manualOpen = true
     GearWindow.Refresh()
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then
+        KeyLab.UI:AnchorPopupToPreparationPanel(f)
+    end
     f:Show()
 end
 
@@ -1534,6 +1579,9 @@ function GearWindow.ShowForLFG()
     f.currentResultNames = nil
     if not f.positionApplied then ApplyShoppingWindowGeometry(f) end
     if needsRefresh then GearWindow.Refresh() end
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then
+        KeyLab.UI:AnchorPopupToPreparationPanel(f)
+    end
     f:Show()
     return true
 end

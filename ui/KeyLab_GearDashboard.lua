@@ -488,6 +488,10 @@ function GearDashboard:Build()
     self.itemLevelValue = MakeText(self.itemLevelCard, "-", "GameFontNormalLarge", 32, COLORS.purple, "CENTER")
     self.itemLevelValue:SetPoint("CENTER", self.itemLevelCard, "CENTER", 0, -5)
     self.itemLevelValue:SetSize(CENTER_WIDTH - 20, 34)
+    self.guideListBadge = MakeBadge(self.itemLevelCard, CENTER_WIDTH - 28)
+    self.guideListBadge:SetHeight(18)
+    self.guideListBadge.text:SetFont(STANDARD_TEXT_FONT, 9, "")
+    self.guideListBadge:SetPoint("TOP", self.itemLevelCard, "TOP", 0, -5)
     self.itemLevelSubtext = MakeText(self.itemLevelCard, "", "GameFontDisableSmall", 9, COLORS.muted, "CENTER")
     self.itemLevelSubtext:SetPoint("BOTTOM", self.itemLevelCard, "BOTTOM", 0, 8)
     self.itemLevelSubtext:SetSize(CENTER_WIDTH - 20, 14)
@@ -678,6 +682,21 @@ local function RefreshDashboard(self)
     local craftedPlans = crafting and crafting.GetDashboardPlans and crafting.GetDashboardPlans(state.specID, state.plansBySlot) or {}
     self.itemLevelValue:SetText(FormatItemLevel(state.itemLevel))
     self.itemLevelSubtext:SetText(state.specName and ("Current Spec: " .. state.specName) or "Current Spec")
+    local guide = KeyLab.GuideRecommendations and KeyLab.GuideRecommendations.GetActiveProfileMatch
+        and KeyLab.GuideRecommendations.GetActiveProfileMatch(state.specID) or nil
+    if guide then
+        SetBadge(self.guideListBadge, "Using: " .. tostring(guide.source or guide.sourceID or "Guide") .. " • " .. tostring(guide.profileName or "Guide List"), COLORS.gold)
+        self.itemLevelCard.title:ClearAllPoints(); self.itemLevelCard.title:SetPoint("TOP", self.itemLevelCard, "TOP", 0, -25)
+        self.itemLevelValue:SetFont(STANDARD_TEXT_FONT, 25, "")
+        self.itemLevelValue:ClearAllPoints(); self.itemLevelValue:SetPoint("CENTER", self.itemLevelCard, "CENTER", 0, -10)
+        self.itemLevelSubtext:ClearAllPoints(); self.itemLevelSubtext:SetPoint("BOTTOM", self.itemLevelCard, "BOTTOM", 0, 3)
+    else
+        self.guideListBadge:Hide()
+        self.itemLevelCard.title:ClearAllPoints(); self.itemLevelCard.title:SetPoint("TOP", self.itemLevelCard, "TOP", 0, -9)
+        self.itemLevelValue:SetFont(STANDARD_TEXT_FONT, 32, "")
+        self.itemLevelValue:ClearAllPoints(); self.itemLevelValue:SetPoint("CENTER", self.itemLevelCard, "CENTER", 0, -5)
+        self.itemLevelSubtext:ClearAllPoints(); self.itemLevelSubtext:SetPoint("BOTTOM", self.itemLevelCard, "BOTTOM", 0, 8)
+    end
     for _, slotName in ipairs(Analysis().LeftSlots or {}) do self:RefreshSlotRow(self.leftSlots[slotName], state.plansBySlot[slotName], craftedPlans[slotName]) end
     for _, slotName in ipairs(Analysis().RightSlots or {}) do self:RefreshSlotRow(self.rightSlots[slotName], state.plansBySlot[slotName], craftedPlans[slotName]) end
     self:RefreshTier(state)

@@ -276,7 +276,11 @@ function Window.Show(manual)
     local result = KeyLab.CraftingAnalysis and KeyLab.CraftingAnalysis.GetShoppingList and KeyLab.CraftingAnalysis.GetShoppingList() or nil
     if not manual and (not AutomaticHelperPopupsEnabled() or auctionHouseSessionClosed
         or not result or (result.planCount or 0) == 0) then return end
-    CreateWindow(); Window.Refresh(); frame:Show(); frame:Raise()
+    CreateWindow(); Window.Refresh()
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then
+        KeyLab.UI:AnchorPopupToPreparationPanel(frame)
+    end
+    frame:Show(); frame:Raise()
 end
 
 function Window.Hide() if frame then frame:Hide() end end

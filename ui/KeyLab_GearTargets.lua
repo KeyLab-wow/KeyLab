@@ -1358,7 +1358,8 @@ function GearTargets:CreateMatcherResultsPopup()
     if self.matcherResultsPopup then return self.matcherResultsPopup end
     local popup = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     popup:SetSize(840, 680)
-    popup:SetPoint("CENTER")
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then KeyLab.UI:AnchorPopupToPreparationPanel(popup)
+    else popup:SetPoint("RIGHT", UIParent, "RIGHT", -24, 0) end
     popup:SetFrameStrata("FULLSCREEN_DIALOG")
     popup:SetFrameLevel(1100)
     if popup.SetToplevel then popup:SetToplevel(true) end
@@ -1416,6 +1417,7 @@ function GearTargets:ShowMatcherResults(result)
         RenderMatcherResults(popup, result)
         popup.renderedResult = result
     end
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then KeyLab.UI:AnchorPopupToPreparationPanel(popup) end
     popup:Show()
     if popup.Raise then popup:Raise() end
     return true
@@ -1529,7 +1531,8 @@ function GearTargets:CreatePreparationPopup()
     if self.preparationPopup then return self.preparationPopup end
     local popup = CreateFrame("Frame", "KeyLabStatGoalMatcherPreparation", UIParent, "BackdropTemplate")
     popup:SetSize(570, 792)
-    popup:SetPoint("CENTER")
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then KeyLab.UI:AnchorPopupToPreparationPanel(popup)
+    else popup:SetPoint("RIGHT", UIParent, "RIGHT", -24, 0) end
     popup:SetFrameStrata("FULLSCREEN_DIALOG")
     popup:SetFrameLevel(1000)
     if popup.SetToplevel then popup:SetToplevel(true) end
@@ -1709,6 +1712,7 @@ function GearTargets:OpenPreparationPopup()
     popup.run:SetEnabled(false)
     popup.run.label:SetText("Start in 5")
     popup.run.label:SetTextColor(unpack(CFG.colors.muted))
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then KeyLab.UI:AnchorPopupToPreparationPanel(popup) end
     popup:Show()
     popup:Raise()
 end

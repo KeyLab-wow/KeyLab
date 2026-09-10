@@ -491,7 +491,10 @@ end
 function Sequencer:EnsureGroupTargetDialog()
     if self.groupTargetDialog then return self.groupTargetDialog end
     local dialog=CreateFrame("Frame","KeyLabGroupTargetNameDialog",UIParent,"BackdropTemplate")
-    dialog:SetSize(450,204); dialog:SetPoint("CENTER"); dialog:SetFrameStrata("FULLSCREEN_DIALOG"); dialog:SetFrameLevel(9500)
+    dialog:SetSize(450,204)
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then KeyLab.UI:AnchorPopupToPreparationPanel(dialog)
+    else dialog:SetPoint("RIGHT",UIParent,"RIGHT",-24,0) end
+    dialog:SetFrameStrata("FULLSCREEN_DIALOG"); dialog:SetFrameLevel(9500)
     Style(dialog,COLORS.bg,COLORS.gold); dialog:EnableMouse(true); dialog:Hide()
     Theme.AddPopupLogo(dialog)
     dialog.title=Text(dialog,"Name This Group Target","GameFontNormal",17,COLORS.gold); dialog.title:SetPoint("TOPLEFT",66,-16); dialog.title:SetSize(366,24)
@@ -530,7 +533,9 @@ function Sequencer:ShowGroupTargetDialog(index)
         local dialog=Sequencer:EnsureGroupTargetDialog(); dialog.blockIndex=index
         local marked=type(block.groupTarget)=="table"
         dialog.nameBox:SetText(marked and tostring(block.groupTarget.name or "") or "")
-        dialog.remove:SetShown(marked); dialog:Show(); dialog.nameBox:SetFocus(); dialog.nameBox:HighlightText()
+        dialog.remove:SetShown(marked)
+        if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then KeyLab.UI:AnchorPopupToPreparationPanel(dialog) end
+        dialog:Show(); dialog.nameBox:SetFocus(); dialog.nameBox:HighlightText()
     end)
 end
 function Sequencer:DeleteMacroBlock()
@@ -798,7 +803,10 @@ function Sequencer:EnsureCaptureOverlay()
     local overlay=CreateFrame("Frame","KeyLabSequencerBindingCapture",UIParent,"BackdropTemplate")
     overlay:SetAllPoints(UIParent); overlay:SetFrameStrata("TOOLTIP"); overlay:SetFrameLevel(10000); if overlay.SetToplevel then overlay:SetToplevel(true) end
     Style(overlay,{0.01,0.02,0.04,0.88},COLORS.gold); overlay:Hide(); overlay:EnableMouse(true); overlay:EnableKeyboard(true); overlay:SetPropagateKeyboardInput(false)
-    local box=Panel(overlay,0,0,430,128,COLORS.panel,COLORS.gold); box:ClearAllPoints(); box:SetPoint("CENTER"); box:SetFrameLevel(10001)
+    local box=Panel(overlay,0,0,430,128,COLORS.panel,COLORS.gold); box:ClearAllPoints()
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then KeyLab.UI:AnchorPopupToPreparationPanel(box)
+    else box:SetPoint("RIGHT",UIParent,"RIGHT",-24,0) end
+    box:SetFrameLevel(10001); overlay.popupBox=box
     Theme.AddPopupLogo(box)
     local title=Text(box,"Press a key or mouse button","GameFontNormalLarge",17,COLORS.gold,"CENTER"); title:SetPoint("TOPLEFT",66,-22); title:SetSize(350,24)
     local help=Text(box,"Escape cancels. Mouse buttons 1 and 2 stay reserved.","GameFontHighlightSmall",11,COLORS.muted,"CENTER"); help:SetPoint("TOP",0,-58); help:SetSize(400,20)
@@ -810,7 +818,9 @@ end
 function Sequencer:StartBindingCapture(target)
     if self.viewOnly then self:SetStatus("Reference examples cannot be assigned a key or mouse binding.","error"); return end
     if InCombat() then self:SetStatus("Bindings cannot be changed during combat.","error"); return end
-    self:EnsureCaptureOverlay(); self.captureTarget=target or "sequence"; self.captureOverlay:Show(); self.captureOverlay:EnableKeyboard(true); if self.captureOverlay.Raise then self.captureOverlay:Raise() end
+    self:EnsureCaptureOverlay(); self.captureTarget=target or "sequence"
+    if self.captureOverlay.popupBox and KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then KeyLab.UI:AnchorPopupToPreparationPanel(self.captureOverlay.popupBox) end
+    self.captureOverlay:Show(); self.captureOverlay:EnableKeyboard(true); if self.captureOverlay.Raise then self.captureOverlay:Raise() end
 end
 function Sequencer:AcceptCapturedBinding(binding)
     if not binding then return end
@@ -903,7 +913,10 @@ end
 
 function Sequencer:ShowRestoreNamePrompt(entry,initialName,message)
     if not self.restoreNameDialog then
-        local dialog=Panel(UIParent,0,0,430,154,COLORS.panel,COLORS.gold); dialog:ClearAllPoints(); dialog:SetPoint("CENTER"); dialog:SetFrameStrata("TOOLTIP"); dialog:SetFrameLevel(10000); dialog:Hide()
+        local dialog=Panel(UIParent,0,0,430,154,COLORS.panel,COLORS.gold); dialog:ClearAllPoints()
+        if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then KeyLab.UI:AnchorPopupToPreparationPanel(dialog)
+        else dialog:SetPoint("RIGHT",UIParent,"RIGHT",-24,0) end
+        dialog:SetFrameStrata("TOOLTIP"); dialog:SetFrameLevel(10000); dialog:Hide()
         local title=Text(dialog,"Restore Sequence with a New Name","GameFontNormalLarge",16,COLORS.gold,"CENTER"); title:SetPoint("TOP",0,-16); title:SetSize(400,22)
         dialog.message=Text(dialog,"","GameFontHighlightSmall",11,COLORS.red,"CENTER"); dialog.message:SetPoint("TOP",0,-46); dialog.message:SetSize(400,30)
         dialog.nameBox=EditBox(dialog,300); dialog.nameBox:SetPoint("TOP",0,-82)
@@ -912,7 +925,9 @@ function Sequencer:ShowRestoreNamePrompt(entry,initialName,message)
         self.restoreNameDialog=dialog
     end
     local dialog=self.restoreNameDialog; dialog.entry=entry; dialog.message:SetText(message or "Choose a unique sequence name.")
-    dialog.nameBox:SetText(tostring(initialName or "")); dialog.nameBox:SetFocus(); dialog.nameBox:HighlightText(); dialog:Show()
+    dialog.nameBox:SetText(tostring(initialName or "")); dialog.nameBox:SetFocus(); dialog.nameBox:HighlightText()
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then KeyLab.UI:AnchorPopupToPreparationPanel(dialog) end
+    dialog:Show()
 end
 
 function Sequencer:AttemptRestore(entry,requestedName)

@@ -777,6 +777,12 @@ local function FloatingPositionStore()
     return KeyLabDB.groupDashboardUI.floatingPositions
 end
 
+local function PreparationPanelStore()
+    KeyLabDB = type(KeyLabDB) == "table" and KeyLabDB or {}
+    KeyLabDB.groupDashboardUI = type(KeyLabDB.groupDashboardUI) == "table" and KeyLabDB.groupDashboardUI or {}
+    return KeyLabDB.groupDashboardUI
+end
+
 local function RestoreFloatingPosition(frame, key, defaultPoint, defaultRelativePoint, defaultX, defaultY)
     local position = FloatingPositionStore()[key]
     frame:ClearAllPoints()
@@ -827,10 +833,42 @@ function Dashboard:EnsureGroupSnapshot()
     frame.closeButton = close
     close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -10)
     close:SetScript("OnClick", function() Dashboard:ClosePreparationPanel() end)
+
+    local function SectionCard(top, height)
+        local card = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        card:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, top)
+        card:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, top)
+        card:SetHeight(height)
+        Theme.StylePanel(card, Colors.noteBg or Colors.panel, Colors.softBorder or Colors.border, 1)
+        -- Keep the card as a border-only organizer. A child-frame fill renders
+        -- above FontStrings owned by the panel and makes their text look buried.
+        card:SetBackdropColor(0, 0, 0, 0)
+        return card
+    end
+    frame.characterCard = SectionCard(-58, 216)
+    frame.raidHealingCard = SectionCard(-282, 70)
+    frame.quickCard = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    frame.quickCard:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 4)
+    frame.quickCard:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -10, 4)
+    frame.quickCard:SetHeight(144)
+    Theme.StylePanel(frame.quickCard, Colors.noteBg or Colors.panel, Colors.softBorder or Colors.border, 1)
+    frame.quickCard:SetBackdropColor(0, 0, 0, 0)
+    frame.readinessCard = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    frame.readinessCard:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -360)
+    frame.readinessCard:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -360)
+    frame.readinessCard:SetPoint("BOTTOMRIGHT", frame.quickCard, "TOPRIGHT", 0, 8)
+    Theme.StylePanel(frame.readinessCard, Colors.noteBg or Colors.panel, Colors.softBorder or Colors.border, 1)
+    frame.readinessCard:SetBackdropColor(0, 0, 0, 0)
+    frame.characterTitle=Text(frame,"CHARACTER SETUP",10,Colors.blue)
+    frame.characterTitle:SetPoint("TOPLEFT",18,-68); frame.characterTitle:SetSize(160,18)
+    frame.characterRule=frame:CreateTexture(nil,"ARTWORK")
+    frame.characterRule:SetColorTexture(unpack(Colors.softBorder or Colors.border))
+    frame.characterRule:SetPoint("LEFT",frame.characterTitle,"RIGHT",8,1)
+    frame.characterRule:SetPoint("RIGHT",frame,"RIGHT",-14,1); frame.characterRule:SetHeight(1)
     frame.talentName=Text(frame,"",12,Colors.gold)
-    frame.talentName:SetPoint("TOPLEFT",16,-72); frame.talentName:SetSize(388,28)
+    frame.talentName:SetPoint("TOPLEFT",18,-90); frame.talentName:SetSize(384,28)
     frame.talentDropdown=CreateCompactDropdown(frame,266)
-    frame.talentDropdown:SetPoint("TOPLEFT",14,-104)
+    frame.talentDropdown:SetPoint("TOPLEFT",16,-122)
     frame.talentSwitch=Theme.CreateButton(frame,"Switch",112,26)
     frame.talentSwitch:SetPoint("LEFT",frame.talentDropdown,"RIGHT",8,0)
     frame.talentSwitch:SetScript("OnClick",function()
@@ -840,22 +878,22 @@ function Dashboard:EnsureGroupSnapshot()
         end
     end)
     frame.talentNote=Text(frame,"",10,Colors.muted)
-    frame.talentNote:SetPoint("TOPLEFT",16,-136); frame.talentNote:SetSize(388,34)
+    frame.talentNote:SetPoint("TOPLEFT",18,-154); frame.talentNote:SetSize(384,34)
     frame.lootName=Text(frame,"Loot Spec: Loading",12,Colors.gold)
-    frame.lootName:SetPoint("TOPLEFT",16,-178); frame.lootName:SetSize(388,26)
+    frame.lootName:SetPoint("TOPLEFT",18,-194); frame.lootName:SetSize(384,26)
     frame.lootDropdown=CreateCompactDropdown(frame,266)
-    frame.lootDropdown:SetPoint("TOPLEFT",14,-210)
+    frame.lootDropdown:SetPoint("TOPLEFT",16,-226)
     frame.lootSwitch=Theme.CreateButton(frame,"Set Loot Spec",112,26)
     frame.lootSwitch:SetPoint("LEFT",frame.lootDropdown,"RIGHT",8,0)
     frame.lootSwitch:SetScript("OnClick",function() Dashboard:SetPreparationLootSpec() end)
     frame.lootNote=Text(frame,"",10,Colors.muted)
-    frame.lootNote:SetPoint("TOPLEFT",16,-242); frame.lootNote:SetSize(388,28)
+    frame.lootNote:SetPoint("TOPLEFT",18,-258); frame.lootNote:SetSize(384,22)
     frame.raidHealingTitle=Text(frame,"RAID HEALING",10,Colors.blue)
-    frame.raidHealingTitle:SetPoint("TOPLEFT",16,-280); frame.raidHealingTitle:SetSize(210,18)
+    frame.raidHealingTitle:SetPoint("TOPLEFT",18,-290); frame.raidHealingTitle:SetSize(210,18)
     frame.raidHealingStatus=Text(frame,"",9,Colors.muted)
-    frame.raidHealingStatus:SetPoint("TOPLEFT",16,-300); frame.raidHealingStatus:SetSize(230,42)
+    frame.raidHealingStatus:SetPoint("TOPLEFT",18,-310); frame.raidHealingStatus:SetSize(230,34)
     frame.raidHealingButton=Theme.CreateButton(frame,"Prepare Raid Healing",158,28)
-    frame.raidHealingButton:SetPoint("TOPRIGHT",frame,"TOPRIGHT",-14,-294)
+    frame.raidHealingButton:SetPoint("TOPRIGHT",frame,"TOPRIGHT",-16,-306)
     frame.raidHealingButton:SetScript("OnClick",function()
         if InCombatLockdown and InCombatLockdown() then return end
         local library=SequencerLibrary()
@@ -865,26 +903,32 @@ function Dashboard:EnsureGroupSnapshot()
         Dashboard:RefreshPreparationRaidHealing()
     end)
     frame.rosterTitle = Text(frame, "GROUP READINESS", 10, Colors.blue)
-    frame.rosterTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -346)
+    frame.rosterTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -370)
     frame.rosterScroll = Theme.CreateScrollArea(frame, { step = 44 })
-    frame.rosterScroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -376)
-    frame.rosterScroll:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -376)
-    frame.rosterScroll:SetHeight(206); frame.rosterRows = {}
+    frame.rosterScroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -394)
+    frame.rosterScroll:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -394)
+    frame.rosterScroll:SetHeight(186); frame.rosterRows = {}
     frame.capabilityTitle = Text(frame, "CLASS/SPEC CAPABILITIES", 10, Colors.blue)
-    frame.capabilityTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -596)
+    frame.capabilityTitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -590)
     frame.capabilityScroll = Theme.CreateScrollArea(frame, { step = 30 })
-    frame.capabilityScroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -618)
-    frame.capabilityScroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 116)
+    frame.capabilityScroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -614)
+    frame.capabilityScroll:SetPoint("BOTTOMRIGHT", frame.quickCard, "TOPRIGHT", -6, 12)
     frame.capabilityRows = {}
     frame.checkButton = Theme.CreateButton(frame, "Check Group Status", 158, 26)
-    frame.checkButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -338)
+    frame.checkButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -366)
     frame.checkButton:SetScript("OnClick", function()
         if IsCurrentlyGrouped() and not (InCombatLockdown and InCombatLockdown()) and Analysis.StartAuraCheck then Analysis.StartAuraCheck() end
     end)
+    frame.quickTitle=Text(frame,"QUICK ACCESS",10,Colors.blue)
+    frame.quickTitle:SetPoint("BOTTOMLEFT",frame,"BOTTOMLEFT",18,116); frame.quickTitle:SetSize(105,18)
+    frame.quickRule=frame:CreateTexture(nil,"ARTWORK")
+    frame.quickRule:SetColorTexture(unpack(Colors.softBorder or Colors.border))
+    frame.quickRule:SetPoint("LEFT",frame.quickTitle,"RIGHT",8,1)
+    frame.quickRule:SetPoint("RIGHT",frame,"RIGHT",-14,1); frame.quickRule:SetHeight(1)
     frame.navigation=CreateCompactDropdown(frame,266)
     frame.navigation.openUp=true
     frame.navigation.menu:SetClampedToScreen(true)
-    frame.navigation:SetPoint("BOTTOMLEFT",frame,"BOTTOMLEFT",14,76)
+    frame.navigation:SetPoint("BOTTOMLEFT",frame,"BOTTOMLEFT",16,82)
     frame.openButton = Theme.CreateButton(frame, "Open", 112, 26)
     frame.openButton:SetPoint("LEFT",frame.navigation,"RIGHT",8,0)
     frame.openButton:SetScript("OnClick", function()
@@ -894,7 +938,7 @@ function Dashboard:EnsureGroupSnapshot()
         if KeyLab.UI and KeyLab.UI.SelectTab then KeyLab.UI:SelectTab(frame.selectedDestination or "Home") end
     end)
     frame.craftButton=Theme.CreateButton(frame,"Craft Shopping List",190,28)
-    frame.craftButton:SetPoint("BOTTOMLEFT",frame,"BOTTOMLEFT",14,38)
+    frame.craftButton:SetPoint("BOTTOMLEFT",frame,"BOTTOMLEFT",16,44)
     frame.craftButton:SetScript("OnClick",function()
         if InCombatLockdown and InCombatLockdown() then return end
         if KeyLab.CraftingShoppingWindow and KeyLab.CraftingShoppingWindow.Show then
@@ -902,7 +946,7 @@ function Dashboard:EnsureGroupSnapshot()
         end
     end)
     frame.targetsButton=Theme.CreateButton(frame,"Gear Target List",190,28)
-    frame.targetsButton:SetPoint("BOTTOMRIGHT",frame,"BOTTOMRIGHT",-14,38)
+    frame.targetsButton:SetPoint("BOTTOMRIGHT",frame,"BOTTOMRIGHT",-16,44)
     frame.targetsButton:SetScript("OnClick",function()
         if InCombatLockdown and InCombatLockdown() then return end
         if KeyLab.GearTargetsWindow and KeyLab.GearTargetsWindow.ShowManual then
@@ -913,7 +957,7 @@ function Dashboard:EnsureGroupSnapshot()
         frame.talentDropdown.menu:Hide(); frame.lootDropdown.menu:Hide(); frame.navigation.menu:Hide()
     end)
     frame.note = Text(frame, "", 9, Colors.muted)
-    frame.note:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 16, 8); frame.note:SetSize(388, 24)
+    frame.note:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 18, 10); frame.note:SetSize(384, 24)
 
     local handle = Theme.CreateButton(UIParent, "PREP\nPANEL", 76, 112)
     local savedHandlePosition = FloatingPositionStore().snapshotHandle
@@ -1001,20 +1045,30 @@ end
 function Dashboard:RefreshGroupSnapshot()
     local frame = self:EnsureGroupSnapshot()
     local grouped = IsCurrentlyGrouped()
-    frame:SetHeight(grouped and 860 or 446)
-    frame:SetScale(math.min(1, (UIParent:GetHeight()-40)/(grouped and 860 or 446)))
-    for _, section in ipairs({frame.rosterTitle,frame.rosterScroll,frame.capabilityTitle,frame.capabilityScroll,frame.checkButton}) do
+    frame:SetHeight(grouped and 860 or 530)
+    frame:SetScale(math.min(1, (UIParent:GetHeight()-40)/(grouped and 860 or 530)))
+    for _, section in ipairs({frame.readinessCard,frame.rosterTitle,frame.rosterScroll,frame.capabilityTitle,frame.capabilityScroll,frame.checkButton}) do
         section:SetShown(grouped == true)
     end
     self:RefreshSnapshotTalents()
     self:RefreshPreparationLootSpec()
     self:RefreshPreparationRaidHealing()
     local destinations = KeyLab.UI and KeyLab.UI.GetPreparationDestinations and KeyLab.UI:GetPreparationDestinations() or {{value="Home",label="Home"}}
-    frame.navigation:SetChoices(destinations,frame.selectedDestination or "Home",function(value,option)
-        frame.selectedDestination=value; frame.navigation:SetText("Go To: "..option.label)
+    local panelStore = PreparationPanelStore()
+    local savedDestination = frame.selectedDestination or panelStore.defaultDestination or "Home"
+    local destinationFound = false
+    for _, option in ipairs(destinations) do
+        if option.value == savedDestination then destinationFound = true; break end
+    end
+    if not destinationFound then savedDestination = "Home" end
+    frame.selectedDestination = savedDestination
+    frame.navigation:SetChoices(destinations,savedDestination,function(value,option)
+        frame.selectedDestination=value
+        PreparationPanelStore().defaultDestination=value
+        frame.navigation:SetText("Go To: "..option.label)
     end)
     for _,option in ipairs(destinations) do
-        if option.value==(frame.selectedDestination or "Home") then frame.navigation:SetText("Go To: "..option.label); break end
+        if option.value==savedDestination then frame.navigation:SetText("Go To: "..option.label); break end
     end
     local roster = grouped and Analysis.GetRoster and Analysis.GetRoster() or {}
     local shownMembers, npcCount = {}, 0
@@ -1191,7 +1245,9 @@ end
 function Dashboard:EnsureTargetChangePopup()
     if self.targetChangePopup then return self.targetChangePopup end
     local popup = CreateFrame("Frame", "KeyLabGroupTargetChangePopup", UIParent, "BackdropTemplate")
-    popup:SetSize(590, 260); popup:SetPoint("CENTER", UIParent, "CENTER", 0, 110)
+    popup:SetSize(590, 260)
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then KeyLab.UI:AnchorPopupToPreparationPanel(popup)
+    else popup:SetPoint("RIGHT", UIParent, "RIGHT", -24, 0) end
     popup:SetFrameStrata("FULLSCREEN_DIALOG"); popup:SetFrameLevel(9700); popup:Hide(); popup:EnableMouse(true)
     Theme.StylePanel(popup, Colors.bg, Colors.gold, 1)
     Theme.AddPopupLogo(popup)
@@ -1280,6 +1336,7 @@ function Dashboard:RefreshTargetChangePopup()
     end
     for index = maxRows + 1, #popup.rows do popup.rows[index]:Hide() end
     popup.leaveButton:SetText("Keep")
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then KeyLab.UI:AnchorPopupToPreparationPanel(popup) end
     popup:Show()
 end
 

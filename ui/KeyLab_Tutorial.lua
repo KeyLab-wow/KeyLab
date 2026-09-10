@@ -43,11 +43,21 @@ local function CurrentTabContent()
 end
 local function Tab(name) return KeyLab.Tabs and KeyLab.Tabs[name] or nil end
 local function Field(tabName,field) local tab=Tab(tabName); return tab and tab[field] or CurrentTabContent() end
-local function Nav(name) return KeyLab.UI and KeyLab.UI.tabButtons and KeyLab.UI.tabButtons[name] or nil end
+local function Nav(name)
+    local ui=KeyLab.UI
+    if not ui then return nil end
+    if ui.tabButtons and ui.tabButtons[name] then return ui.tabButtons[name] end
+    for _,entries in pairs(ui.navigationChildButtons or {}) do
+        for _,entry in ipairs(entries) do if entry.destination==name then return entry.button end end
+    end
+end
 local function Mode(name) return KeyLab.UI and KeyLab.UI.modeButtons and KeyLab.UI.modeButtons[name] or nil end
 local function HomeField(field) local h=Tab("Home"); return (h and h.frame and h.frame[field]) or (h and h[field]) or CurrentTabContent() end
 local function HomeButton(name) local h=Tab("Home"); return h and h.frame and h.frame.subTabs and h.frame.subTabs[name] end
-local function GearButton(name) local t=Tab("GearPlanning"); return t and ({guide=t.guideTab,crafted=t.craftedTab,season2Info=t.season2InfoTab})[name] end
+local function GearButton(name)
+    local destination=({guide="Gear Guide",crafted="Crafted Gear",season2Info="Season 2 Info",WH="Wowhead Guide Lists",IV="Icy Veins Guide Lists"})[name]
+    return destination and Nav(destination) or CurrentTabContent()
+end
 local function GroupButton(name) local t=Tab("GroupDashboard"); return t and ({readiness=t.readinessTab,composition=t.compositionTab,targets=t.targetsTab})[name] end
 local function SeqButton(name) local t=Tab("Sequencer"); return t and t.viewButtons and t.viewButtons[name] end
 local function SeqField(field) return Field("Sequencer",field) end
@@ -72,33 +82,34 @@ local STEPS={
     {section="Home",title="S2 Common Issues",body="Use S2 Common Issues to check tracked in-game and technical problems before troubleshooting your own setup.",tab="Home",homeView="issues",target=function() return HomeButton("issues") end},
     {section="Home",title="Game Updates",body="Use Game Updates for dated patch notes and completed hotfixes organized by category.",tab="Home",homeView="updates",target=function() return HomeButton("updates") end},
 
-    {section="Runs",title="Open Mythic+",body="Click Mythic+. The next result pages use Mythic+ names and Mythic+ filter choices.",mode="mplus",tab="Encounters",target=function() return Mode("mplus") end},
-    {section="Runs",title="Mythic+ Encounters",body="Filter saved runs by Dungeon, Key Level, Date, Performance Metric, and Sort. Select a row to see its setup and results.",mode="mplus",tab="Encounters",target=function() return Field("Encounters","dungeonDropdown") end},
-    {section="Runs",title="Mythic+ Encounter filters",body="Key Level narrows difficulty. Date narrows when it happened. Performance Metric and Sort decide how the list is ordered.",mode="mplus",tab="Encounters",target=function() return Field("Encounters","keyDropdown") end},
-    {section="Runs",title="Open Raid",body="Click Raid. The same result pages now use raid bosses and raid difficulties instead of dungeons and key levels.",mode="raid",tab="Encounters",target=function() return Mode("raid") end},
-    {section="Runs",title="Raid Encounters",body="Filter individual boss pulls by Boss, Difficulty, Date, Performance Metric, and Sort. Select a pull for its saved details.",mode="raid",tab="Encounters",target=function() return Field("RaidEncounters","bossDropdown") end},
-    {section="Runs",title="Raid Encounter filters",body="Difficulty separates raid levels. Date, Performance Metric, and Sort help you find the pull you want.",mode="raid",tab="Encounters",target=function() return Field("RaidEncounters","difficultyDropdown") end},
-    {section="Runs",title="Last Run",body="On Mythic+, Summary is named Last Run. KeyLab keeps the latest 10 runs so you can reopen a recent full summary.",mode="mplus",tab="Summary",target=function() return Nav("Summary") end},
-    {section="Runs",title="Last Raid",body="On Raid, Summary is named Last Raid. KeyLab keeps the latest 10 raid sessions and shows the boss pulls inside each one.",mode="raid",tab="Summary",target=function() return Nav("Summary") end},
-    {section="Runs",title="Talent Builds: Mythic+",body="Only the top 5 saved builds are shown. Use Dungeon, Key Level, and Performance Metric, then select a build to inspect and copy it.",mode="mplus",tab="Talent Builds",target=function() return Field("TalentBuilds","dungeonDropdown") end},
-    {section="Runs",title="Talent Builds: Raid",body="Only the top 5 builds for the chosen Boss, Difficulty, and Performance Metric are shown. This keeps unlike fights separate.",mode="raid",tab="Talent Builds",target=function() return Field("RaidTalentBuilds","bossDropdown") end},
-    {section="Runs",title="Stat Profiles: Mythic+",body="Only the top 5 stat-priority profiles are shown. Filter by Dungeon, Key Level, and Performance Metric.",mode="mplus",tab="Stat Profiles",target=function() return Field("StatProfiles","dungeonDropdown") end},
-    {section="Runs",title="Stat Profiles: Raid",body="Only the top 5 stat profiles for one Boss, Difficulty, and Performance Metric are shown. Select one for its exact percentages.",mode="raid",tab="Stat Profiles",target=function() return Field("RaidStatProfiles","bossDropdown") end},
-    {section="Runs",title="Gear Profiles: Mythic+",body="Only the top 5 complete gear sets you used are shown. Filter by Dungeon, Key Level, and Performance Metric.",mode="mplus",tab="Gear Profiles",target=function() return Field("GearProfiles","primaryDropdown") end},
-    {section="Runs",title="Gear Profiles: Raid",body="Only the top 5 complete gear sets for the chosen Boss, Difficulty, and Performance Metric are shown. Select one to see every item.",mode="raid",tab="Gear Profiles",target=function() return Field("RaidGearProfiles","primaryDropdown") end},
-    {section="Runs",title="Trends changes too",body="Mythic+ Trends compares recent runs by dungeon. Raid Trends compares pull performance, execution, and consistency by boss and difficulty.",mode="mplus",tab="Trends",target=function() return Mode("mplus") end},
+    {section="Performance",title="Open Mythic+",body="Click Mythic+. The next result pages use Mythic+ names and Mythic+ filter choices.",mode="mplus",tab="Encounters",target=function() return Mode("mplus") end},
+    {section="Performance",title="Mythic+ Encounters",body="Filter saved runs by Dungeon, Key Level, Date, Performance Metric, and Sort. Select a row to see its setup and results.",mode="mplus",tab="Encounters",target=function() return Field("Encounters","dungeonDropdown") end},
+    {section="Performance",title="Mythic+ Encounter filters",body="Key Level narrows difficulty. Date narrows when it happened. Performance Metric and Sort decide how the list is ordered.",mode="mplus",tab="Encounters",target=function() return Field("Encounters","keyDropdown") end},
+    {section="Performance",title="Open Raid",body="Click Raid. The same result pages now use raid bosses and raid difficulties instead of dungeons and key levels.",mode="raid",tab="Encounters",target=function() return Mode("raid") end},
+    {section="Performance",title="Raid Encounters",body="Filter individual boss pulls by Boss, Difficulty, Date, Performance Metric, and Sort. Select a pull for its saved details.",mode="raid",tab="Encounters",target=function() return Field("RaidEncounters","bossDropdown") end},
+    {section="Performance",title="Raid Encounter filters",body="Difficulty separates raid levels. Date, Performance Metric, and Sort help you find the pull you want.",mode="raid",tab="Encounters",target=function() return Field("RaidEncounters","difficultyDropdown") end},
+    {section="Performance",title="Last Run",body="On Mythic+, Summary is named Last Run. KeyLab keeps the latest 10 runs so you can reopen a recent full summary.",mode="mplus",tab="Summary",target=function() return Nav("Summary") end},
+    {section="Performance",title="Last Raid",body="On Raid, Summary is named Last Raid. KeyLab keeps the latest 10 raid sessions and shows the boss pulls inside each one.",mode="raid",tab="Summary",target=function() return Nav("Summary") end},
+    {section="Profiles",title="Winning Setups",body="Winning Setups finds the same Talent Build, Stat Profile, and Gear Profile reaching the Top 5 for the same content and metric. Exact matches earn the gold Triple Top 5 badge.",tab="Winning Setups",target=CurrentTabContent},
+    {section="Profiles",title="Talent Builds: Mythic+",body="Only the top 5 saved builds are shown. Use Dungeon, Key Level, and Performance Metric, then select a build to inspect and copy it.",mode="mplus",tab="Talent Builds",target=function() return Field("TalentBuilds","dungeonDropdown") end},
+    {section="Profiles",title="Talent Builds: Raid",body="Only the top 5 builds for the chosen Boss, Difficulty, and Performance Metric are shown. This keeps unlike fights separate.",mode="raid",tab="Talent Builds",target=function() return Field("RaidTalentBuilds","bossDropdown") end},
+    {section="Profiles",title="Stat Profiles: Mythic+",body="Only the top 5 stat-priority profiles are shown. Filter by Dungeon, Key Level, and Performance Metric.",mode="mplus",tab="Stat Profiles",target=function() return Field("StatProfiles","dungeonDropdown") end},
+    {section="Profiles",title="Stat Profiles: Raid",body="Only the top 5 stat profiles for one Boss, Difficulty, and Performance Metric are shown. Select one for its exact percentages.",mode="raid",tab="Stat Profiles",target=function() return Field("RaidStatProfiles","bossDropdown") end},
+    {section="Profiles",title="Gear Profiles: Mythic+",body="Only the top 5 complete gear sets you used are shown. Filter by Dungeon, Key Level, and Performance Metric.",mode="mplus",tab="Gear Profiles",target=function() return Field("GearProfiles","primaryDropdown") end},
+    {section="Profiles",title="Gear Profiles: Raid",body="Only the top 5 complete gear sets for the chosen Boss, Difficulty, and Performance Metric are shown. Select one to see every item.",mode="raid",tab="Gear Profiles",target=function() return Field("RaidGearProfiles","primaryDropdown") end},
+    {section="Performance",title="Trends changes too",body="Mythic+ Trends compares recent runs by dungeon. Raid Trends compares pull performance, execution, and consistency by boss and difficulty.",mode="mplus",tab="Trends",target=function() return Mode("mplus") end},
 
-    {section="Practice",title="Start a Practice session",body="Choose single-target or multi-target, choose a test length, then start the session at a training dummy.",tab="Practice",target=function() return Field("Practice","startTypeDropdown") end},
-    {section="Practice",title="Use a timed test",body="KeyLab recommends timed tests. Dummy areas can leave WoW stuck in combat. KeyLab saves the session when time ends, but you may need to leave the area afterward.",tab="Practice",target=function() return Field("Practice","startDurationDropdown") end},
-    {section="Practice",title="Remember the rotation",body="Macro Sequence Version is optional. Choose it when testing a rotation so KeyLab remembers the exact version without handwritten notes. We will visit Macro Sequencer later.",tab="Practice",target=function() return Field("Practice","startSequenceDropdown") end},
-    {section="Practice",title="Filter saved tests",body="Use Session Type, Test Length, Performance Metric, and Status to narrow the list. Select a row to read the full setup and result.",tab="Practice",target=function() return Field("Practice","typeFilterDropdown") end},
+    {section="Performance",title="Start a Practice session",body="Choose single-target or multi-target, choose a test length, then start the session at a training dummy.",tab="Practice",target=function() return Field("Practice","startTypeDropdown") end},
+    {section="Performance",title="Use a timed test",body="KeyLab recommends timed tests. Dummy areas can leave WoW stuck in combat. KeyLab saves the session when time ends, but you may need to leave the area afterward.",tab="Practice",target=function() return Field("Practice","startDurationDropdown") end},
+    {section="Performance",title="Remember the rotation",body="Macro Sequence Version is optional. Choose it when testing a rotation so KeyLab remembers the exact version without handwritten notes. We will visit Macro Sequencer later.",tab="Practice",target=function() return Field("Practice","startSequenceDropdown") end},
+    {section="Performance",title="Filter saved tests",body="Use Session Type, Test Length, Performance Metric, and Status to narrow the list. Select a row to read the full setup and result.",tab="Practice",target=function() return Field("Practice","typeFilterDropdown") end},
 
-    {section="Gear Planning",title="Gear Planning Guide",body="The Guide provides gearing information and explains how Stat Goal Matcher, Gear Targets, and Gear Dashboard work together.",tab="Gear Planning",gearView="guide",target=function() return GearButton("guide") end},
-    {section="Gear Planning",title="Crafted Gear",body="Search crafted items, review materials and options, and add an item to your plan. Open Shopping List shows everything the plan needs.",tab="Gear Planning",gearView="crafted",target=function() return GearButton("crafted") end},
-    {section="Gear Planning",title="Shopping List at the Auction House",body="When you visit the Auction House, your saved Crafted Gear Shopping List opens automatically so you can compare materials with what you have.",tab="Gear Planning",gearView="crafted",target=function() return Field("GearPlanning","shoppingButton") end},
-    {section="Gear Planning",title="Reward Sources",body="Season 2 Info has three menu choices. Reward Sources shows where gear comes from and the item levels available there.",tab="Gear Planning",gearView="season2Info",seasonView="rewardSources",target=function() local t=Tab("GearPlanning"); return t and t.season2InfoViewButtons and t.season2InfoViewButtons.rewardSources end},
-    {section="Gear Planning",title="Upgrade Tracks",body="Upgrade Tracks shows each track and its item-level range. Use it to see how far an item can grow.",tab="Gear Planning",gearView="season2Info",seasonView="upgradeTracks",target=function() local t=Tab("GearPlanning"); return t and t.season2InfoViewButtons and t.season2InfoViewButtons.upgradeTracks end},
-    {section="Gear Planning",title="Great Vault",body="Great Vault shows activity choices and the reward level each one can unlock.",tab="Gear Planning",gearView="season2Info",seasonView="greatVault",target=function() local t=Tab("GearPlanning"); return t and t.season2InfoViewButtons and t.season2InfoViewButtons.greatVault end},
+    {section="Gear",title="Gear Guide",body="The Gear Guide provides gearing information and explains how Stat Goal Matcher, Gear Targets, and Gear Dashboard work together.",tab="Gear Guide",gearView="guide",target=function() return GearButton("guide") end},
+    {section="Gear",title="Crafted Gear",body="Search crafted items, review materials and options, and add an item to your plan. Open Shopping List shows everything the plan needs.",tab="Crafted Gear",gearView="crafted",target=function() return GearButton("crafted") end},
+    {section="Gear",title="Shopping List at the Auction House",body="When you visit the Auction House, your saved Crafted Gear Shopping List opens automatically so you can compare materials with what you have.",tab="Crafted Gear",gearView="crafted",target=function() return Field("GearPlanning","shoppingButton") end},
+    {section="Gear",title="Reward Sources",body="Season 2 Info has three menu choices. Reward Sources shows where gear comes from and the item levels available there.",tab="Season 2 Info",gearView="season2Info",seasonView="rewardSources",target=function() local t=Tab("GearPlanning"); return t and t.season2InfoViewButtons and t.season2InfoViewButtons.rewardSources end},
+    {section="Gear",title="Upgrade Tracks",body="Upgrade Tracks shows each track and its item-level range. Use it to see how far an item can grow.",tab="Season 2 Info",gearView="season2Info",seasonView="upgradeTracks",target=function() local t=Tab("GearPlanning"); return t and t.season2InfoViewButtons and t.season2InfoViewButtons.upgradeTracks end},
+    {section="Gear",title="Great Vault",body="Great Vault shows activity choices and the reward level each one can unlock.",tab="Season 2 Info",gearView="season2Info",seasonView="greatVault",target=function() local t=Tab("GearPlanning"); return t and t.season2InfoViewButtons and t.season2InfoViewButtons.greatVault end},
 
     {section="Gear Targets",title="Browse Items",body="Browse Items chooses Dungeon and Raid together, Dungeon only, or Raid only. Slot and Loot Location narrow the list further.",tab="Gear Targets",target=function() return Field("GearTargets","itemTypeDropdown") end},
     {section="Gear Targets",title="Search and sort",body="Search Item finds a name. Click any column header to sort by that column; click it again to reverse the order.",tab="Gear Targets",target=function() return Field("GearTargets","searchBox") end},
@@ -127,6 +138,9 @@ local STEPS={
     {section="Gear Dashboard",title="Tier and Alternatives",body="Tier Set shows which eligible slots count. Alternative Items keeps saved backup choices visible in one place.",tab="Gear Dashboard",target=function() return Field("GearDashboard","tierCard") end},
     {section="Gear Dashboard",title="Crests and seasonal currency",body="This area shows the upgrade resources KeyLab can read from your bags and currency list.",tab="Gear Dashboard",target=function() return Field("GearDashboard","currencyCard") end},
     {section="Gear Dashboard",title="Myth Target Progress",body="A target counts complete only when that exact item is equipped on the Myth track. Hero and lower-track copies stay unfinished goals.",tab="Gear Dashboard",target=function() return Field("GearDashboard","progressCard") end},
+
+    {section="Guide Lists",title="Wowhead Guide Lists",body="Browse the current spec's Wowhead Talent Builds and Gear Lists. Talent choices use one clear selector at a time; Gear Lists use a dropdown and compact two-column slot view.",tab="Wowhead Guide Lists",gearView="WH",target=function() return GearButton("WH") end},
+    {section="Guide Lists",title="Icy Veins Guide Lists",body="Browse the current spec's Icy Veins Talent Builds and Gear Lists. Added status, update dates, talent switching, and target replacement keep their existing KeyLab rules.",tab="Icy Veins Guide Lists",gearView="IV",target=function() return GearButton("IV") end},
 
     {section="Groups",title="Group Readiness",body="See each player, class and spec, item level, role, leader or assistant status, and checked auras. Use Check Group Status when everyone is nearby.",tab="Group Dashboard",groupView="readiness",target=function() return GroupButton("readiness") end},
     {section="Groups",title="Read aura icons",body="Hover player-card icons to identify buffs, food, oils, flasks, and other checked auras. Progress tells how many players were checked.",tab="Group Dashboard",groupView="readiness",target=function() return Field("GroupDashboard","readinessView") end},
@@ -158,13 +172,20 @@ local STEPS={
     {section="Macros",title="Binding List",body="Binding List shows each sequence, its active version, binding, and status for your current class and spec.",tab="Sequencer",sequencerView="binding",target=function() return SeqButton("binding") end},
     {section="Macros",title="Information and Recycle Bin",body="Information explains Sequencer rules and options. Recycle Bin can restore a deleted sequence or version for 30 days.",tab="Sequencer",sequencerView="information",target=function() return SeqButton("information") end},
 
-    {section="Finish",title="Insights",body="Insights provides quick reference notes about encounters, stats, macros, spell queue behavior, and simulations.",tab="Insights",target=function() return Nav("Insights") end},
-    {section="Finish",title="Settings",body="Settings controls window behavior, the Group Finder helper, backup instructions, and old-season data removal.",tab="Settings",target=function() return Nav("Settings") end},
+    {section="Performance",title="Insights",body="Insights provides quick reference notes about encounters, stats, macros, spell queue behavior, and simulations.",tab="Insights",target=function() return Nav("Insights") end},
+    {section="Settings",title="Settings",body="Settings controls window behavior, the Group Finder helper, backup instructions, and old-season data removal.",tab="Settings",target=function() return Nav("Settings") end},
     {section="Finish",title="Tour complete",body="You are ready to use KeyLab. Close the tour now. Take the Tour stays on Home whenever you want to start again.",tab="Home",homeView="home",target=function() return HomeField("tourButton") end},
 }
 
+local SECTION_ALIASES={
+    ["Gear Targets"]="Gear", ["Gear Dashboard"]="Gear", ["Gear Planning"]="Gear",
+    ["Groups"]="Group Dashboard", ["Macros"]="Macro Sequencer",
+}
 local SECTIONS,seen={},{}
-for index,step in ipairs(STEPS) do if not seen[step.section] then seen[step.section]=true; table.insert(SECTIONS,{label=step.section,step=index}) end end
+for index,step in ipairs(STEPS) do
+    step.section=SECTION_ALIASES[step.section] or step.section
+    if not seen[step.section] then seen[step.section]=true; table.insert(SECTIONS,{label=step.section,step=index}) end
+end
 
 local function CreateHighlight()
     local f=CreateFrame("Frame","KeyLabTutorialHighlight",UIParent); f:SetFrameStrata("TOOLTIP"); f:SetFrameLevel(900); f:EnableMouse(false)
@@ -183,7 +204,8 @@ end
 function Tutorial:Create()
     if self.frame then return self.frame end
     local f=CreateFrame("Frame","KeyLabGuidedTourFrame",UIParent,"BackdropTemplate"); f:SetSize(520,278)
-    local anchor=KeyLab.UI and KeyLab.UI.frame or UIParent; f:SetPoint("BOTTOM",anchor,"BOTTOM",0,24)
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then KeyLab.UI:AnchorPopupToPreparationPanel(f)
+    else f:SetPoint("RIGHT",UIParent,"RIGHT",-24,0) end
     f:SetFrameStrata("TOOLTIP"); f:SetFrameLevel(950); f:SetClampedToScreen(true); f:EnableMouse(true); f:SetMovable(true); f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart",function(self) self:StartMoving() end); f:SetScript("OnDragStop",function(self) self:StopMovingOrSizing() end); StylePanel(f,Colors.bg,Colors.gold)
     Theme.AddPopupLogo(f)
@@ -195,7 +217,7 @@ function Tutorial:Create()
     f.sections=Button(f,"Sections",106,32); f.sections:SetPoint("LEFT",f.back,"RIGHT",8,0)
     f.close=Button(f,"Close",82,32); f.close:SetPoint("BOTTOMRIGHT",-18,15)
     f.next=Button(f,"Next",82,32); f.next:SetPoint("RIGHT",f.close,"LEFT",-8,0)
-    f.menu=CreateFrame("Frame",nil,f,"BackdropTemplate"); f.menu:SetSize(250,20+(#SECTIONS*30)); f.menu:SetPoint("BOTTOM",f.sections,"TOP",0,8); f.menu:SetFrameLevel(f:GetFrameLevel()+10); StylePanel(f.menu,Colors.bg,Colors.gold); f.menu:Hide(); f.menu.buttons={}
+    f.menu=CreateFrame("Frame",nil,f,"BackdropTemplate"); f.menu:SetSize(250,20+(#SECTIONS*30)); f.menu:SetPoint("BOTTOM",f.sections,"TOP",0,8); f.menu:SetFrameLevel(f:GetFrameLevel()+10); f.menu:SetClampedToScreen(true); StylePanel(f.menu,Colors.bg,Colors.gold); f.menu:Hide(); f.menu.buttons={}
     for index,def in ipairs(SECTIONS) do local s=def; local b=Button(f.menu,s.label,222,26); b:SetPoint("TOPLEFT",14,-10-((index-1)*30)); b:SetScript("OnClick",function() f.menu:Hide(); Tutorial:ShowStep(s.step) end); f.menu.buttons[index]=b end
     f.back:SetScript("OnClick",function() Tutorial:ShowStep((Tutorial.stepIndex or 1)-1) end)
     f.next:SetScript("OnClick",function() local i=Tutorial.stepIndex or 1; if i>=#STEPS then Tutorial:Stop() else Tutorial:ShowStep(i+1) end end)
@@ -253,7 +275,9 @@ function Tutorial:ShowStep(index)
 end
 function Tutorial:Start()
     if InCombatLockdown and InCombatLockdown() then if KeyLab.Print then KeyLab.Print("Leave combat before starting the KeyLab tour.") end; return end
-    self:Create(); local main=KeyLab.UI and KeyLab.UI.frame
+    self:Create()
+    if KeyLab.UI and KeyLab.UI.AnchorPopupToPreparationPanel then KeyLab.UI:AnchorPopupToPreparationPanel(self.frame) end
+    local main=KeyLab.UI and KeyLab.UI.frame
     if main and not self.mainFrameHooked then main:HookScript("OnHide",function() if Tutorial.active and not Tutorial.showingPreparation then Tutorial:Stop() end end); self.mainFrameHooked=true end
     self:ShowStep(1)
 end

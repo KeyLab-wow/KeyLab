@@ -1440,6 +1440,14 @@ function GearPlanning:ShowView(name)
     if name ~= "crafted" and name ~= "season2Info" and name ~= "WH" and name ~= "IV" then name = "guide" end
     if name ~= "crafted" then self.guideCraftDraft=nil end
     self.selectedView = name
+    local headings = {
+        guide = "Gear Guide",
+        crafted = "Crafted Gear",
+        season2Info = "Season 2 Info",
+        WH = "Guide Lists - Wowhead",
+        IV = "Guide Lists - Icy Veins",
+    }
+    if self.headerTitle then self.headerTitle:SetText(headings[name] or "Gear") end
     self.guideView:SetShown(self.selectedView == "guide")
     self.craftedView:SetShown(self.selectedView == "crafted")
     self.season2InfoView:SetShown(self.selectedView == "season2Info")
@@ -1453,6 +1461,7 @@ function GearPlanning:ShowView(name)
     end
     if self.selectedView == "crafted" then self:RefreshRecipes() end
     if self.selectedView == "season2Info" then self:RefreshSeason2Info() end
+    if KeyLab.UI and KeyLab.UI.NotifyGearPlanningView then KeyLab.UI:NotifyGearPlanningView(name) end
 end
 
 function GearPlanning:Create(parent)
@@ -1460,7 +1469,7 @@ function GearPlanning:Create(parent)
     frame:SetAllPoints(parent)
     SetBackdrop(frame, COLORS.bg, {0, 0, 0, 0})
 
-    KeyLab.UI.Theme.CreateTabHeader(
+    self.headerTitle, self.headerSubtitle = KeyLab.UI.Theme.CreateTabHeader(
         frame,
         "Gear Planning",
         "Review general gearing information, choose crafted items for a convenient Auction House materials list, and check Season 2 reward sources and upgrade tracks."
@@ -1470,7 +1479,7 @@ function GearPlanning:Create(parent)
     self.craftedTab = Button(frame, "Crafted Gear", 170, 34); self.craftedTab:SetPoint("LEFT", self.guideTab, "RIGHT", 10, 0)
     self.season2InfoTab = Button(frame, "Season 2 Info", 170, 34); self.season2InfoTab:SetPoint("LEFT", self.craftedTab, "RIGHT", 10, 0)
     local views = CreateFrame("Frame", nil, frame)
-    views:SetPoint("TOPLEFT", 18, -116); views:SetPoint("BOTTOMRIGHT", -34, 18)
+    views:SetPoint("TOPLEFT", 18, -72); views:SetPoint("BOTTOMRIGHT", -34, 18)
     self.guideView = self:BuildGuideView(views)
     self:BuildCraftedView(views)
     self:BuildSeason2InfoView(views)
@@ -1492,6 +1501,8 @@ function GearPlanning:Create(parent)
     self.craftedTab:SetScript("OnClick", function() self:ShowView("crafted") end)
     self.season2InfoTab:SetScript("OnClick", function() self:ShowView("season2Info") end)
     self.frame = frame
+    self.guideTab:Hide(); self.craftedTab:Hide(); self.season2InfoTab:Hide()
+    for _, button in pairs(self.sourceTabs) do button:Hide() end
     self.recipePage, self.recipeSearch = 1, ""
     self.season2SelectedInfoView = "rewardSources"
     self.season2SelectedSource = "dungeons"
