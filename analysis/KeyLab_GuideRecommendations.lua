@@ -51,6 +51,40 @@ function Guides.GetTargetItem(row, specID)
     return Guides.GetItem(row.originalID or row.itemID, specID)
 end
 
+local function SaveActiveProfile(record, profile, entries)
+    local store = KeyLab.LootTargetsDB.GetSpecStore(record.specID, "MN_S2")
+    local expected = {}
+    for _, entry in ipairs(entries or {}) do expected[entry.slotInstance] = tonumber(entry.item and entry.item.itemID) end
+    store.activeGuideList = {
+        sourceID = record.sourceID,
+        source = record.source,
+        profileKey = profile.key,
+        profileName = profile.name,
+        content = profile.content,
+        expectedTargets = expected,
+        savedAt = time and time() or 0,
+    }
+end
+
+function Guides.GetActiveProfileMatch(specID)
+    specID = tonumber(specID or Guides.CurrentSpec()) or 0
+    local store = KeyLab.LootTargetsDB.GetSpecStore(specID, "MN_S2")
+    local active = store and store.activeGuideList
+    if type(active) ~= "table" or type(active.expectedTargets) ~= "table" then return nil end
+    local actual, actualCount, expectedCount = {}, 0, 0
+    for _, target in ipairs(KeyLab.LootTargetsDB.GetAllTargetsForSpec(specID, "MN_S2") or {}) do
+        if target.slotInstance and target.itemID then
+            actual[target.slotInstance] = tonumber(target.itemID); actualCount = actualCount + 1
+        end
+    end
+    for slot, itemID in pairs(active.expectedTargets) do
+        expectedCount = expectedCount + 1
+        if actual[slot] ~= tonumber(itemID) then return nil end
+    end
+    if actualCount ~= expectedCount then return nil end
+    return active
+end
+
 function Guides.ApplyProfile(record, profile, choices, approval)
     if not record or record.specID ~= Guides.CurrentSpec() then return false, "Your specialization changed. Review the current spec's list." end
     if InCombatLockdown and InCombatLockdown() then return false, "Wait until combat ends." end
@@ -72,5 +106,7 @@ function Guides.ApplyProfile(record, profile, choices, approval)
             table.insert(entries, {item=item,slotInstance=slot})
         end
     end
-    return KeyLab.LootTargetsDB.ReplaceGuideTargets(record.specID, entries, approval)
+    local ok, message, details = KeyLab.LootTargetsDB.ReplaceGuideTargets(record.specID, entries, approval)
+    if ok then SaveActiveProfile(record, profile, entries) end
+    return ok, message, details
 end
