@@ -90,19 +90,12 @@ local CFG = {
 
     tabs = {
         "Home",
-        "Encounters",
-        "Summary",
-        "Talent Builds",
-        "Stat Profiles",
-        "Gear Profiles",
-        "Trends",
-        "Practice",
-        "Gear Planning",
-        "Gear Targets",
-        "Gear Dashboard",
+        "Performance",
+        "Profiles",
+        "Gear",
+        "Guide Lists",
         "Group Dashboard",
         "Sequencer",
-        "Insights",
         "Settings",
     },
 }
@@ -116,6 +109,60 @@ local ANALYSIS_ROUTES = {
     ["Trends"] = { mplus = "M+ Trends", raid = "Raid Trends" },
 }
 
+-- These destinations keep every existing tab implementation intact while the
+-- sidebar presents related pages together. Gear Planning remains the owner of
+-- its established views; the virtual destinations only choose which one opens.
+local VIRTUAL_ROUTES = {
+    ["Gear Guide"] = { tab = "Gear Planning", view = "guide" },
+    ["Crafted Gear"] = { tab = "Gear Planning", view = "crafted" },
+    ["Season 2 Info"] = { tab = "Gear Planning", view = "season2Info" },
+    ["Wowhead Guide Lists"] = { tab = "Gear Planning", view = "WH" },
+    ["Icy Veins Guide Lists"] = { tab = "Gear Planning", view = "IV" },
+}
+
+local NAVIGATION_SECTIONS = {
+    { id = "Home", default = "Home" },
+    {
+        id = "Performance", default = "Summary",
+        items = {
+            { destination = "Summary" },
+            { destination = "Encounters" },
+            { destination = "Trends" },
+            { destination = "Practice" },
+            { destination = "Insights" },
+        },
+    },
+    {
+        id = "Profiles", default = "Winning Setups",
+        items = {
+            { destination = "Winning Setups" },
+            { destination = "Talent Builds" },
+            { destination = "Stat Profiles" },
+            { destination = "Gear Profiles" },
+        },
+    },
+    {
+        id = "Gear", default = "Gear Dashboard",
+        items = {
+            { destination = "Gear Dashboard" },
+            { destination = "Gear Targets" },
+            { destination = "Crafted Gear" },
+            { destination = "Season 2 Info" },
+            { destination = "Gear Guide" },
+        },
+    },
+    {
+        id = "Guide Lists", default = "Wowhead Guide Lists",
+        items = {
+            { destination = "Wowhead Guide Lists", label = "Wowhead" },
+            { destination = "Icy Veins Guide Lists", label = "Icy Veins" },
+        },
+    },
+    { id = "Group Dashboard", default = "Group Dashboard" },
+    { id = "Sequencer", default = "Sequencer" },
+    { id = "Settings", default = "Settings" },
+}
+
 local function GetNavigationLabel(category, mode)
     if category == "Summary" then
         return mode == "raid" and "Last Raid" or "Last Run"
@@ -125,10 +172,6 @@ local function GetNavigationLabel(category, mode)
     end
     return category
 end
-
-local OPTIONAL_TABS = {
-    ["Gear Planning"] = true,
-}
 
 -- =========================================================
 -- SMALL UI HELPERS
@@ -172,6 +215,34 @@ local function SafePrint(message)
     else
         print("|cffd6b35aKeyLab:|r " .. tostring(message))
     end
+end
+
+-- KeyLab's compact helper windows share the Preparation Panel anchor so they
+-- always open in the same predictable place. The minimized PREP PANEL handle
+-- deliberately keeps its own independent saved position.
+function KeyLab.UI:AnchorPopupToPreparationPanel(frame)
+    if not frame then return end
+
+    local point, relativePoint, x, y
+    local dashboard = KeyLab.GroupQuickUI
+    if dashboard and dashboard.snapshot and dashboard.snapshot.GetPoint then
+        point, _, relativePoint, x, y = dashboard.snapshot:GetPoint(1)
+    end
+
+    if not point then
+        local positions = KeyLabDB and KeyLabDB.groupDashboardUI
+            and KeyLabDB.groupDashboardUI.floatingPositions
+        local saved = type(positions) == "table" and positions.snapshot or nil
+        if type(saved) == "table" and type(saved.point) == "string" then
+            point = saved.point
+            relativePoint = saved.relativePoint or saved.point
+            x = tonumber(saved.x) or 0
+            y = tonumber(saved.y) or 0
+        end
+    end
+
+    frame:ClearAllPoints()
+    frame:SetPoint(point or "RIGHT", UIParent, relativePoint or point or "RIGHT", x or -24, y or 0)
 end
 
 local function FindRegisteredTab(name)
@@ -228,15 +299,37 @@ end
 
 local function GetNavigationKey(tabName)
     local category = GetAnalysisRoute(tabName)
-    return category or tabName
+    if category == "Summary" or category == "Encounters" or category == "Trends" then return "Performance" end
+    if category == "Talent Builds" or category == "Stat Profiles" or category == "Gear Profiles" then return "Profiles" end
+    if tabName == "Practice" or tabName == "Insights" then return "Performance" end
+    if tabName == "Winning Setups" then return "Profiles" end
+    if tabName == "Gear Dashboard" or tabName == "Gear Targets" or tabName == "Gear Planning" then
+        local view = KeyLab.Tabs and KeyLab.Tabs.GearPlanning and KeyLab.Tabs.GearPlanning.selectedView
+        if tabName == "Gear Planning" and (view == "WH" or view == "IV") then return "Guide Lists" end
+        return "Gear"
+    end
+    return tabName
 end
 
 local function GetVisibleNavigationTabs()
     local tabs = {}
-    for _, tabName in ipairs(CFG.tabs or {}) do
-        if not OPTIONAL_TABS[tabName] or FindRegisteredTab(tabName) then table.insert(tabs, tabName) end
-    end
+    for _, tabName in ipairs(CFG.tabs or {}) do table.insert(tabs, tabName) end
     return tabs
+end
+
+local function GetNavigationSection(sectionID)
+    for _, section in ipairs(NAVIGATION_SECTIONS) do
+        if section.id == sectionID then return section end
+    end
+end
+
+local function DestinationLabel(destination, mode)
+    if VIRTUAL_ROUTES[destination] then
+        if destination == "Wowhead Guide Lists" then return "Wowhead" end
+        if destination == "Icy Veins Guide Lists" then return "Icy Veins" end
+        return destination
+    end
+    return GetNavigationLabel(destination, mode)
 end
 
 local function GetTabObjectKey(tabName)
@@ -541,9 +634,14 @@ function KeyLab.UI:RefreshContentModeSelector()
         button:SetBackdropBorderColor(border[1], border[2], border[3], border[4] or 1)
         ApplyColor(button.label, active and CFG.colors.gold or CFG.colors.text)
     end
-    for category, button in pairs(self.tabButtons or {}) do
-        if button.label then button.label:SetText(GetNavigationLabel(category, selected)) end
+    for _, entries in pairs(self.navigationChildButtons or {}) do
+        for _, entry in ipairs(entries) do
+            if entry.button and entry.button.label then
+                entry.button.label:SetText(entry.label or DestinationLabel(entry.destination, selected))
+            end
+        end
     end
+    self:RefreshNavigationButtons()
 end
 
 function KeyLab.UI:CreateContentModeSelector(y)
@@ -586,45 +684,108 @@ function KeyLab.UI:CreateContentModeSelector(y)
     self:RefreshContentModeSelector()
 end
 
-function KeyLab.UI:CreateTabButtons()
+local function CreateNavigationButton(parent, width, height, fontObject)
+    local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    button:SetSize(width, height)
+    StylePanel(button, CFG.colors.buttonBg, CFG.colors.buttonBorder)
+    local accent
+    if Theme.AddAccent then
+        accent = Theme.AddAccent(button, CFG.colors.gold, 3)
+    else
+        accent = button:CreateTexture(nil, "ARTWORK")
+        accent:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
+        accent:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 0, 0)
+        accent:SetWidth(3)
+        accent:SetColorTexture(unpack(CFG.colors.gold))
+    end
+    accent:Hide(); button.accent = accent
+    local label = button:CreateFontString(nil, "OVERLAY", fontObject or "GameFontNormal")
+    label:SetPoint("LEFT", button, "LEFT", 14, 0)
+    label:SetWidth(width - 24); label:SetJustifyH("LEFT")
+    ApplyColor(label, CFG.colors.text); button.label = label
+    return button
+end
+
+function KeyLab.UI:LayoutNavigationButtons()
     local y = CFG.sidebar.y
-
-    for _, tabName in ipairs(self.navigationTabs or GetVisibleNavigationTabs()) do
-        local button = CreateFrame("Button", nil, self.frame, "BackdropTemplate")
-        button:SetPoint("TOPLEFT", self.frame, "TOPLEFT", CFG.sidebar.x, y)
-        button:SetSize(CFG.sidebar.width, CFG.sidebar.buttonHeight)
-        StylePanel(button, CFG.colors.buttonBg, CFG.colors.buttonBorder)
-
-        local accent
-        if Theme.AddAccent then
-            accent = Theme.AddAccent(button, CFG.colors.gold, 3)
-        else
-            accent = button:CreateTexture(nil, "ARTWORK")
-            accent:SetPoint("TOPLEFT", button, "TOPLEFT", 0, 0)
-            accent:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 0, 0)
-            accent:SetWidth(3)
-            accent:SetColorTexture(CFG.colors.gold[1], CFG.colors.gold[2], CFG.colors.gold[3], CFG.colors.gold[4] or 1)
+    local childHeight, childGap = 27, 4
+    for _, section in ipairs(NAVIGATION_SECTIONS) do
+        local button = self.tabButtons and self.tabButtons[section.id]
+        if button then
+            button:ClearAllPoints(); button:SetPoint("TOPLEFT", self.frame, "TOPLEFT", CFG.sidebar.x, y); button:Show()
+            y = y - CFG.sidebar.buttonHeight - CFG.sidebar.buttonGap
         end
-        accent:Hide()
-        button.accent = accent
-
-        local label
-        local navigationLabel = GetNavigationLabel(tabName, self.contentMode or GetSavedContentMode())
-        if Theme.CreateText then
-            label = Theme.CreateText(button, navigationLabel, "GameFontNormal", nil, CFG.colors.text)
-        else
-            label = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            label:SetText(navigationLabel)
-            ApplyColor(label, CFG.colors.text)
+        if section.id == "Home" and self.modeSelector then
+            self.modeSelector:ClearAllPoints(); self.modeSelector:SetPoint("TOPLEFT", self.frame, "TOPLEFT", CFG.sidebar.x, y)
+            y = y - (CFG.sidebar.modeHeight or 30) - CFG.sidebar.buttonGap
         end
-        label:SetPoint("LEFT", button, "LEFT", 14, 0)
-        label:SetWidth(CFG.sidebar.width - 24)
-        label:SetJustifyH("LEFT")
-        button.label = label
+        local expanded = self.expandedNavigationSection == section.id and type(section.items) == "table"
+        for _, entry in ipairs(self.navigationChildButtons and self.navigationChildButtons[section.id] or {}) do
+            entry.button:SetShown(expanded)
+            if expanded then
+                entry.button:ClearAllPoints()
+                entry.button:SetPoint("TOPLEFT", self.frame, "TOPLEFT", CFG.sidebar.x + 10, y)
+                y = y - childHeight - childGap
+            end
+        end
+        if expanded then y = y - 4 end
+    end
+    local usedHeight = -y + CFG.sidebar.y + (CFG.sidebar.paddingTop or 12) + (CFG.sidebar.paddingBottom or 12)
+    if self.sidebar then
+        self.standardSidebarHeight = math.max(usedHeight, 360)
+        self.sidebar:SetHeight(self.standardSidebarHeight)
+    end
+    return y
+end
+
+function KeyLab.UI:IsDestinationSelected(destination)
+    local virtual = VIRTUAL_ROUTES[destination]
+    if virtual then
+        local view = KeyLab.Tabs and KeyLab.Tabs.GearPlanning and KeyLab.Tabs.GearPlanning.selectedView
+        return self.selectedTab == virtual.tab and view == virtual.view
+    end
+    local category = GetAnalysisRoute(destination)
+    if category then return self.selectedTab == ResolveNavigationTab(category, self.contentMode) end
+    return self.selectedTab == destination
+end
+
+function KeyLab.UI:RefreshNavigationButtons()
+    local selectedSection = GetNavigationKey(self.selectedTab)
+    if self.selectedTab == "Gear Planning" then selectedSection = GetNavigationKey("Gear Planning") end
+    for sectionID, button in pairs(self.tabButtons or {}) do
+        local selected = sectionID == selectedSection
+        local bg = selected and (CFG.colors.buttonSelectedBg or CFG.colors.buttonBg) or CFG.colors.buttonBg
+        local border = selected and CFG.colors.buttonSelected or CFG.colors.buttonBorder
+        button:SetBackdropColor(unpack(bg)); button:SetBackdropBorderColor(unpack(border))
+        ApplyColor(button.label, selected and CFG.colors.gold or CFG.colors.text)
+        if button.accent then button.accent:SetShown(selected) end
+    end
+    for _, entries in pairs(self.navigationChildButtons or {}) do
+        for _, entry in ipairs(entries) do
+            local selected = self:IsDestinationSelected(entry.destination)
+            local bg = selected and (CFG.colors.buttonSelectedBg or CFG.colors.buttonBg) or CFG.colors.buttonBg
+            local border = selected and CFG.colors.buttonSelected or CFG.colors.buttonBorder
+            entry.button:SetBackdropColor(unpack(bg)); entry.button:SetBackdropBorderColor(unpack(border))
+            ApplyColor(entry.button.label, selected and CFG.colors.gold or CFG.colors.text)
+            if entry.button.accent then entry.button.accent:SetShown(selected) end
+        end
+    end
+end
+
+function KeyLab.UI:CreateTabButtons()
+    self.navigationChildButtons = {}
+    for _, section in ipairs(NAVIGATION_SECTIONS) do
+        local tabName = section.id
+        local button = CreateNavigationButton(self.frame, CFG.sidebar.width, CFG.sidebar.buttonHeight, "GameFontNormal")
+        button.label:SetText(GetNavigationLabel(tabName, self.contentMode or GetSavedContentMode()))
 
         button:SetScript("OnClick", function()
             if KeyLab.UI.isMenuOnly then KeyLab.UI:SetMenuOnly(false) end
-            KeyLab.UI:SelectTab(tabName)
+            if type(section.items) == "table" and #section.items > 0 then
+                KeyLab.UI.expandedNavigationSection = section.id
+                KeyLab.UI:LayoutNavigationButtons()
+            end
+            KeyLab.UI:SelectTab(section.default)
         end)
 
         button:SetScript("OnEnter", function(self)
@@ -640,13 +801,30 @@ function KeyLab.UI:CreateTabButtons()
         end)
 
         self.tabButtons[tabName] = button
-        y = y - CFG.sidebar.buttonHeight - CFG.sidebar.buttonGap
-        if tabName == "Home" then
-            self:CreateContentModeSelector(y)
-            y = y - (CFG.sidebar.modeHeight or 30) - CFG.sidebar.buttonGap
+        if tabName == "Home" then self:CreateContentModeSelector(CFG.sidebar.y - CFG.sidebar.buttonHeight - CFG.sidebar.buttonGap) end
+
+        self.navigationChildButtons[section.id] = {}
+        for _, definition in ipairs(section.items or {}) do
+            local entry = {
+                destination = definition.destination,
+                label = definition.label,
+            }
+            local child = CreateNavigationButton(self.frame, CFG.sidebar.width - 10, 27, "GameFontHighlightSmall")
+            child.label:SetText(entry.label or DestinationLabel(entry.destination, self.contentMode or GetSavedContentMode()))
+            child:SetScript("OnClick", function()
+                if KeyLab.UI.isMenuOnly then KeyLab.UI:SetMenuOnly(false) end
+                KeyLab.UI:SelectTab(entry.destination)
+            end)
+            child:SetScript("OnEnter", function(self)
+                if not KeyLab.UI:IsDestinationSelected(entry.destination) then self:SetBackdropBorderColor(unpack(CFG.colors.buttonHover)) end
+            end)
+            child:SetScript("OnLeave", function() KeyLab.UI:RefreshNavigationButtons() end)
+            entry.button = child
+            table.insert(self.navigationChildButtons[section.id], entry)
         end
     end
-    return y
+    self.expandedNavigationSection = "Performance"
+    return self:LayoutNavigationButtons()
 end
 
 function KeyLab.UI:CreateMenuOnlyHelperButtons(y)
@@ -860,6 +1038,10 @@ function KeyLab.UI:SelectTab(tabName)
     end
     self:Create()
 
+    local requestedDestination = tabName
+    local virtualRoute = VIRTUAL_ROUTES[tabName]
+    if virtualRoute then tabName = virtualRoute.tab end
+
     local category, explicitMode = GetAnalysisRoute(tabName)
     if explicitMode then
         self.contentMode = SaveContentMode(explicitMode)
@@ -871,7 +1053,7 @@ function KeyLab.UI:SelectTab(tabName)
     if GetNavigationKey(self.selectedTab) == "Sequencer" and GetNavigationKey(tabName) ~= "Sequencer"
         and KeyLab.Tabs and KeyLab.Tabs.Sequencer and KeyLab.Tabs.Sequencer.RequestLeave
         and not (InCombatLockdown and InCombatLockdown()) then
-        local allowed = KeyLab.Tabs.Sequencer:RequestLeave(function() KeyLab.UI:SelectTab(tabName) end)
+        local allowed = KeyLab.Tabs.Sequencer:RequestLeave(function() KeyLab.UI:SelectTab(requestedDestination) end)
         if not allowed then return end
     end
 
@@ -890,22 +1072,21 @@ function KeyLab.UI:SelectTab(tabName)
         selectedFrame:Show()
     end
 
-    local selectedNavigation = GetNavigationKey(tabName)
-    if selectedNavigation ~= "Sequencer" then self.lastNonSequencerTab = tabName end
-    for name, button in pairs(self.tabButtons or {}) do
-        if name == selectedNavigation then
-            local selectedBg = CFG.colors.buttonSelectedBg or {0.055, 0.085, 0.160, 0.90}
-            button:SetBackdropColor(selectedBg[1], selectedBg[2], selectedBg[3], selectedBg[4] or 1)
-            button:SetBackdropBorderColor(CFG.colors.buttonSelected[1], CFG.colors.buttonSelected[2], CFG.colors.buttonSelected[3], CFG.colors.buttonSelected[4])
-            ApplyColor(button.label, CFG.colors.gold)
-            if button.accent then button.accent:Show() end
-        else
-            button:SetBackdropColor(CFG.colors.buttonBg[1], CFG.colors.buttonBg[2], CFG.colors.buttonBg[3], CFG.colors.buttonBg[4])
-            button:SetBackdropBorderColor(CFG.colors.buttonBorder[1], CFG.colors.buttonBorder[2], CFG.colors.buttonBorder[3], CFG.colors.buttonBorder[4])
-            ApplyColor(button.label, CFG.colors.text)
-            if button.accent then button.accent:Hide() end
-        end
+    if virtualRoute and KeyLab.Tabs and KeyLab.Tabs.GearPlanning and KeyLab.Tabs.GearPlanning.ShowView then
+        KeyLab.Tabs.GearPlanning:ShowView(virtualRoute.view)
     end
+
+    local selectedNavigation = GetNavigationKey(tabName)
+    local section = GetNavigationSection(selectedNavigation)
+    if section and type(section.items) == "table" and #section.items > 0 then
+        self.expandedNavigationSection = selectedNavigation
+    elseif requestedDestination == "Home" then
+        self.expandedNavigationSection = nil
+    end
+    self:LayoutNavigationButtons()
+
+    if selectedNavigation ~= "Sequencer" then self.lastNonSequencerTab = tabName end
+    self:RefreshNavigationButtons()
 
     self:RefreshSelectedTab()
     self:RefreshSequencerNavigationState()
@@ -914,17 +1095,36 @@ end
 
 function KeyLab.UI:GetPreparationDestinations()
     local choices = {}
-    for _, category in ipairs(GetVisibleNavigationTabs()) do
-        local route = ANALYSIS_ROUTES[category]
-        if route then
-            for _, mode in ipairs({"mplus", "raid"}) do
-                choices[#choices+1] = {value=route[mode], label=(mode=="raid" and "Raid - " or "Mythic+ - ")..GetNavigationLabel(category,mode)}
+    for _, section in ipairs(NAVIGATION_SECTIONS) do
+        if type(section.items) == "table" and #section.items > 0 then
+            for _, item in ipairs(section.items) do
+                local route = ANALYSIS_ROUTES[item.destination]
+                if route then
+                    for _, mode in ipairs({"mplus", "raid"}) do
+                        choices[#choices+1] = {
+                            value = route[mode],
+                            label = section.id .. " - " .. (mode == "raid" and "Raid " or "Mythic+ ") .. GetNavigationLabel(item.destination, mode),
+                        }
+                    end
+                else
+                    choices[#choices+1] = {
+                        value = item.destination,
+                        label = section.id .. " - " .. (item.label or DestinationLabel(item.destination, self.contentMode)),
+                    }
+                end
             end
         else
-            choices[#choices+1] = {value=category,label=GetNavigationLabel(category,self.contentMode)}
+            choices[#choices+1] = { value = section.default, label = GetNavigationLabel(section.id, self.contentMode) }
         end
     end
     return choices
+end
+
+function KeyLab.UI:NotifyGearPlanningView(view)
+    if self.selectedTab ~= "Gear Planning" then return end
+    self.expandedNavigationSection = (view == "WH" or view == "IV") and "Guide Lists" or "Gear"
+    self:LayoutNavigationButtons()
+    self:RefreshNavigationButtons()
 end
 
 function KeyLab.UI:Show()

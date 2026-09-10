@@ -1,5 +1,60 @@
 # KeyLab Changelog
 
+## Version 2.0.102 - Practice Results Reopen
+
+- Reopens KeyLab directly to the completed Practice session after a timed test finishes and the player leaves combat.
+- Continues to reopen immediately when the test completes while the player is already out of combat.
+
+## Version 2.0.101 - Macro Sequence Rules and Logic
+
+- Adds an authoritative macro-sequence rules reference—and registers it in the workspace instructions—covering KeyLab's one-press/one-step engine, one-primary-line blocks, Even and Weighted Cycle authoring, SBA and SimulationCraft translation boundaries, spell classification, targeting, Action/nil, cooldowns, proc limitations, pets, weapons, raid healing, and testing.
+- Documents advanced situational patterns from current class guides, including help/harm routing, focus fallbacks, talent-adaptive buttons, ground placement, aura cancellation, emergency actions, and future candidate commands without enabling unsupported live behavior.
+- Adds Protected Channel and channel-handoff research rules, including emergency exceptions, fallback-clause auditing, `/stopcasting` safety, and the current Retail channel-condition lockout warning that must be cleared through in-instance testing before automatic generation.
+
+## Version 2.0.100 - Top Winning Setup Details
+
+- Shows only the highest-ranked setup where the Talent Build, Stat Profile, and Gear Profile all align in the Top 5 for the selected content and metric.
+- Displays that setup's full talent string, stat priority, and equipped gear items in a compact two-column list, and removes Average Item Level from Winning Setups.
+
+## Version 2.0.99 - Compact Guide Gear Item Cards
+
+- Changes Wowhead and Icy Veins Gear Lists to compact item cards with icon, slot, and item name on the first line and source on the second line, reducing the full profile height so it fits without normal scrolling.
+- Keeps both Catalyst item icons and tooltips, retains the explicit Tier conversion message, and fits the crafted-item control fully inside its card. Saved crafts display a green Added to Plan status while unsaved crafts keep the Configure Craft action.
+
+## Version 2.0.98 - Compact Guide List Badges
+
+- Sizes Wowhead and Icy Veins recommendation and saved-state badges to their text instead of stretching them across the Talent Build card, while preserving every badge label, color, and meaning.
+
+## Version 2.0.97 - Preparation Panel Text and Gear List Icons
+
+- Keeps the Preparation Panel section cards behind their labels so Character Setup, Raid Healing, Group Readiness, and Quick Access text remains fully readable.
+- Adds Great Vault-style item icons to the Gear Target List's dungeon, raid, other-item, and Tier-slot Target rows while preserving its existing grouping and Loot Spec details.
+
+## Version 2.0.96 - Preparation and Gear List Polish
+
+- Centers Great Vault reminder item names and Loot Spec details beside their item icons for faster scanning.
+- Gives Character Setup, Raid Healing, Group Readiness, and Quick Access their own clearly separated cards in Preparation Panel, and remembers the player's selected Go To destination across sessions.
+- Makes Wowhead and Icy Veins Talent and Gear Lists easier to read, moves the shared guide date into the page header, compacts the two-column gear view, labels Catalyst conversions clearly, and marks already saved crafted items as Planned.
+- Moves the active Guide List badge above Current Item Level in Gear Dashboard, enlarges it, and prefixes it with Using so the applied profile is unmistakable.
+- Removes the unfinished website-plan import button from Gear Targets and stops loading its importer until the website workflow is ready.
+
+## Version 2.0.95 - Streamlined Navigation and Winning Setups
+
+- Reorganizes the main sidebar into Home, Performance, Profiles, Gear, Guide Lists, Group Dashboard, Macro Sequencer, and Settings while preserving the existing pages, filters, analysis, and saved data behind their new routes.
+- Adds Winning Setups under Profiles. It awards a gold Triple Top 5 badge only when the same Talent Build, Stat Profile, and Gear Profile all rank in the Top 5 for the same content filters and performance metric.
+- Changes Wowhead and Icy Veins into dedicated Guide Lists routes with compact topic-style Talent Build selection and a dropdown-driven, two-column Gear List view.
+- Tracks an exactly applied Guide List in Gear Dashboard and removes its guide badge whenever the current Targets no longer match that list exactly; Alternatives and crafted-item behavior remain unchanged.
+- Separates the compact Preparation Panel into clearer Character Setup, Raid Healing, Group Readiness, capabilities, and Quick Access areas without changing its existing actions.
+- Updates the guided tour and Preparation Panel page routing for the new structure, including Winning Setups, Guide Lists, and the minimized PREP PANEL handle.
+- Opens KeyLab helper, results, shopping, import, practice, and custom macro windows at the Preparation Panel's current saved anchor. The minimized PREP PANEL handle keeps its own independent position, and Blizzard confirmation dialogs are unchanged.
+
+## Version 2.0.94 - Website Gear Plan Import
+
+- Adds an Import Website Plan button to Gear Targets for the browser planner's `KLG1` transfer code.
+- Validates the current specialization, season, item IDs, sources, slots, weapon layout, primary-stat rule, stat goals, Targets, and Alternatives before offering an import.
+- Previews every imported Target and Alternative plus Stat Goal Matcher settings before replacing the current spec's plan; conflicting crafted plans are named in the preview and removed only when the player confirms the import.
+- Keeps the transfer local and manual: the website stores plans in that browser, and KeyLab changes nothing until the player pastes, previews, and imports the code out of combat.
+
 ## Version 2.0.93 - Home Content Authoring Template
 
 - Adds an authoritative Home content template covering Sunday weekly News & Events, PTR placement, dated hotfixes, S2 Common Issues, and the established themed segmented reader.
